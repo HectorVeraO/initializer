@@ -35,9 +35,10 @@ function main() {
     },
     strict: true,
   });
+  const specsDir = values['specs-dir'] ? resolve(values['specs-dir']) : SPECS_ROOT;
   let passes;
   try {
-    passes = planRun({ specsDir: values['specs-dir'] ?? SPECS_ROOT, tags: values.tags });
+    passes = planRun({ specsDir, tags: values.tags });
   } catch (error) {
     if (error instanceof TckError) {
       process.stderr.write(`run-tck: ${error.message}\n`);
@@ -56,7 +57,7 @@ function main() {
   const cli = createRequire(import.meta.url).resolve('@playwright/test/cli');
   let failed = false;
   for (const pass of passes) {
-    const result = spawnSync(process.execPath, [cli, ...pass.args], { cwd: SPECS_ROOT, stdio: 'inherit' });
+    const result = spawnSync(process.execPath, [cli, ...pass.args], { cwd: specsDir, stdio: 'inherit' });
     if (result.status !== 0) {
       failed = true;
     }

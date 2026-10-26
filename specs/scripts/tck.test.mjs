@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import { collectTags, loadManifests, narrowTags, TckError } from './tck-select.mjs';
 import { buildExports } from './tck-env.mjs';
 import { planRun } from './run-tck.mjs';
@@ -106,7 +107,7 @@ test('run-tck --tags with an uninstalled tag exits 2', () => {
 
 test('run-tck with no manifest exits non-zero with a clear message', () => {
   const result = runNode('run-tck.mjs', ['--dry-run', '--specs-dir', join(fixtures, 'tag-roots', 'ok', 'alpha', 'tck')]);
-  assert.notEqual(result.status, 0);
+  assert.equal(result.status, 1);
   assert.match(result.stderr, /no spec\.manifest\.json found/);
 });
 
@@ -128,7 +129,10 @@ test('tck-env fails on a conflicting key and accepts an identical repeat', () =>
 });
 
 test('tck-env rejects a key that is not a shell identifier', () => {
-  assert.throws(() => buildExports([{ spec: 'a', tckEnv: { 'X; rm': '1' } }]), TckError);
+  assert.throws(
+    () => buildExports([{ spec: 'a', tckEnv: { 'X; rm': '1' } }]),
+    (error) => error instanceof TckError && error.exitCode === 1 && /invalid env key/.test(error.message),
+  );
 });
 
 test('tck-env rejects a non-string value', () => {
@@ -200,4 +204,26 @@ test('check-tags fails TCK_TAG_FOREIGN on a foreign tag', () => {
   const result = checkRoot('foreign');
   assert.equal(result.status, 1);
   assert.match(result.stderr, /TCK_TAG_FOREIGN: alpha\/tck\/a\.spec\.ts:\d+ "alpha foreign" carries @beta/);
+});
+
+test('check-tags accepts an empty tree with no suite installed', () => {
+  const result = checkRoot('empty');
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /check-tags: ok/);
+});
+
+test('run-tck exits 1 when a Playwright pass fails', () => {
+  const root = join(fixtures, 'tag-roots', 'failing');
+  const result = runNode('run-tck.mjs', ['--specs-dir', root], { stdio: 'pipe' });
+  assert.equal(result.status, 1);
+});
+
+test('the Playwright config refuses to load without TCK_BASE_URL', () => {
+  const specsRoot = join(here, '..');
+  const cli = createRequire(import.meta.url).resolve('@playwright/test/cli');
+  const env = { ...process.env };
+  delete env.TCK_BASE_URL;
+  const result = spawnSync(process.execPath, [cli, 'test', '--list'], { cwd: specsRoot, env, encoding: 'utf8' });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}${result.stderr}`, /TCK_BASE_URL is required/);
 });
