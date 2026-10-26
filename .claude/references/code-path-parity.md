@@ -14,3 +14,7 @@ Format and examples: `.claude/references/code-path-parity-format.md`.
 ---
 
 <!-- Add parity rows below this line. The skill never edits below. -->
+
+| Group | Files | What duplicates | Check | What breaks silently |
+|---|---|---|---|---|
+| oasdiff pin | `mise.toml`, `.github/workflows/ci.yml` | The oasdiff version (`github:oasdiff/oasdiff` in `mise.toml`, `OASDIFF_VERSION` and its sha256 in `ci.yml`) | Both name the same version; the sha256 comment matches that release's linux_amd64 archive | Local and CI `gates contracts` classify breaking changes with different oasdiff versions |
