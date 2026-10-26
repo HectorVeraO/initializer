@@ -3,6 +3,7 @@ package coreauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -166,6 +167,60 @@ func TestCreateAPIKeyReturnsThePlainKeyOnceAndNeverStoresOrLogsIt(t *testing.T) 
 		if strings.Contains(dump, secret) {
 			t.Fatalf("table %s holds the secret", name)
 		}
+	}
+}
+
+// sequenceKeys returns a generator that yields keys in order, then fails.
+func sequenceKeys(keys ...string) func() (string, error) {
+	next := 0
+	return func() (string, error) {
+		if next >= len(keys) {
+			return "", errors.New("generator exhausted")
+		}
+		key := keys[next]
+		next++
+		return key, nil
+	}
+}
+
+func TestCreateAPIKeyRetriesAfterAPrefixCollision(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	creator := e.person()
+	taken := e.apiKey(tenant, []string{"tenant:read"}, nil)
+	fresh, err := newAPIKey()
+	if err != nil {
+		t.Fatalf("new key: %v", err)
+	}
+	takenPrefix, _, _ := splitAPIKey(taken)
+	collidingPlain := takenPrefix + "_" + strings.Repeat("a", apiKeySecretChars)
+	service := newAPIKeys(e.pool, e.clock)
+
+	service.generate = sequenceKeys(collidingPlain, fresh)
+	created, err := service.Create(context.Background(), tenant, creator.accountID, "retry", []string{"tenant:read"}, nil)
+
+	if err != nil {
+		t.Fatalf("create after one collision: %v", err)
+	}
+	if created.PlainTextKey != fresh {
+		t.Fatalf("plain key = %q, want the second generated key", created.PlainTextKey)
+	}
+}
+
+func TestCreateAPIKeyFailsWhenEveryAttemptCollides(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	creator := e.person()
+	taken := e.apiKey(tenant, []string{"tenant:read"}, nil)
+	takenPrefix, _, _ := splitAPIKey(taken)
+	collidingPlain := takenPrefix + "_" + strings.Repeat("a", apiKeySecretChars)
+	service := newAPIKeys(e.pool, e.clock)
+
+	service.generate = sequenceKeys(collidingPlain, collidingPlain, collidingPlain, collidingPlain)
+	_, err := service.Create(context.Background(), tenant, creator.accountID, "retry", []string{"tenant:read"}, nil)
+
+	if err == nil {
+		t.Fatal("create succeeded although every attempt collides")
 	}
 }
 

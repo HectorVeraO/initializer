@@ -130,10 +130,12 @@ func apiKeyStatusAt(expiresAt, revokedAt *time.Time, now time.Time) string {
 type apiKeys struct {
 	pool  *pgxpool.Pool
 	clock clock.Clock
+	// generate yields a fresh plain key; newAPIKey in production.
+	generate func() (string, error)
 }
 
 func newAPIKeys(pool *pgxpool.Pool, clk clock.Clock) *apiKeys {
-	return &apiKeys{pool: pool, clock: clk}
+	return &apiKeys{pool: pool, clock: clk, generate: newAPIKey}
 }
 
 func scanAPIKey(row rowScanner, now time.Time) (ApiKeyView, error) {
@@ -169,7 +171,7 @@ func (s *apiKeys) Create(ctx context.Context, tenantID, actorID, name string, sc
 	now := s.clock.Now()
 	var lastErr error
 	for attempt := 0; attempt < maxPrefixRetries; attempt++ {
-		plain, err := newAPIKey()
+		plain, err := s.generate()
 		if err != nil {
 			return ApiKeyCreated{}, err
 		}
