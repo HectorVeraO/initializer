@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "stack": "go-srv",
+  "module": "core-auth",
+  "version": "0.1.0",
+  "implied": true,
+  "implementsSpec": { "core-auth": "0.1.0" },
+  "requiresCore": "^0.1.0",
+  "requiresModules": [],
+  "tablePrefixes": ["iam", "ten"],
+  "files": [
+    ".deploy/local/kratos/",
+    "go-srv/internal/gatbase/coreauth/"
+  ],
+  "exclude": []
+}
