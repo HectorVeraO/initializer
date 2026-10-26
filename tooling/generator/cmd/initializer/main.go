@@ -2,6 +2,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	generator "github.com/HectorVeraO/initializer/tooling/generator"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 )
@@ -25,6 +30,9 @@ const (
 
 // maxInputBytes bounds every input file read from disk.
 const maxInputBytes = 1 << 20
+
+// maxFileListBytes bounds the tracked file list.
+const maxFileListBytes = 32 << 20
 
 const usageText = `usage:
   initializer catalog build --root <repo> --files <file> --out <file>
@@ -52,7 +60,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if len(args) < 2 || args[1] != "build" {
 			return usageError(logger, "catalog requires the build subcommand")
 		}
-		return runCatalogBuild(args[2:], stdout, logger)
+		return runCatalogBuild(args[2:], stdout, stderr, logger)
 	case "generate":
 		return runGenerate(args[1:], stdout, stderr, logger)
 	case "verify":
@@ -107,18 +115,87 @@ func missingFlag(fs *flag.FlagSet, names ...string) string {
 	return ""
 }
 
-func runCatalogBuild(args []string, stdout io.Writer, logger *slog.Logger) int {
+func runCatalogBuild(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
 	fs := newFlagSet("catalog build")
-	fs.String("root", "", "repository root")
-	fs.String("files", "", "tracked file list")
-	fs.String("out", "", "catalog output file")
+	root := fs.String("root", "", "repository root")
+	filesPath := fs.String("files", "", "tracked file list")
+	outPath := fs.String("out", "", "catalog output file")
 	if code, done := parseFlags(fs, args, stdout, logger); done {
 		return code
 	}
 	if name := missingFlag(fs, "root", "files", "out"); name != "" {
 		return usageError(logger, "missing required flag: "+name)
 	}
-	return notImplemented(logger, "catalog_build")
+
+	info, err := os.Stat(*root)
+	if err != nil || !info.IsDir() {
+		logger.Error("input_unreadable", slog.String("error", "root is not a readable directory"))
+		return exitInternal
+	}
+	list, err := readLimited(*filesPath, maxFileListBytes)
+	if err != nil {
+		logger.Error("input_unreadable", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	files, err := catalog.ParseFileList(list)
+	if err != nil {
+		logger.Error("input_unreadable", slog.String("error", err.Error()))
+		return exitInternal
+	}
+
+	built, issues, err := catalog.Build(catalog.BuildOptions{
+		Root:      os.DirFS(*root),
+		Files:     files,
+		Generator: generator.Version,
+	})
+	if err != nil {
+		logger.Error("catalog_build_failed", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	if len(issues) > 0 {
+		logger.Warn("validation_failed", slog.Int("issue_count", len(issues)))
+		if err := issue.Write(stderr, issues); err != nil {
+			logger.Error("issues_unwritable", slog.String("error", err.Error()))
+			return exitInternal
+		}
+		return exitIssues
+	}
+	encoded, err := catalog.Encode(built)
+	if err != nil {
+		logger.Error("catalog_build_failed", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	if err := writeOutput(*outPath, encoded); err != nil {
+		logger.Error("output_unwritable", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	sum := sha256.Sum256(encoded)
+	result := struct {
+		Catalog string `json:"catalog"`
+		SHA256  string `json:"sha256"`
+	}{Catalog: filepath.ToSlash(*outPath), SHA256: hex.EncodeToString(sum[:])}
+	line, err := json.Marshal(result)
+	if err != nil {
+		logger.Error("catalog_build_failed", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	if _, err := stdout.Write(append(line, '\n')); err != nil {
+		logger.Error("result_unwritable", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	logger.Info("catalog_built",
+		slog.Int("spec_count", len(built.Specs)),
+		slog.Int("stack_count", len(built.Stacks)),
+		slog.String("sha256", result.SHA256))
+	return exitOK
+}
+
+// writeOutput writes data to path, creating the parent directory.
+func writeOutput(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 func runVerify(args []string, stdout io.Writer, logger *slog.Logger) int {
@@ -213,17 +290,22 @@ func splitList(value string) []string {
 
 // readInput reads a file of at most maxInputBytes.
 func readInput(path string) ([]byte, error) {
+	return readLimited(path, maxInputBytes)
+}
+
+// readLimited reads a file of at most limit bytes.
+func readLimited(path string, limit int) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, maxInputBytes+1))
+	data, err := io.ReadAll(io.LimitReader(file, int64(limit)+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > maxInputBytes {
-		return nil, fmt.Errorf("input exceeds %d bytes", maxInputBytes)
+	if len(data) > limit {
+		return nil, fmt.Errorf("input exceeds %d bytes", limit)
 	}
 	return data, nil
 }

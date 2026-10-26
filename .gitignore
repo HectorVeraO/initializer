@@ -6,3 +6,6 @@
 .*.env
 !.example.env
 !.*.example.env
+
+# Build output of `initializer catalog build`
+/catalog.lock.json
