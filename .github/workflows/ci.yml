@@ -168,7 +168,7 @@ jobs:
           compose="docker compose -f .deploy/local/docker-compose.yml"
           ${compose} up -d
           for _ in $(seq 1 60); do
-            state="$(${compose} ps --format json postgres | jq -r '.Health // empty' | head -n 1)"
+            state="$(${compose} ps --format json postgres | jq -rs 'flatten | .[0].Health // empty')"
             if [ "${state}" = "healthy" ] && curl -fsS http://localhost:10133/health/ready > /dev/null; then
               exit 0
             fi

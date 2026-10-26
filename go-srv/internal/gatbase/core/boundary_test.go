@@ -472,6 +472,22 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 			want: "rule 5",
 		},
 		{
+			name: "rule 5 the exemption does not cover a coretest subpackage",
+			files: map[string]string{
+				"internal/gatbase/core/core.go":             "package core\n",
+				"internal/gatbase/core/coretest/sub/sub.go": "package sub\n\nimport _ \"example.com/boundary/internal/gatbase/core\"\n",
+			},
+			want: "rule 5",
+		},
+		{
+			name: "rule 5 the exemption does not cover a coretest-prefixed sibling",
+			files: map[string]string{
+				"internal/gatbase/core/core.go":        "package core\n",
+				"internal/gatbase/core/coretestx/x.go": "package coretestx\n\nimport _ \"example.com/boundary/internal/gatbase/core\"\n",
+			},
+			want: "rule 5",
+		},
+		{
 			name: "clean module reports nothing",
 			files: map[string]string{
 				"internal/gatbase/core/core.go":    "package core\n",

@@ -163,23 +163,51 @@ func (allFlags) Snapshot(context.Context, *reqctx.TenantID) map[featureflag.Key]
 	return map[featureflag.Key]bool{"x": true}
 }
 
+type keyFake struct{}
+
+func (keyFake) Present(*http.Request) bool { return true }
+
+func (keyFake) Resolve(context.Context, *http.Request) (reqctx.Principal, error) {
+	return reqctx.Principal{Kind: reqctx.ActorAccount, ActorID: testActor}, nil
+}
+
+type tenantFake struct{}
+
+func (tenantFake) TenantExists(context.Context, reqctx.TenantID) (bool, error) { return true, nil }
+
 func TestNewHandsTheFakesToModules(t *testing.T) {
 	var flags featureflag.Evaluator
+	var keys auth.APIKeyResolver
+	var tenants auth.TenantDirectory
 	var sessions auth.SessionResolver
-	session := coretest.Session(reqctx.Principal{})
 	module := mounting("alpha", func(h *core.Host) {
 		flags = h.FlagEvaluator()
+		keys = h.APIKeyResolver()
+		tenants = h.TenantDirectory()
 		sessions = h.SessionResolver()
 	})
 	coretest.New(t, []core.Module{module}, coretest.Options{
 		FlagEvaluator:   allFlags{},
-		SessionResolver: session,
+		SessionResolver: coretest.Session(reqctx.Principal{Kind: reqctx.ActorAccount, ActorID: testActor}),
+		APIKeyResolver:  keyFake{},
+		TenantDirectory: tenantFake{},
 	})
 	if !flags.Enabled(context.Background(), "x") {
 		t.Fatalf("the module must see the supplied flag evaluator")
 	}
-	if sessions != session {
-		t.Fatalf("the module must see the supplied session resolver")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "test_session", Value: "x"})
+	result, err := sessions.Resolve(req)
+	if err != nil || result.State != auth.SessionValid || result.Principal.ActorID != testActor {
+		t.Fatalf("session resolver = %+v, %v", result, err)
+	}
+	principal, err := keys.Resolve(context.Background(), req)
+	if err != nil || principal.ActorID != testActor {
+		t.Fatalf("api key resolver = %+v, %v", principal, err)
+	}
+	exists, err := tenants.TenantExists(context.Background(), reqctx.TenantID("33333333-3333-4333-8333-333333333333"))
+	if err != nil || !exists {
+		t.Fatalf("tenant directory = %v, %v", exists, err)
 	}
 }
 
