@@ -152,6 +152,39 @@ func TestRewriteImportsIdentity(t *testing.T) {
 	}
 }
 
+func TestRewriteImportsIdentityRefusals(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want error
+	}{
+		{"leaking string literal", "package p\n\nvar s = \"example.com/fixture/srv\"\n", ErrModulePathLeak},
+		{"mixed group", "package p\n\nimport (\n\t\"fmt\"\n\t\"example.com/fixture/srv/a\"\n)\n", ErrImportGroup},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, count, err := RewriteImports("p.go", []byte(tc.in), source, source)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v, want %v", err, tc.want)
+			}
+			if got != nil || count != 0 {
+				t.Fatalf("partial output returned: %q %d", got, count)
+			}
+		})
+	}
+}
+
+func TestRewriteImportsNonModuleTrailingComment(t *testing.T) {
+	in := "package p\n\nimport (\n\t\"fmt\" // why\n)\n"
+	got, count, err := RewriteImports("p.go", []byte(in), source, target)
+	if err != nil {
+		t.Fatalf("RewriteImports: %v", err)
+	}
+	if string(got) != in || count != 0 {
+		t.Fatalf("got %q count %d, want unchanged and 0", got, count)
+	}
+}
+
 func TestRewriteImportsRefusals(t *testing.T) {
 	tests := []struct {
 		name string
