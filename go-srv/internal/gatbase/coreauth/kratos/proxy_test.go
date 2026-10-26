@@ -233,17 +233,17 @@ func TestProxyPassesKratosStatusAndBodyThrough(t *testing.T) {
 }
 
 func FuzzProxyPath(f *testing.F) {
-	allowedPaths := map[string]bool{
-		"/self-service/login/browser": true,
-		"/self-service/login/flows":   true,
-		"/self-service/login":         true,
-		"/self-service/errors":        true,
+	allowedRequests := map[string]bool{
+		"GET /self-service/login/browser": true,
+		"GET /self-service/login/flows":   true,
+		"GET /self-service/errors":        true,
+		"POST /self-service/login":        true,
 	}
 	var reachedMu sync.Mutex
 	var reachedPaths []string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reachedMu.Lock()
-		reachedPaths = append(reachedPaths, r.URL.Path)
+		reachedPaths = append(reachedPaths, r.Method+" "+r.URL.Path)
 		reachedMu.Unlock()
 		w.WriteHeader(200)
 	}))
@@ -281,10 +281,11 @@ func FuzzProxyPath(f *testing.F) {
 		reachedNow := append([]string(nil), reachedPaths...)
 		reachedMu.Unlock()
 		for _, reached := range reachedNow {
-			if !allowedPaths[reached] {
+			if !allowedRequests[reached] {
 				t.Fatalf("upstream received %q for %s %q", reached, method, path)
 			}
-			if "/kratos"+reached != path {
+			reachedPath := strings.TrimPrefix(reached, method+" ")
+			if "/kratos"+reachedPath != path {
 				t.Fatalf("upstream path %q does not match input %q", reached, path)
 			}
 		}
@@ -292,4 +293,26 @@ func FuzzProxyPath(f *testing.F) {
 			t.Fatalf("200 without reaching upstream for %s %q", method, path)
 		}
 	})
+}
+
+type headerRoundTripper struct{ next http.RoundTripper }
+
+func (h headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+	return h.next.RoundTrip(req)
+}
+
+func TestProxyTransportWrapperDecoratesTheKratosHop(t *testing.T) {
+	upstream := newFakeKratos(t, jsonReply(200, `{}`))
+	wrap := func(next http.RoundTripper) http.RoundTripper { return headerRoundTripper{next} }
+	handler := kratos.NewProxy(upstream.url(t), mustParse(t, "https://app.example.com"), bffCookies, kratos.WithTransportWrapper(wrap))
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	resp := send(t, "GET", server.URL+"/kratos/self-service/login/browser", nil)
+
+	reqs := upstream.requests()
+	if resp.StatusCode != 200 || len(reqs) != 1 || reqs[0].Header.Get("Traceparent") == "" {
+		t.Fatalf("status %d, upstream requests %+v", resp.StatusCode, reqs)
+	}
 }

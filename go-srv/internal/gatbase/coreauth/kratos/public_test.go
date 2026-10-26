@@ -188,6 +188,19 @@ func TestWhoAmIMapsAnswersToErrors(t *testing.T) {
 	}
 }
 
+func TestWhoAmIAnswerOverOneMiBIsUnavailable(t *testing.T) {
+	padding := strings.Repeat("a", 2<<20)
+	body := `{"id":"s","active":true,"identity":{"id":"i"},"pad":"` + padding + `"}`
+	fake := newFakeKratos(t, jsonReply(200, body))
+	public := kratos.NewPublic(fake.url(t), kratosCookieName)
+
+	_, err := public.WhoAmI(context.Background(), &http.Cookie{Name: "x", Value: "v"})
+
+	if !errors.Is(err, kratos.ErrUnavailable) {
+		t.Fatalf("want ErrUnavailable, got %v", err)
+	}
+}
+
 func TestWhoAmIContextDeadlineIsUnavailable(t *testing.T) {
 	release := make(chan struct{})
 	fake := newFakeKratos(t, func(w http.ResponseWriter, _ *http.Request) {

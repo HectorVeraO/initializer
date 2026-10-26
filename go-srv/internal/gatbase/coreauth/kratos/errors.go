@@ -32,6 +32,17 @@ type Option func(*clientOptions)
 
 type clientOptions struct {
 	transport http.RoundTripper
+	wrap      func(http.RoundTripper) http.RoundTripper
+}
+
+// WithTransportWrapper wraps the round tripper the proxy uses, which keeps
+// its bounded transport inside the wrapper, for example
+// Telemetry.Transport so the Kratos hop carries the W3C traceparent. A nil
+// wrapper keeps the default.
+func WithTransportWrapper(wrap func(http.RoundTripper) http.RoundTripper) Option {
+	return func(options *clientOptions) {
+		options.wrap = wrap
+	}
 }
 
 // WithTransport sets the round tripper of the client, for example

@@ -36,17 +36,24 @@ var credentialHeaders = []string{"Authorization", "X-API-Key", "X-XSRF-TOKEN", "
 // XSRF-TOKEN) and the credential headers, and sets X-Forwarded-Proto and
 // X-Forwarded-Host from publicBase. Anything outside the allowlist answers a
 // plain 404 without reaching Kratos; a transport error answers a plain 502.
-func NewProxy(publicURL *url.URL, publicBase *url.URL, bffCookieNames []string) http.Handler {
+func NewProxy(publicURL *url.URL, publicBase *url.URL, bffCookieNames []string, opts ...Option) http.Handler {
+	var options clientOptions
+	for _, apply := range opts {
+		apply(&options)
+	}
 	dropCookies := map[string]bool{csrfCookie: true}
 	for _, name := range bffCookieNames {
 		dropCookies[name] = true
 	}
-	transport := &http.Transport{
+	var transport http.RoundTripper = &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: proxyTimeout}).DialContext,
 		ResponseHeaderTimeout: proxyTimeout,
 		TLSHandshakeTimeout:   proxyTimeout,
 		MaxIdleConns:          10,
 		IdleConnTimeout:       30 * time.Second,
+	}
+	if options.wrap != nil {
+		transport = options.wrap(transport)
 	}
 	forwardedProto := publicBase.Scheme
 	forwardedHost := publicBase.Host
