@@ -240,9 +240,14 @@ func TestOperationalErrorsAnswer500WithoutLeaking(t *testing.T) {
 	wrongStatus := api.NewError(404, api.CodeResourceNotFound, "nope")
 	h = newHarness(t, &fakeSession{}, &fakeKey{present: true, err: wrongStatus})
 	h.expect(t, h.do(keyPolicy, http.MethodGet, nil), 500, api.CodeInternalError)
+	h = newHarness(t, &fakeSession{present: true, err: wrongStatus}, &fakeKey{})
+	h.expect(t, h.do(sessionPolicy, http.MethodGet, nil), 500, api.CodeInternalError)
 	h = newHarness(t, &fakeSession{}, &fakeKey{present: true, err: secret})
 	rec = h.do(keyPolicy, http.MethodGet, nil)
 	h.expect(t, rec, 500, api.CodeInternalError)
+	if strings.Contains(rec.Body.String(), "10.0.0.1") {
+		t.Fatalf("key path leaked: %s", rec.Body)
+	}
 }
 
 func TestStep4CSRFOnUnsafeMethods(t *testing.T) {

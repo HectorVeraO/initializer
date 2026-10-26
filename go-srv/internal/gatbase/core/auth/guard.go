@@ -130,7 +130,8 @@ func (g *Guard) authorizeSession(p Policy, r *http.Request) (reqctx.Principal, e
 	var zero reqctx.Principal
 	result, err := g.sessions.Resolve(r)
 	if err != nil {
-		return zero, err
+		// Strip the wire error: a session resolver fails only operationally (500).
+		return zero, fmt.Errorf("auth: session resolver failed: %s", err.Error())
 	}
 	allowsExpired := p.Kind == KindSessionAllowExpired
 	switch {

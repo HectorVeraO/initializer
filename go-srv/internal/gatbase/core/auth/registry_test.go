@@ -129,6 +129,9 @@ func FuzzCheckTenantRef(f *testing.F) {
 		if isKnown && err != nil {
 			t.Fatalf("%q rejected", ref)
 		}
+		if !isKnown && err == nil {
+			t.Fatalf("foreign ref %q accepted", ref)
+		}
 		if err != nil {
 			if apiErr, ok := err.(*api.Error); !ok || apiErr.Code != "TENANT_MISMATCH" {
 				t.Fatalf("unexpected error %v", err)

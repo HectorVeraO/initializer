@@ -11,13 +11,11 @@ import (
 )
 
 type staticEvaluator struct {
-	on    bool
-	calls int
-	keys  []featureflag.Key
+	on   bool
+	keys []featureflag.Key
 }
 
 func (s *staticEvaluator) Enabled(_ context.Context, key featureflag.Key) bool {
-	s.calls++
 	s.keys = append(s.keys, key)
 	return s.on
 }
@@ -56,9 +54,6 @@ func TestRouteServesOnOrOff(t *testing.T) {
 			ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 		if rec.Code != want {
 			t.Fatalf("enabled=%v status = %d", enabled, rec.Code)
-		}
-		if e.calls != 1 {
-			t.Fatalf("evaluated %d times", e.calls)
 		}
 		if len(e.keys) != 1 || e.keys[0] != "new-thing" {
 			t.Fatalf("evaluated keys = %v, want [new-thing]", e.keys)
