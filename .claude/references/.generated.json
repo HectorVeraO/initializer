@@ -22,7 +22,7 @@
   ".claude/references/test-anti-patterns.md": "sha256:84ed3dd0e5cac7ce9d81a9400b0e6cd332c8f8caedbacae9295a7e867d0dd919",
   ".claude/references/test-rules.md": "sha256:7ff6f69974fc3fdda6b987eb6c17c7e772867117fcbe2e394ca64421128cf412",
   ".claude/scripts/validate-artifacts.mjs": "sha256:57027198b7f7808d70977a5d851b3a2422e8f747762082738f3cc96c0b8087b6",
-  ".claude/skills/pl-address-issue/SKILL.md": "sha256:399c412be2434921f0f16f92cc89f94cb87fe563dc6423bcd8b4ab6da0158c40",
+  ".claude/skills/pl-address-issue/SKILL.md": "sha256:68dba431f4711d14abc2d0c2f8213415ede5a2cdc343f388753925b8486299b9",
   ".claude/skills/pl-address-review/SKILL.md": "sha256:83bcb868d85260144e7802134040a131935a5d0637f57cccbf712d6ad3278252",
   ".claude/skills/pl-address-review/scripts/threads.mjs": "sha256:0a13df2f3b135bc2ba7fd50fd51532b34bde47b8358f61912ddf758288a8a2d0",
   ".claude/skills/pl-attach-evidence/SKILL.md": "sha256:6e7a3d48bfc293cb5fedf4b9815176a681fe9917dbc207c60dde1bc799dcd7de",
