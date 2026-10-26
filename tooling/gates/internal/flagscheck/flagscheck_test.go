@@ -93,6 +93,8 @@ func TestParseErrors(t *testing.T) {
 		"entry not mapping":  "flags:\n  - just_a_string\n",
 		"scalar top level":   "hello\n",
 		"missing flags key":  "other: []\n",
+		"duplicate flags":    "flags: []\nflags: []\n",
+		"duplicate field":    "flags:\n  - key: example_beta_banner\n    type: ops\n    type: ops\n    default: false\n    description: d\n",
 	}
 	for name, content := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -143,6 +145,31 @@ func TestKeyValidation(t *testing.T) {
 
 func TestMissingKey(t *testing.T) {
 	assertRules(t, checkText(t, "flags:\n  - type: ops\n    default: false\n    description: d\n", ""), flagscheck.RuleKeyInvalid)
+}
+
+func TestNullRequiredScalarsCountAsMissing(t *testing.T) {
+	cases := []struct {
+		field string
+		rule  string
+	}{
+		{"key", flagscheck.RuleKeyInvalid},
+		{"type", flagscheck.RuleTypeInvalid},
+		{"default", flagscheck.RuleDefaultMissing},
+		{"description", flagscheck.RuleDescriptionMiss},
+	}
+	for _, tc := range cases {
+		t.Run(tc.field, func(t *testing.T) {
+			fields := map[string]string{"key": "example_beta_banner", "type": "ops", "default": "false", "description": "d"}
+			fields[tc.field] = "null"
+			content := "flags:\n"
+			prefix := "  - "
+			for _, name := range []string{"key", "type", "default", "description"} {
+				content += prefix + name + ": " + fields[name] + "\n"
+				prefix = "    "
+			}
+			assertRules(t, checkText(t, content, ""), tc.rule)
+		})
+	}
 }
 
 func TestDuplicateKeyIsReportedOnTheSecondAndCitesTheFirst(t *testing.T) {

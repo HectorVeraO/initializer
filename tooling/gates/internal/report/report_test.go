@@ -76,6 +76,25 @@ func TestGitHubPrinterEscapesCommandData(t *testing.T) {
 	}
 }
 
+func TestGitHubPrinterEscapesCarriageReturnAndPropertySeparators(t *testing.T) {
+	var out bytes.Buffer
+	v := report.Violation{Rule: "X", Ref: "RA.2", Path: "dir,a:b/flags.yaml", Line: 3, Message: "a\rb"}
+	err := report.NewGitHubPrinter(&out).Print([]report.Violation{v})
+	if err != nil {
+		t.Fatalf("Print: %v", err)
+	}
+	want := "::error file=dir%2Ca%3Ab/flags.yaml,line=3::X: a%0Db"
+	var commands []string
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		if strings.HasPrefix(line, "::") {
+			commands = append(commands, line)
+		}
+	}
+	if len(commands) != 1 || commands[0] != want {
+		t.Fatalf("workflow commands = %q, want exactly [%q]", commands, want)
+	}
+}
+
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) {
