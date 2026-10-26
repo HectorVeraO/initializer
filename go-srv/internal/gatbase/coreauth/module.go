@@ -26,6 +26,8 @@ type service struct {
 	access *access
 	// tenancy backs the tenant, membership and invitation routes.
 	tenancy *tenancy
+	// apiKeys backs the API key routes.
+	apiKeys *apiKeys
 }
 
 // provideSession builds the token codec and the cookie helpers. A bad
@@ -79,9 +81,15 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 	s.provideSession(b)
 	s.provideKratos(b)
 	s.tenancy = newTenancy(b.Pool(), b.Clock(), s.admin, s.cfg)
+	s.apiKeys = newAPIKeys(b.Pool(), b.Clock())
 	err := b.ProvideTenantDirectory(&tenantDirectory{pool: b.Pool()})
 	if err != nil {
 		return fmt.Errorf("provide tenant directory: %w", err)
+	}
+	keyResolver := newAPIKeyResolver(b.Pool(), b.Clock(), b.Scopes(), b.Logger())
+	err = b.ProvideAPIKeyResolver(keyResolver)
+	if err != nil {
+		return fmt.Errorf("provide api key resolver: %w", err)
 	}
 
 	scopes := []struct{ name, description string }{
@@ -117,5 +125,6 @@ func (s *service) provideKratos(b *core.Builder) {
 func (s *service) mount(_ context.Context, h *core.Host) error {
 	s.mountSession(h)
 	s.mountTenancy(h)
+	s.mountAPIKeys(h)
 	return nil
 }

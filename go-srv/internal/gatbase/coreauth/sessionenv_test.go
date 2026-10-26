@@ -191,8 +191,6 @@ type sessEnvOptions struct {
 	adminURL string
 	// operatorEmails is GATBASE_PLATFORM_OPERATOR_EMAILS.
 	operatorEmails string
-	// keys is the API key resolver; nil keeps the instance without API keys.
-	keys auth.APIKeyResolver
 }
 
 // sessEnv is core.Build with the module, a probe route and fakes at the boundary.
@@ -247,12 +245,11 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 		settings["GATBASE_PLATFORM_OPERATOR_EMAILS"] = opts.operatorEmails
 	}
 	app, err := core.Build(context.Background(), core.Options{
-		Logger:         slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Config:         config.MapSource(settings),
-		Clock:          clk,
-		Pool:           pool,
-		FlagEvaluator:  opts.flags,
-		APIKeyResolver: opts.keys,
+		Logger:        slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Config:        config.MapSource(settings),
+		Clock:         clk,
+		Pool:          pool,
+		FlagEvaluator: opts.flags,
 	}, []core.Module{Module(), probe})
 	if err != nil {
 		t.Fatalf("Build: %v", err)

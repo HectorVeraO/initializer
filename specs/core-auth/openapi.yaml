@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Gatbase core-auth
-  version: 1.2.0
+  version: 1.3.0
   description: >
     Identity (Ory Kratos behind a stateless BFF session), flat tenancy, invitations,
     memberships and M2M API keys. Every /api/v1 body is ApiEnvelope<T>. Session cookie
@@ -15,6 +15,7 @@ tags:
   - name: tenants
   - name: memberships
   - name: invitations
+  - name: api-keys
 x-gatbase-tck:
   pinned:
     - routes, methods, bodies, status codes and error codes of this file
@@ -306,6 +307,80 @@ paths:
         '409': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
+  /api/v1/api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [api-keys]
+      description: Admin session, or an API key holding api-keys:read. Never a secret or hash.
+      security: [{ sessionCookie: [] }, { apiKey: [] }]
+      x-gatbase-scope: api-keys:read
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/ApiKeyStatus' }
+          description: Every status when absent.
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Size' }
+        - name: sort
+          in: query
+          required: false
+          schema: { type: string, enum: [createdAt, -createdAt, name, -name], default: -createdAt }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/ApiKeyPageOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createApiKey
+      tags: [api-keys]
+      description: Admin session only. plainTextKey is shown once and never stored.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateApiKeyRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/ApiKeyCreatedOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/api-keys/{id}:
+    delete:
+      operationId: revokeApiKey
+      tags: [api-keys]
+      description: Admin session only. Idempotent; a foreign, unknown or malformed id is 404.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/ApiKeyViewOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/api-key-scopes:
+    get:
+      operationId: listApiKeyScopes
+      tags: [api-keys]
+      description: Admin session only. The scopes registered by installed modules, ordered by name.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/ScopeListOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
     sessionCookie:
@@ -450,6 +525,30 @@ components:
       content:
         application/json:
           schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AcceptNewResult' } } } ] }
+    ApiKeyViewOk:
+      description: API key metadata.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ApiKeyView' } } } ] }
+    ApiKeyPageOk:
+      description: Page of API key metadata; never a secret, hash or plain key.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { allOf: [ { $ref: '#/components/schemas/PageInfo' }, { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ApiKeyView' } } } } ] } } } ] }
+    ApiKeyCreatedOk:
+      description: plainTextKey is shown once and never stored.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ApiKeyCreated' } } } ] }
+    ScopeListOk:
+      description: Registered scopes ordered by name.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ScopeInfo' } } } } ] }
   schemas:
     ApiMeta:
       type: object
@@ -531,6 +630,9 @@ components:
         - TENANT_MISMATCH
         - LAST_TENANT_ADMIN
         - INVITATION_REQUIRED
+        - API_KEY_INVALID_OR_REVOKED
+        - INSUFFICIENT_SCOPE
+        - CREDENTIAL_CONFLICT
     ApiIssueCode:
       type: string
       description: error.issues[].code, always under a 422 VALIDATION_FAILED. The set grows (x-extensible-enum), so a client treats an unknown code as a generic problem.
@@ -695,3 +797,34 @@ components:
         token: { type: string }
         password: { type: string, description: 12-64 characters }
         fullName: { type: string, description: 1-100 characters after trimming }
+    ApiKeyStatus: { type: string, enum: [active, expired, revoked] }
+    ApiKeyView:
+      type: object
+      required: [id, name, keyPrefix, scopes, status, expiresAt, revokedAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        keyPrefix: { type: string, pattern: '^gbk_live_[a-z2-7]{16}$' }
+        scopes: { type: array, items: { type: string } }
+        status: { $ref: '#/components/schemas/ApiKeyStatus' }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        revokedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    ApiKeyCreated:
+      type: object
+      required: [apiKey, plainTextKey]
+      properties:
+        apiKey: { $ref: '#/components/schemas/ApiKeyView' }
+        plainTextKey: { type: string, pattern: '^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$' }
+    ScopeInfo:
+      type: object
+      required: [name, description]
+      properties:
+        name: { type: string, pattern: '^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$' }
+        description: { type: string }
+    CreateApiKeyRequest:
+      type: object
+      properties:
+        name: { type: string, description: 1-100 characters after trimming }
+        scopes: { type: array, items: { type: string }, description: Non-empty, registered, no duplicates }
+        expiresAt: { type: [string, 'null'], format: date-time, description: A past value is accepted and the key is born expired. }
