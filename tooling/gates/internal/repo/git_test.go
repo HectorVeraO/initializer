@@ -176,6 +176,21 @@ func TestTrailerValuesFindsOnlyRealTrailersOnTouchingCommits(t *testing.T) {
 	}
 }
 
+func TestTrailerValuesAcceptsIndentedContinuationLines(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, filepath.Join(dir, "specs", "a", "f.txt"), "1\n")
+	runGit(t, dir, "add", "-A")
+	message := "feature(a): Break a\n\nWhy.\n\nBREAKING CHANGE: a wire change\n  that spans two lines\nRefs: #1"
+	runGit(t, dir, "commit", "-m", message)
+	got, err := repo.TrailerValues(dir, "main", "HEAD", "specs/a/", []string{"BREAKING CHANGE"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "a wire change" {
+		t.Fatalf("got %v", got)
+	}
+}
+
 func TestTrailerValuesRejectsBadInput(t *testing.T) {
 	dir := newRepo(t)
 	cases := []struct {
