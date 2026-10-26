@@ -1,0 +1,228 @@
+openapi: 3.1.0
+info:
+  title: Gatbase core-auth
+  version: 0.1.0
+  description: >
+    Identity (Ory Kratos behind a stateless BFF session), flat tenancy, invitations,
+    memberships and M2M API keys. Every /api/v1 body is ApiEnvelope<T>. Session cookie
+    name and token format are not pinned (see x-gatbase-tck). The CSRF cookie XSRF-TOKEN
+    and header X-XSRF-TOKEN are pinned.
+servers:
+  - url: /
+security: []
+tags:
+  - name: session
+x-gatbase-tck:
+  pinned:
+    - routes, methods, bodies, status codes and error codes of this file
+    - CSRF cookie XSRF-TOKEN readable by JS and header X-XSRF-TOKEN on cookie-borne mutations
+    - CheckAccess order (ACCOUNT_LOCKED_OR_DISABLED, TENANT_ACCESS_DENIED, TENANT_SUSPENDED, MEMBERSHIP_REVOKED)
+  unpinned:
+    - session cookie name, number of session cookies, token format and claims
+    - identity provider endpoints
+    - how refresh is implemented
+paths:
+  /api/v1/auth/session:
+    get:
+      operationId: getSession
+      tags: [session]
+      description: >
+        Returns the session. Without a valid BFF session it issues one from the identity
+        provider session; a tenantless session is moved onto a usable tenant when one exists.
+      security: [{}, { sessionCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/SessionOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [session]
+      description: Revokes the identity provider session and clears every session cookie. Needs a session whose signature verifies (expired allowed up to the refresh maximum age); an absent or unusable session answers 401 and clears nothing.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/XsrfToken' }
+      responses:
+        '200': { $ref: '#/components/responses/LogoutOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: gb_session
+      description: Name is __Host-gb_session over https. Not pinned by the TCK; treat it as opaque.
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "Format ^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$. Never combined with a session cookie (409 CREDENTIAL_CONFLICT)."
+  parameters:
+    XsrfToken:
+      name: X-XSRF-TOKEN
+      in: header
+      required: false
+      description: Required on cookie-authenticated mutations; value of the XSRF-TOKEN cookie. Missing or wrong -> 403 CSRF_TOKEN_INVALID.
+      schema: { type: string }
+  headers:
+    XTraceId:
+      description: The trace id of the request; equals meta.traceId of the body.
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{32}$'
+    CacheControl:
+      schema: { type: string, const: no-store }
+  responses:
+    Error:
+      description: Error envelope.
+      headers:
+        X-Trace-Id:
+          $ref: '#/components/headers/XTraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiEnvelopeError'
+    SessionOk:
+      description: Session view.
+      headers:
+        X-Trace-Id:
+          $ref: '#/components/headers/XTraceId'
+        Cache-Control: { $ref: '#/components/headers/CacheControl' }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/SessionView' } } } ] }
+    LogoutOk:
+      description: Cookies cleared.
+      headers:
+        X-Trace-Id:
+          $ref: '#/components/headers/XTraceId'
+        Cache-Control: { $ref: '#/components/headers/CacheControl' }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/LogoutResult' } } } ] }
+  schemas:
+    ApiMeta:
+      type: object
+      required: [traceId, timestamp]
+      additionalProperties: false
+      properties:
+        traceId:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+          description: 32 lowercase hex characters, never all zeros.
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC in whole seconds, ending in Z.
+    ApiIssue:
+      type: object
+      required: [field, code, message]
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+          description: JSON path into the request body or a query parameter name; empty means the whole body.
+        code:
+          $ref: '#/components/schemas/ApiIssueCode'
+        message:
+          type: string
+    ApiError:
+      type: object
+      required: [code, message, issues]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/ApiErrorCode'
+        message:
+          type: string
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiIssue'
+    ApiEnvelopeError:
+      type: object
+      required: [data, meta, error]
+      additionalProperties: false
+      properties:
+        data:
+          type: 'null'
+        meta:
+          $ref: '#/components/schemas/ApiMeta'
+        error:
+          $ref: '#/components/schemas/ApiError'
+    ApiErrorCode:
+      type: string
+      description: Top-level error.code; a code is contract and renaming one is a breaking change.
+      enum:
+        - SESSION_INVALID
+        - CSRF_TOKEN_INVALID
+        - ACCOUNT_LOCKED_OR_DISABLED
+        - ROUTE_NOT_FOUND
+        - INTERNAL_ERROR
+        - SERVICE_UNAVAILABLE
+        - IDENTITY_PROVIDER_UNAVAILABLE
+    ApiIssueCode:
+      type: string
+      description: error.issues[].code, always under a 422 VALIDATION_FAILED.
+      enum:
+        - BODY_MALFORMED
+        - FIELD_REQUIRED
+        - FIELD_TYPE_INVALID
+        - FIELD_TOO_SHORT
+        - FIELD_TOO_LONG
+        - FIELD_OUT_OF_RANGE
+        - FIELD_INVALID_FORMAT
+        - FIELD_NOT_ALLOWED
+        - FIELD_DUPLICATE
+        - FIELD_MIN_ITEMS
+    SuccessEnvelope:
+      type: object
+      required: [data, meta, error]
+      properties:
+        data: {}
+        meta: { $ref: '#/components/schemas/ApiMeta' }
+        error: { type: 'null' }
+    Role: { type: string, enum: [admin, member, viewer] }
+    TenantStatus: { type: string, enum: [active, suspended] }
+    MembershipStatus: { type: string, enum: [active, suspended, revoked] }
+    TenantSummary:
+      type: object
+      required: [id, slug, name, status]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string, pattern: '^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$' }
+        name: { type: string }
+        status: { $ref: '#/components/schemas/TenantStatus' }
+    SessionAccount:
+      type: object
+      required: [id, email, fullName, role, isPlatformOperator]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        fullName: { type: [string, 'null'] }
+        role: { oneOf: [ { $ref: '#/components/schemas/Role' }, { type: 'null' } ], description: Role in the active tenant; null when tenantless. }
+        isPlatformOperator: { type: boolean }
+    MembershipView:
+      type: object
+      required: [id, tenant, role, status]
+      properties:
+        id: { type: string, format: uuid }
+        tenant: { $ref: '#/components/schemas/TenantSummary' }
+        role: { $ref: '#/components/schemas/Role' }
+        status: { $ref: '#/components/schemas/MembershipStatus' }
+    SessionView:
+      type: object
+      required: [account, activeTenant, memberships, flags]
+      properties:
+        account: { $ref: '#/components/schemas/SessionAccount' }
+        activeTenant: { oneOf: [ { $ref: '#/components/schemas/TenantSummary' }, { type: 'null' } ] }
+        memberships: { type: array, items: { $ref: '#/components/schemas/MembershipView' }, description: Active memberships only. }
+        flags: { type: object, additionalProperties: { type: boolean } }
+    LogoutResult:
+      type: object
+      required: [logoutUrl]
+      properties:
+        logoutUrl: { type: string, format: uri, description: Where the client navigates next. }

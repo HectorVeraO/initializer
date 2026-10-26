@@ -21,6 +21,9 @@ type service struct {
 	cookies session.Cookies
 	// admin is nil only when GATBASE_KRATOS_ADMIN_URL is invalid, which fails Build.
 	admin *kratos.Admin
+	// public is nil only when GATBASE_KRATOS_PUBLIC_URL is invalid, which fails Build.
+	public *kratos.Public
+	access *access
 }
 
 // provideSession builds the token codec and the cookie helpers. A bad
@@ -45,6 +48,11 @@ func (s *service) provideSession(b *core.Builder) {
 		return
 	}
 	s.codec = session.NewCodec(ring, b.Clock())
+	resolver := newSessionResolver(s.codec, s.cookies, s.cfg.SessionRefreshMaxAge, b.Logger())
+	err := b.ProvideSessionResolver(resolver)
+	if err != nil {
+		b.Config().Invalid(keySessionKeys, "session resolver: "+err.Error())
+	}
 }
 
 // Module returns the core-auth catalog module. modules.go lists it first.
@@ -54,6 +62,7 @@ func Module() core.Module {
 		ID:         moduleID,
 		Migrations: migrationsFS,
 		Provide:    s.provide,
+		Mount:      s.mount,
 		Start:      s.start,
 	}
 }
@@ -64,6 +73,7 @@ func Module() core.Module {
 func (s *service) provide(_ context.Context, b *core.Builder) error {
 	s.cfg = parseConfig(b.Config(), b.PublicBaseURL())
 	s.store = newStore(b.Pool(), b.Clock())
+	s.access = newAccess(b.Pool(), b.Clock(), s.cfg.PlatformOperatorEmails)
 	s.provideSession(b)
 	s.provideKratos(b)
 
@@ -83,13 +93,21 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 // provideKratos builds the admin client without any I/O. Its transport
 // carries the W3C traceparent of the request or job context.
 func (s *service) provideKratos(b *core.Builder) {
-	if s.cfg.KratosAdminURL == nil {
-		return
-	}
 	var opts []kratos.Option
 	telemetry := b.Telemetry()
 	if telemetry != nil {
 		opts = append(opts, kratos.WithTransport(telemetry.Transport(nil)))
 	}
-	s.admin = kratos.NewAdmin(s.cfg.KratosAdminURL, opts...)
+	if s.cfg.KratosAdminURL != nil {
+		s.admin = kratos.NewAdmin(s.cfg.KratosAdminURL, opts...)
+	}
+	if s.cfg.KratosPublicURL != nil {
+		s.public = kratos.NewPublic(s.cfg.KratosPublicURL, kratosCookieName, opts...)
+	}
+}
+
+// mount registers the session routes and the /kratos/ proxy.
+func (s *service) mount(_ context.Context, h *core.Host) error {
+	s.mountSession(h)
+	return nil
 }

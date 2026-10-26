@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "spec": "core-auth",
+  "version": "0.1.0",
+  "tckTags": ["@core-auth"],
+  "tckEnv": {
+    "GATBASE_BOOTSTRAP_ADMIN_EMAIL": "admin@example.com",
+    "GATBASE_BOOTSTRAP_ADMIN_PASSWORD": "change-me-local-only",
+    "GATBASE_BOOTSTRAP_TENANT_SLUG": "acme"
+  }
+}

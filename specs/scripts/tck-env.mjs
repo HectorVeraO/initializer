@@ -11,12 +11,12 @@ export function shellQuote(value) {
 }
 
 /**
- * Merges every spec's `tckEnv` into sorted `export KEY='value'` lines.
+ * Merges every spec's `tckEnv` into one key/value map.
  * Throws a TckError (exit 1) on an invalid key, a non-string value or a conflict.
  * @param {{ spec: string, tckEnv: Record<string, string> }[]} manifests
- * @returns {string[]}
+ * @returns {Map<string, string>}
  */
-export function buildExports(manifests) {
+export function mergeTckEnv(manifests) {
   const merged = new Map();
   const problems = [];
   for (const manifest of manifests) {
@@ -40,7 +40,19 @@ export function buildExports(manifests) {
   if (problems.length > 0) {
     throw new TckError(problems.join('\n'), 1);
   }
-  const lines = [...merged.keys()].sort().map((key) => `export ${key}=${shellQuote(merged.get(key).value)}`);
+  const values = new Map([...merged.entries()].map(([key, entry]) => [key, entry.value]));
+  return values;
+}
+
+/**
+ * Merges every spec's `tckEnv` into sorted `export KEY='value'` lines.
+ * Throws a TckError (exit 1) on an invalid key, a non-string value or a conflict.
+ * @param {{ spec: string, tckEnv: Record<string, string> }[]} manifests
+ * @returns {string[]}
+ */
+export function buildExports(manifests) {
+  const merged = mergeTckEnv(manifests);
+  const lines = [...merged.keys()].sort().map((key) => `export ${key}=${shellQuote(merged.get(key))}`);
   return lines;
 }
 

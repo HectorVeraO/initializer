@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { mergeTckEnv } from './tck-env.mjs';
 import { collectTags, loadManifests, narrowTags, parseTagList, planPasses, TckError } from './tck-select.mjs';
 
 const SPECS_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -54,10 +55,13 @@ function main() {
     return;
   }
 
+  // The suite sees the tckEnv values the instance under test was started with; an exported variable wins.
+  const tckEnv = Object.fromEntries(mergeTckEnv(loadManifests(specsDir)));
+  const env = { ...tckEnv, ...process.env };
   const cli = createRequire(import.meta.url).resolve('@playwright/test/cli');
   let failed = false;
   for (const pass of passes) {
-    const result = spawnSync(process.execPath, [cli, ...pass.args], { cwd: specsDir, stdio: 'inherit' });
+    const result = spawnSync(process.execPath, [cli, ...pass.args], { cwd: specsDir, env, stdio: 'inherit' });
     if (result.status !== 0) {
       failed = true;
     }
