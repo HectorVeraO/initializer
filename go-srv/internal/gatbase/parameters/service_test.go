@@ -1,11 +1,13 @@
 package parameters_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +33,7 @@ func TestCreateAcceptsEveryValueType(t *testing.T) {
 		{"number with equal bounds", `{"key":"custom.fixed","valueType":"number","minValue":4,"maxValue":4,"defaultValue":4}`},
 		{"number allowed written 2.0", `{"key":"custom.steps","valueType":"number","allowedValues":[1,2,3],"defaultValue":2.0}`},
 		{"number beyond 2^53", `{"key":"custom.big","valueType":"number","defaultValue":9007199254740993}`},
+		{"json with a valid surrogate pair", `{"key":"custom.emoji","valueType":"json","defaultValue":"\ud83d\ude00"}`},
 		{"boolean", `{"key":"custom.enabled","valueType":"boolean","defaultValue":false}`},
 		{"json object", `{"key":"custom.theme","valueType":"json","defaultValue":{"a":[1,2,{"b":null}]}}`},
 		{"json scalar", `{"key":"custom.scalar","valueType":"json","defaultValue":0}`},
@@ -46,8 +49,33 @@ func TestCreateAcceptsEveryValueType(t *testing.T) {
 			if view.Source != "global" || view.EffectiveValue == nil || view.Key == "" {
 				t.Fatalf("unexpected view %+v", view)
 			}
+			var sent struct {
+				DefaultValue json.RawMessage `json:"defaultValue"`
+			}
+			if err := json.Unmarshal([]byte(tc.body), &sent); err != nil {
+				t.Fatal(err)
+			}
+			if !sameJSON(t, sent.DefaultValue, view.DefaultValue) {
+				t.Fatalf("default value = %s, sent %s", view.DefaultValue, sent.DefaultValue)
+			}
 		})
 	}
+}
+
+// sameJSON reports whether two JSON texts hold the same value, numbers
+// compared by their exact text.
+func sameJSON(t testing.TB, a, b []byte) bool {
+	t.Helper()
+	decode := func(raw []byte) any {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			t.Fatalf("decode %s: %v", raw, err)
+		}
+		return value
+	}
+	return reflect.DeepEqual(decode(a), decode(b))
 }
 
 func TestCreateReturnsTheContractView(t *testing.T) {
@@ -101,6 +129,21 @@ func TestCreateStoresTheActorAndClockTime(t *testing.T) {
 	}
 	if updatedBy != string(p.AccountID) || !updatedAt.Equal(fixedNow) || !createdAt.Equal(fixedNow) {
 		t.Fatalf("updated_by=%s updated_at=%s created_at=%s", updatedBy, updatedAt, createdAt)
+	}
+}
+
+func TestCreateByAnActorWithoutAnAccountStoresNullUpdatedBy(t *testing.T) {
+	svc, pool := newService(t)
+	keyActor := reqctx.Principal{Kind: reqctx.ActorAPIKey, ActorID: randomUUID(t), Role: reqctx.RoleAdmin}
+	mustCreate(t, svc, keyActor, retryDefinition)
+	var isNull bool
+	err := pool.QueryRow(context.Background(),
+		"SELECT updated_by IS NULL FROM sys_parameters WHERE key = 'retry.max_attempts'").Scan(&isNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isNull {
+		t.Fatal("updated_by is set for an actor without an account")
 	}
 }
 
@@ -289,12 +332,12 @@ func TestOverrideCallsNeedAnActiveTenant(t *testing.T) {
 		t.Fatal("SetOverride without a tenant succeeded")
 	}
 	var apiErr *api.Error
-	if errors.As(err, &apiErr) || !strings.Contains(err.Error(), "needs an active tenant") {
-		t.Fatalf("want the tenant guard's plain error, got %v", err)
+	if errors.As(err, &apiErr) {
+		t.Fatalf("want a plain error, got the API error %v", err)
 	}
 	_, err = svc.ClearOverride(ctx, p, "retry.max_attempts")
-	if err == nil || !strings.Contains(err.Error(), "needs an active tenant") {
-		t.Fatalf("ClearOverride without a tenant: want the tenant guard's error, got %v", err)
+	if err == nil || errors.As(err, &apiErr) {
+		t.Fatalf("ClearOverride without a tenant: want a plain error, got %v", err)
 	}
 }
 

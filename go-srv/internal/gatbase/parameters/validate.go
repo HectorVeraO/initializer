@@ -123,9 +123,10 @@ func matchesType(t valueType, raw json.RawMessage) bool {
 }
 
 // isStorable reports whether PostgreSQL jsonb can hold the valid JSON in raw:
-// UTF-8 text, no NUL character in a string, every number finite as a float64.
+// UTF-8 text, no unpaired surrogate escape, no NUL character in a string,
+// every number finite as a float64.
 func isStorable(raw []byte) bool {
-	if !utf8.Valid(raw) {
+	if !utf8.Valid(raw) || !hasPairedSurrogates(raw) {
 		return false
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -150,6 +151,58 @@ func isStorable(raw []byte) bool {
 			}
 		}
 	}
+}
+
+// hasPairedSurrogates reports whether every surrogate \u escape in the valid
+// JSON text raw is a high surrogate followed by a low one, the only form jsonb
+// accepts. A backslash occurs only inside a string, so a linear scan that
+// skips each escape pair is exact.
+func hasPairedSurrogates(raw []byte) bool {
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '\\' {
+			continue
+		}
+		isUnicodeEscape := i+1 < len(raw) && raw[i+1] == 'u'
+		if !isUnicodeEscape {
+			i++
+			continue
+		}
+		unit, ok := hexUnit(raw, i+2)
+		if !ok {
+			return false
+		}
+		i += 5
+		isHigh := unit >= 0xD800 && unit <= 0xDBFF
+		isLow := unit >= 0xDC00 && unit <= 0xDFFF
+		if isLow {
+			return false
+		}
+		if !isHigh {
+			continue
+		}
+		hasEscape := i+2 < len(raw) && raw[i+1] == '\\' && raw[i+2] == 'u'
+		if !hasEscape {
+			return false
+		}
+		next, ok := hexUnit(raw, i+3)
+		if !ok || next < 0xDC00 || next > 0xDFFF {
+			return false
+		}
+		i += 6
+	}
+	return true
+}
+
+// hexUnit parses the four hex digits of raw at offset.
+func hexUnit(raw []byte, offset int) (uint16, bool) {
+	if offset+4 > len(raw) {
+		return 0, false
+	}
+	value, err := strconv.ParseUint(string(raw[offset:offset+4]), 16, 16)
+	if err != nil {
+		return 0, false
+	}
+	return uint16(value), true
 }
 
 // identityOf returns the Go value two scalars of type t are compared by:

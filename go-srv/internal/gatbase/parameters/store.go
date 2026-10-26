@@ -201,6 +201,8 @@ func (s *store) list(ctx context.Context, tenantID *string, isDescending bool, l
 	if isDescending {
 		direction = "DESC"
 	}
+	// COLLATE "C" orders keys by byte value, so the order does not depend on
+	// the database locale.
 	query := "SELECT " + definitionColumns + ", o.value FROM sys_parameters p " +
 		"LEFT JOIN sys_parameter_overrides o ON o.parameter_key = p.key AND o.tenant_id = $1::uuid " +
 		`ORDER BY p.key COLLATE "C" ` + direction + " LIMIT $2 OFFSET $3"
