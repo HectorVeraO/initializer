@@ -559,17 +559,13 @@ components:
       in: query
       required: false
       description: 1-based page number. Not an integer -> FIELD_TYPE_INVALID; below 1 -> FIELD_OUT_OF_RANGE.
-      schema:
-        type: string
-        default: '1'
+      schema: { type: integer, minimum: 1, default: 1 }
     Size:
       name: size
       in: query
       required: false
       description: Page size, 1 to 100. Not an integer -> FIELD_TYPE_INVALID; outside the range -> FIELD_OUT_OF_RANGE.
-      schema:
-        type: string
-        default: '20'
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
     Sort:
       name: sort
       in: query
