@@ -3,6 +3,7 @@ package flagscheck_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -96,13 +97,12 @@ func TestParseErrors(t *testing.T) {
 	for name, content := range cases {
 		t.Run(name, func(t *testing.T) {
 			vs := checkText(t, content, "")
-			if len(vs) == 0 {
-				t.Fatal("expected a violation")
+			hasParseError := slices.Contains(rules(vs), flagscheck.RuleParseError)
+			if !hasParseError {
+				t.Fatalf("want %s among, got %+v", flagscheck.RuleParseError, vs)
 			}
-			t.Logf("RULES %s: %v", name, vs[0].Rule)
 		})
 	}
-	assertRules(t, checkText(t, "flags:\n", ""), flagscheck.RuleParseError)
 }
 
 func TestUnknownFields(t *testing.T) {
@@ -257,6 +257,16 @@ func TestShorteningExpiryFails(t *testing.T) {
 func TestChangingTypeFails(t *testing.T) {
 	vs := checkText(t, release("example_beta_banner", "2026-11-24"), ops("example_beta_banner"))
 	assertRules(t, vs, flagscheck.RuleTypeChanged)
+}
+
+func TestChangingTypeIsExemptFromTheFarDateLimit(t *testing.T) {
+	vs := checkText(t, release("example_beta_banner", "2026-12-31"), ops("example_beta_banner"))
+	assertRules(t, vs, flagscheck.RuleTypeChanged)
+}
+
+func TestChangingTypeStillReportsAnExpiredDate(t *testing.T) {
+	vs := checkText(t, release("example_beta_banner", "2026-10-20"), ops("example_beta_banner"))
+	assertRules(t, vs, flagscheck.RuleTypeChanged, flagscheck.RuleExpired)
 }
 
 func TestNewFlagAgainstAnEmptyBaseIsStillLimited(t *testing.T) {

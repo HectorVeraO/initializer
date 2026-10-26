@@ -64,19 +64,15 @@ func TestGitHubPrinterEscapesCommandData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Print: %v", err)
 	}
-	wantPrefix := "::error file=flags.yaml::X: 100%25%0A"
-	hasCommand := false
-	for _, line := range strings.Split(out.String(), "\n") {
-		isCommand := strings.HasPrefix(line, "::")
-		if isCommand && !strings.HasPrefix(line, wantPrefix) {
-			t.Fatalf("unescaped workflow command line %q", line)
-		}
-		if isCommand {
-			hasCommand = true
+	want := "::error file=flags.yaml::X: 100%25%0A::error::injected"
+	var commands []string
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		if strings.HasPrefix(line, "::") {
+			commands = append(commands, line)
 		}
 	}
-	if !hasCommand {
-		t.Fatalf("no escaped workflow command in %q", out.String())
+	if len(commands) != 1 || commands[0] != want {
+		t.Fatalf("workflow commands = %q, want exactly [%q]", commands, want)
 	}
 }
 

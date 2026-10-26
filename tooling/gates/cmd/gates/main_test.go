@@ -216,6 +216,13 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 	}
 }
 
+func TestHelpExitsZero(t *testing.T) {
+	r := invoke([]string{"flags", "-h"}, fixedNow, nil)
+	if r.code != 0 || r.stdout != "" {
+		t.Fatalf("got %+v", r)
+	}
+}
+
 func TestRunUsesTheRealEntryPoint(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := run([]string{"bogus"}, &out, &errOut)
