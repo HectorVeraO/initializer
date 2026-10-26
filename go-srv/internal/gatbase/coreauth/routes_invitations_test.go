@@ -223,6 +223,8 @@ func TestCreateInvitationValidationAccumulates(t *testing.T) {
 		{"format and role", `{"email":"not-an-email","role":"owner"}`, []wantIssue{{"email", "FIELD_INVALID_FORMAT"}, {"role", "FIELD_NOT_ALLOWED"}}},
 		{"too long", `{"email":"` + strings.Repeat("a", 250) + `@example.com","role":"admin"}`, []wantIssue{{"email", "FIELD_TOO_LONG"}}},
 		{"empty role", `{"email":"a@example.com","role":""}`, []wantIssue{{"role", "FIELD_REQUIRED"}}},
+		{"empty email", `{"email":"","role":"admin"}`, []wantIssue{{"email", "FIELD_REQUIRED"}}},
+		{"whitespace email", `{"email":"   ","role":"admin"}`, []wantIssue{{"email", "FIELD_REQUIRED"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -306,6 +308,10 @@ func TestListInvitationsFiltersByStatusAndTenant(t *testing.T) {
 		if len(page.Items) != 1 || page.Items[0].ID != wantID || page.TotalItems != 1 {
 			t.Fatalf("status %q: page = %+v", status, page)
 		}
+	}
+	emptyStatus := decodeData[api.Page[InvitationView]](t, adminA.send(http.MethodGet, "/api/v1/invitations?status=", ""))
+	if len(emptyStatus.Items) != 1 || emptyStatus.Items[0].ID != pending.Invitation.ID {
+		t.Fatalf("empty status: page = %+v", emptyStatus)
 	}
 	page := decodeData[api.Page[InvitationView]](t, adminA.send(http.MethodGet, "/api/v1/invitations?status=expired", ""))
 	if len(page.Items) != 0 || page.Items == nil {
@@ -447,6 +453,8 @@ func TestAcceptInvitationValidationAndUnknownToken(t *testing.T) {
 	}{
 		{"missing", `{}`, []wantIssue{{"token", "FIELD_REQUIRED"}}},
 		{"type", `{"token":7}`, []wantIssue{{"token", "FIELD_TYPE_INVALID"}}},
+		{"empty", `{"token":""}`, []wantIssue{{"token", "FIELD_REQUIRED"}}},
+		{"whitespace", `{"token":"   "}`, []wantIssue{{"token", "FIELD_INVALID_FORMAT"}}},
 		{"format", `{"token":"short"}`, []wantIssue{{"token", "FIELD_INVALID_FORMAT"}}},
 		{"padding", `{"token":"` + strings.Repeat("a", 42) + `="}`, []wantIssue{{"token", "FIELD_INVALID_FORMAT"}}},
 	}
@@ -564,6 +572,10 @@ func TestAcceptNewValidationAccumulatesInFieldOrder(t *testing.T) {
 			[]wantIssue{{"token", "FIELD_TYPE_INVALID"}, {"password", "FIELD_TYPE_INVALID"}, {"fullName", "FIELD_TYPE_INVALID"}}},
 		{"too long", `{"token":"` + token + `","password":"` + strings.Repeat("p", 65) + `","fullName":"` + strings.Repeat("n", 101) + `"}`,
 			[]wantIssue{{"password", "FIELD_TOO_LONG"}, {"fullName", "FIELD_TOO_LONG"}}},
+		{"empty strings", `{"token":"` + token + `","password":"","fullName":""}`,
+			[]wantIssue{{"password", "FIELD_REQUIRED"}, {"fullName", "FIELD_REQUIRED"}}},
+		{"empty token", `{"token":"","password":"` + strings.Repeat("p", 12) + `","fullName":"Jane"}`,
+			[]wantIssue{{"token", "FIELD_REQUIRED"}}},
 		{"spaces count in a password", `{"token":"` + token + `","password":"           x","fullName":"   "}`,
 			[]wantIssue{{"fullName", "FIELD_REQUIRED"}}},
 	}

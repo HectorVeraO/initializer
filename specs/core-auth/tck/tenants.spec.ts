@@ -3,7 +3,7 @@ import { bootstrapOperator, expectError, mutate, seedTenant } from '../../tck-su
 
 test('CA-12 tenant creation refuses a taken slug and accumulates validation issues', { tag: '@core-auth' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
-  const tenant = await seedTenant(playwright, operator, { slugBase: 'tenant-a' });
+  const tenant = await seedTenant(playwright, operator, { slugBase: 'ca12-a' });
 
   const taken = await mutate(operator, 'POST', '/api/v1/tenants', {
     slug: tenant.slug,

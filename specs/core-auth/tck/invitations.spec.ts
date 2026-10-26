@@ -52,8 +52,8 @@ async function rawPost(admin: Actor, body: string, contentType: string): Promise
 test('CA-06 invitations carry a fragment token, match the email and are single use', { tag: '@core-auth' }, async ({ playwright, request }) => {
   const suffix = runSuffix();
   const operator = await bootstrapOperator(playwright);
-  const tenantA = await seedTenant(playwright, operator, { slugBase: 'tenant-a' });
-  const other = await seedTenant(playwright, operator, { slugBase: 'tenant-w' });
+  const tenantA = await seedTenant(playwright, operator, { slugBase: 'ca06-a' });
+  const other = await seedTenant(playwright, operator, { slugBase: 'ca06-w' });
   const janeEmail = `jane-${suffix}@example.com`;
 
   const created = await expectData<{ invitation: InvitationItem; invitationUrl: string }>(
@@ -97,7 +97,7 @@ test('CA-06 invitations carry a fragment token, match the email and are single u
 
 test('CA-08 a new invitation supersedes the pending one', { tag: '@core-auth' }, async ({ playwright, request }) => {
   const operator = await bootstrapOperator(playwright);
-  const tenant = await seedTenant(playwright, operator, { slugBase: 'tenant-a' });
+  const tenant = await seedTenant(playwright, operator, { slugBase: 'ca08-a' });
   const email = `ca08-${runSuffix()}@example.com`;
 
   const first = await invite(tenant.admin, email, 'member');
@@ -113,8 +113,8 @@ test('CA-08 a new invitation supersedes the pending one', { tag: '@core-auth' },
 
 test('CA-09 accept-new accumulates issues and leaves an existing identity to accept', { tag: '@core-auth' }, async ({ playwright, request }) => {
   const operator = await bootstrapOperator(playwright);
-  const tenantB = await seedTenant(playwright, operator, { slugBase: 'tenant-b' });
-  const other = await seedTenant(playwright, operator, { slugBase: 'tenant-w' });
+  const tenantB = await seedTenant(playwright, operator, { slugBase: 'ca09-b' });
+  const other = await seedTenant(playwright, operator, { slugBase: 'ca09-w' });
 
   const invalid = await expectError(await acceptNew(request, { token: 'short', password: 'short', fullName: '  ' }), 422, 'VALIDATION_FAILED');
   expect(invalid.issues.map((issue) => [issue.field, issue.code])).toEqual([
@@ -134,7 +134,7 @@ test('CA-09 accept-new accumulates issues and leaves an existing identity to acc
 
 test('Transport limits on POST /api/v1/invitations answer the registry codes', { tag: '@core-auth' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
-  const tenant = await seedTenant(playwright, operator, { slugBase: 'tenant-a' });
+  const tenant = await seedTenant(playwright, operator, { slugBase: 'tl-a' });
 
   const malformed = await expectError(await rawPost(tenant.admin, '{"email":', 'application/json'), 422, 'VALIDATION_FAILED');
   expect(malformed.issues.map((issue) => [issue.field, issue.code])).toEqual([['', 'BODY_MALFORMED']]);
