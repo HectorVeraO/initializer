@@ -234,6 +234,9 @@ func TestIssueCodes(t *testing.T) {
 		{"go.mod line 1", func(t *testing.T, r fstest.MapFS) {
 			put(r, "go-srv/go.mod", "mod "+fixtureModule+"\n")
 		}, []string{"GO_MODULE_LINE_INVALID"}},
+		{"go.mod not tracked", func(t *testing.T, r fstest.MapFS) {
+			delete(r, "go-srv/go.mod")
+		}, []string{"GO_MODULE_LINE_INVALID"}},
 		{"module path in a spec file", func(t *testing.T, r fstest.MapFS) {
 			put(r, "specs/core/openapi.yaml", "servers: "+fixtureModule+"\n")
 		}, []string{"GO_MODULE_PATH_LEAK"}},
@@ -364,8 +367,8 @@ func TestBuildRefusesUnsafeFileLists(t *testing.T) {
 	repo := cleanRepo(t)
 	for _, bad := range []string{"../escape", "/abs", "a\\b", "a//b", "./a", "a/../b", "a\x01b", "dir/", ""} {
 		_, _, err := Build(BuildOptions{Root: repo, Files: []string{bad}, Generator: "0.1.0"})
-		if err == nil {
-			t.Fatalf("path %q must be refused", bad)
+		if err == nil || !strings.Contains(err.Error(), "invalid tracked path") {
+			t.Fatalf("path %q must be refused as an invalid tracked path, got %v", bad, err)
 		}
 	}
 }

@@ -179,7 +179,10 @@ func runCatalogBuild(args []string, stdout, stderr io.Writer, logger *slog.Logge
 		logger.Error("catalog_build_failed", slog.String("error", err.Error()))
 		return exitInternal
 	}
-	_, _ = stdout.Write(append(line, '\n'))
+	if _, err := stdout.Write(append(line, '\n')); err != nil {
+		logger.Error("result_unwritable", slog.String("error", err.Error()))
+		return exitInternal
+	}
 	logger.Info("catalog_built",
 		slog.Int("spec_count", len(built.Specs)),
 		slog.Int("stack_count", len(built.Stacks)),

@@ -351,6 +351,22 @@ func TestCatalogBuildInputErrorsExitThree(t *testing.T) {
 	}
 }
 
+func TestCatalogBuildFileListSizeLimit(t *testing.T) {
+	root := filepath.Join(cleanFixture, "repo")
+	out := filepath.Join(t.TempDir(), "c.json")
+	list := filepath.Join(t.TempDir(), "big.bin")
+	if err := os.WriteFile(list, bytes.Repeat([]byte("a"), maxFileListBytes+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, _ := execute(t, "catalog", "build", "--root", root, "--files", list, "--out", out)
+	if code != exitInternal {
+		t.Fatalf("exit %d, want %d", code, exitInternal)
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Fatalf("no catalog may be written for an oversized list")
+	}
+}
+
 func TestCatalogBuildRequiresFilesFlag(t *testing.T) {
 	code, _, stderr := execute(t, "catalog", "build", "--root", ".", "--out", "c.json")
 	if code != exitUsage || !strings.Contains(stderr, "files") {
