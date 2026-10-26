@@ -53,22 +53,32 @@ func TestDecodeRefusesBadCatalogs(t *testing.T) {
 		t.Fatalf("Encode: %v", err)
 	}
 	text := string(good)
-	cases := map[string]string{
-		"unknown key":      strings.Replace(text, `"schema": 1,`, `"schema": 1, "extra": 2,`, 1),
-		"schema 2":         strings.Replace(text, `"schema": 1,`, `"schema": 2,`, 1),
-		"trailing data":    text + "{}",
-		"empty":            "",
-		"not an object":    "[]",
-		"bad version":      strings.Replace(text, `"version": "1.0.0"`, `"version": "1.0"`, 1),
-		"short hash":       strings.Replace(text, `"sha256": "`, `"sha256": "zz`, 1),
-		"bad compose name": strings.Replace(text, `"composeName": "fixture-app"`, `"composeName": "Bad"`, 1),
-		"traversal path":   strings.Replace(text, `"path": "specs/core/openapi.yaml"`, `"path": "../openapi.yaml"`, 1),
-		"unsorted specs":   strings.Replace(text, `"spec": "core",`, `"spec": "zzz",`, 1),
+	cases := []struct {
+		name    string
+		data    string
+		path    string
+		message string
+	}{
+		{"unknown key", strings.Replace(text, `"schema": 1,`, `"schema": 1, "extra": 2,`, 1), "catalog.lock.json#", `unknown field "extra"`},
+		{"schema 2", strings.Replace(text, `"schema": 1,`, `"schema": 2,`, 1), "catalog.lock.json#/schema", "must be the number 1"},
+		{"trailing data", text + "{}", "catalog.lock.json#", "unexpected data after the JSON value"},
+		{"empty", "", "catalog.lock.json#", "EOF"},
+		{"not an object", "[]", "catalog.lock.json#", "cannot unmarshal array"},
+		{"bad version", strings.Replace(text, `"version": "1.0.0"`, `"version": "1.0"`, 1), "catalog.lock.json#/specs/0/version", "MAJOR.MINOR.PATCH"},
+		{"short hash", strings.Replace(text, `"sha256": "`, `"sha256": "zz`, 1), "catalog.lock.json#/specs/0/files/0/sha256", "64 lowercase hex digits"},
+		{"bad compose name", strings.Replace(text, `"composeName": "fixture-app"`, `"composeName": "Bad"`, 1), "catalog.lock.json#/composeName", "must match"},
+		{"traversal path", strings.Replace(text, `"path": "specs/core/openapi.yaml"`, `"path": "../openapi.yaml"`, 1), "catalog.lock.json#/specs/0/files/0/path", "repo-relative path"},
+		{"unsorted specs", strings.Replace(text, `"spec": "core",`, `"spec": "zzz",`, 1), "catalog.lock.json#/specs/1", "sorted bytewise and unique"},
 	}
-	for name, data := range cases {
-		t.Run(name, func(t *testing.T) {
-			if _, issues := Decode([]byte(data)); len(issues) == 0 {
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, issues := Decode([]byte(tc.data))
+			if len(issues) == 0 {
 				t.Fatalf("want issues")
+			}
+			first := issues[0]
+			if first.Code != CodeCatalogInvalid || string(first.Path) != tc.path || !strings.Contains(first.Message, tc.message) {
+				t.Fatalf("first issue = %+v, want code %s at %s containing %q", first, CodeCatalogInvalid, tc.path, tc.message)
 			}
 		})
 	}
