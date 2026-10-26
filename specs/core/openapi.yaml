@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Gatbase core
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Wire contract every Gatbase module shares: the response envelope, the
     error and issue code tables, trace correlation, pagination, the health

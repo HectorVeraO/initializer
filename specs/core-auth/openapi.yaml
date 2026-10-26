@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Gatbase core-auth
-  version: 0.1.0
+  version: 0.2.0
   description: >
     Identity (Ory Kratos behind a stateless BFF session), flat tenancy, invitations,
     memberships and M2M API keys. Every /api/v1 body is ApiEnvelope<T>. Session cookie
@@ -35,6 +35,40 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
+  /api/v1/auth/refresh:
+    post:
+      operationId: refreshSession
+      tags: [session]
+      description: Re-runs the status checks and re-issues the session on the same tenant. Accepts an expired session.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/SessionOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/v1/auth/switch-tenant:
+    post:
+      operationId: switchTenant
+      tags: [session]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SwitchTenantRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/SessionOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
   /api/v1/auth/logout:
     post:
       operationId: logout
@@ -66,6 +100,12 @@ components:
       required: false
       description: Required on cookie-authenticated mutations; value of the XSRF-TOKEN cookie. Missing or wrong -> 403 CSRF_TOKEN_INVALID.
       schema: { type: string }
+    ActiveTenantId:
+      name: X-Active-Tenant-Id
+      in: header
+      required: false
+      description: Tenant the client rendered. Differs from the session tenant -> 409 ACTIVE_TENANT_CHANGED, nothing executed. Ignored for API keys.
+      schema: { type: string, format: uuid }
   headers:
     XTraceId:
       description: The trace id of the request; equals meta.traceId of the body.
@@ -160,6 +200,13 @@ components:
         - SESSION_INVALID
         - CSRF_TOKEN_INVALID
         - ACCOUNT_LOCKED_OR_DISABLED
+        - TENANT_ACCESS_DENIED
+        - TENANT_SUSPENDED
+        - MEMBERSHIP_REVOKED
+        - ACTIVE_TENANT_CHANGED
+        - VALIDATION_FAILED
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
         - ROUTE_NOT_FOUND
         - INTERNAL_ERROR
         - SERVICE_UNAVAILABLE
@@ -226,3 +273,7 @@ components:
       required: [logoutUrl]
       properties:
         logoutUrl: { type: string, format: uri, description: Where the client navigates next. }
+    SwitchTenantRequest:
+      type: object
+      properties:
+        tenantId: { type: string, format: uuid }
