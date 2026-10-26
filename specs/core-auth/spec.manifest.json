@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "spec": "core-auth",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "tckTags": ["@core-auth"],
   "tckEnv": {
     "GATBASE_BOOTSTRAP_ADMIN_EMAIL": "admin@example.com",

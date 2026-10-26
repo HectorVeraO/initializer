@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Gatbase core-auth
-  version: 0.2.0
+  version: 1.0.0
   description: >
     Identity (Ory Kratos behind a stateless BFF session), flat tenancy, invitations,
     memberships and M2M API keys. Every /api/v1 body is ApiEnvelope<T>. Session cookie

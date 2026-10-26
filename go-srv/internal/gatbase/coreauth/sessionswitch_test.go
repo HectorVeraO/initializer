@@ -813,3 +813,28 @@ func FuzzParseSwitchTenantID(f *testing.F) {
 		}
 	})
 }
+
+func TestSwitchSetsNoCookieWhenTheLastActiveWriteFails(t *testing.T) {
+	e := newSessEnv(t, sessEnvOptions{})
+	p := e.person()
+	c, home := signedInOn(e, p, "tenant-a", "admin")
+	target := e.tenant("tenant-b", "active")
+	e.member(target, p.accountID, "member", "active", e.clock.Now())
+	e.exec(`CREATE FUNCTION it_reject_last_active() RETURNS trigger AS $$
+		BEGIN RAISE EXCEPTION 'last active write rejected'; END; $$ LANGUAGE plpgsql`)
+	e.exec(`CREATE TRIGGER it_reject_last_active BEFORE UPDATE OF last_active_tenant_id
+		ON iam_accounts FOR EACH ROW EXECUTE FUNCTION it_reject_last_active()`)
+
+	rec := c.switchTo(target)
+
+	expectError(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR")
+	for _, name := range setCookieNames(rec) {
+		if name == "gb_session" {
+			t.Errorf("a failed switch set the session cookie: %v", setCookieNames(rec))
+		}
+	}
+	tenantID := c.claims().TenantID
+	if tenantID == nil || *tenantID != home {
+		t.Errorf("session tenant = %v, want it to stay on %s", tenantID, home)
+	}
+}
