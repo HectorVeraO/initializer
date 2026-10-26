@@ -150,11 +150,12 @@ func TestCheckAccessNonMemberAndUnknownTenantLookAlike(t *testing.T) {
 	other := env.tenant("tenant-b", "active")
 	unknown := env.scanString("SELECT gen_random_uuid()::text")
 	badID := "not-a-uuid"
+	const wantDeniedMessage = "The account has no access to this tenant."
 	for _, tenantID := range []string{suspended, other, unknown, badID, ""} {
 		_, err := env.access.CheckAccess(ctx, account.ID, &tenantID)
 		apiErr := requireDenied(t, err, coreauth.CodeTenantAccessDenied)
-		if strings.Contains(apiErr.Message, "tenant-") {
-			t.Fatalf("message leaks tenant data: %q", apiErr.Message)
+		if apiErr.Message != wantDeniedMessage {
+			t.Fatalf("tenant %q: message = %q, want %q", tenantID, apiErr.Message, wantDeniedMessage)
 		}
 	}
 }
@@ -303,6 +304,24 @@ func TestSelectTenantNoneKeepsOperatorFlag(t *testing.T) {
 	got, grant, err := env.access.SelectTenant(ctx, operator.ID)
 	if err != nil || got != nil || !grant.PlatformOperator || grant.Role != "" {
 		t.Fatalf("got %v %+v %v", got, grant, err)
+	}
+}
+
+func TestReadFailureIsOperationalNotAccessDenial(t *testing.T) {
+	env := newAccessEnv(t)
+	account := env.account()
+	tenantID := env.tenant("acme", "active")
+	env.member(tenantID, account.ID, "admin", "active", accessNow)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, checkErr := env.access.CheckAccess(cancelled, account.ID, &tenantID)
+	_, _, selectErr := env.access.SelectTenant(cancelled, account.ID)
+	for name, err := range map[string]error{"CheckAccess": checkErr, "SelectTenant": selectErr} {
+		var apiErr *api.Error
+		if err == nil || errors.As(err, &apiErr) {
+			t.Fatalf("%s: err = %v, want a non-API operational error", name, err)
+		}
 	}
 }
 
