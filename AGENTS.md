@@ -96,6 +96,7 @@ Run from the relevant subproject directory before pushing, each command prefixed
 | Go (`go-srv`) | `go vet ./...`, `go build ./...`, `go test ./...` |
 | Angular (`ng-web`) | `npm run lint`, `npm run build`, `npm test -- --watch=false` |
 | Playwright E2E (`initializer-e2e`) | `npm run typecheck`, `npm run lint` |
+| Gates CLI (`tooling/gates`) | `gofmt -l .` (empty), `go vet ./...`, `go test ./...`, `go run ./cmd/gates flags --root ../..` |
 | No real suite | `initializer-e2e` (one skipped placeholder spec; run `npm test` there once real specs exist) |
 
 If a check fails, fix it before pushing by default. When the developer chooses to push with a failing or skipped check, push and name that check in the PR description and final report; `--no-verify` and skip-flags stay blocked (see "Blocked actions"). Failures are subject to the **Healthy Baseline Rule** below - do not silently classify them as pre-existing.
@@ -181,7 +182,7 @@ Assume the source branch is GREEN at the start: tests pass, lint is clean, build
 
 ## Gatbase rules
 
-Full text: `.claude/references/architecture.md` -> "Gatbase rules". No validator enforces these yet (flags expiry check, migration prefix lint and `oasdiff` in CI are planned work): agents and reviewers apply them by reading.
+Full text: `.claude/references/architecture.md` -> "Gatbase rules". `tooling/gates` enforces `flags.yaml` (`gates flags`, CI job `gates`); the migration prefix lint and `oasdiff` are planned work: agents and reviewers apply those rules by reading.
 
 - **Trunk-based development**, five rules for agents:
   1. No flag on a bugfix or refactor (`A -> A'`): fix `A` directly, with a regression test.

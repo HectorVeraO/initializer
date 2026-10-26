@@ -1,0 +1,10 @@
+flags:
+  - key: new_settings_ui
+    type: release
+    default: false
+    expires_at: "2026-11-10"
+    description: "Example release flag"
+  - key: example_kill_switch
+    type: ops
+    default: true
+    description: "Example ops flag"

@@ -1,0 +1,26 @@
+name: gates-nightly
+
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flags:
+    name: flags
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: tooling/gates/go.mod
+          cache-dependency-path: tooling/gates/go.sum
+      - name: Check flags.yaml
+        run: go -C tooling/gates run ./cmd/gates flags --root "${GITHUB_WORKSPACE}" --base-rev origin/main
