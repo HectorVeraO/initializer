@@ -23,6 +23,7 @@ Read the fragment routed to your task before building here; this `AGENTS.md` is 
 | Action | Command |
 |---|---|
 | Develop | `npm start` |
+| Lint | `npm run lint` |
 | Build | `npm run build` |
 
 Available environment configurations: `production`, `development`.

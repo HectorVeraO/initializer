@@ -116,7 +116,7 @@ If lint, build, or type-check have not run on this diff, run them and record the
 | Stack | Gate |
 |---|---|
 | Go (`go-srv`) | `go vet ./...`, `go build ./...`, `go test ./...` |
-| Angular (`ng-web`) | `npm run build`, `npm test -- --watch=false` |
+| Angular (`ng-web`) | `npm run lint`, `npm run build`, `npm test -- --watch=false` |
 | Playwright E2E (`initializer-e2e`) | `npm run typecheck`, `npm run lint` |
 | No real suite | `initializer-e2e` (one skipped placeholder spec; run `npm test` there once real specs exist) |
 

@@ -49,7 +49,7 @@ Run before handing back, from the affected subproject. This gate proves the chan
 | Stack | Gate |
 |---|---|
 | Go (`go-srv`) | `go vet ./...`, `go build ./...`, `go test ./...` |
-| Angular (`ng-web`) | `npm run build`, `npm test -- --watch=false` |
+| Angular (`ng-web`) | `npm run lint`, `npm run build`, `npm test -- --watch=false` |
 | Playwright E2E (`initializer-e2e`) | `npm run typecheck`, `npm run lint` |
 | No real suite | `initializer-e2e` (one skipped placeholder spec; run `npm test` there once real specs exist) |
 
