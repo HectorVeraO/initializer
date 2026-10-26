@@ -1,0 +1,19 @@
+flags:
+  - key: Bad-Key
+    type: sometimes
+    default: "false"
+  - key: new_settings_ui
+    type: release
+    default: true
+    expires_at: 2026-02-30
+    description: ""
+    owner: nobody
+  - key: example_kill_switch
+    type: ops
+    default: false
+    expires_at: 2026-12-01
+    description: "Example ops flag"
+  - key: new_settings_ui
+    type: ops
+    default: false
+    description: "Duplicate"
