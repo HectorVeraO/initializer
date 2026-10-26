@@ -82,7 +82,7 @@ Every workflow below is a **skill**; this repo has no slash commands. Invoke a s
 ## Branch model
 
 - Branches: `feature/<slug>` and `bugfix/<slug>`, the slug from the issue title, both cut from `main` in place and merged back through a PR whose body says `Closes #N`. There is no other prefix. See root `AGENTS.md` -> "Branch types".
-- **Merging is yours**: the agent never merges; `gh pr merge` prompts.
+- **The agent merges on green**: once every required check passes, except a PR that touches `.github/`, `AGENTS.md`, `.claude/`, `references/`, `lefthook.yml` or `.gitleaks.toml`, which waits for your explicit OK.
 - **Defaults, not gates:** an issue, a branch plus a PR, and green verification are what the agent does by default. When you ask for work without an issue, a direct commit to `main` or a skipped check, the agent does it and names it in its report. Only the `.claude/hooks/` guardrails, the gitleaks hook and the settings `deny` list block anything; root `AGENTS.md` -> "Blocked actions" lists them.
 
 ## Conventions worth knowing on day one

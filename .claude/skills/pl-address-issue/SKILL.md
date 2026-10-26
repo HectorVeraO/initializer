@@ -178,7 +178,7 @@ Run this step after the Step 9 e2e passes.
   ```
   gh pr create --base main --head <prefix>/<slug> --title "<title>" --body-file .me/<slug>/pr-body.md
   ```
-- Merging is the owner's: never run `gh pr merge` on your own initiative (it prompts). Report the PR link and the state of its checks (`gh pr checks <n>`).
+- Once the PR exists, wait for its required checks: `gh pr checks <n> --watch --required`. When every required check passes, merge with `gh pr merge <n> --merge` unless the PR touches a protected path. List the touched paths with `gh pr diff <n> --name-only`; a path under `.github/`, `.claude/` or `references/`, any `AGENTS.md`, `lefthook.yml` or `.gitleaks.toml` means the PR waits for the owner's explicit OK: report it and do not merge. A failing or pending check, or a PR with no required check reported, means no merge: report it.
 
 ## Step 11b: Issue writes - delegated to `pl-attach-evidence`
 

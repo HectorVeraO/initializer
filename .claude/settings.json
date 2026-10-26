@@ -353,7 +353,9 @@
       "PowerShell(go vet ./...*)",
       "PowerShell(go build ./...*)",
       "PowerShell(go test *)",
-      "PowerShell(gofmt -l *)"
+      "PowerShell(gofmt -l *)",
+      "Bash(gh pr merge*)",
+      "PowerShell(gh pr merge*)"
     ],
     "deny": [
       "Bash(gh repo delete*)",
@@ -398,7 +400,6 @@
     "ask": [
       "Bash(gh api graphql*)",
       "PowerShell(gh api graphql*)",
-      "Bash(gh pr merge*)",
       "Bash(gh api repos/* -X *)",
       "Bash(gh api repos/* --method *)",
       "Bash(gh api repos/* -f *)",
@@ -406,7 +407,6 @@
       "Bash(gh api repos/* --field *)",
       "Bash(gh api repos/* --raw-field *)",
       "Bash(gh api repos/* --input *)",
-      "PowerShell(gh pr merge*)",
       "PowerShell(gh api repos/* -X *)",
       "PowerShell(gh api repos/* --method *)",
       "PowerShell(gh api repos/* -f *)",
