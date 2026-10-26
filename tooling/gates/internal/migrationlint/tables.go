@@ -20,7 +20,7 @@ var (
 	renameTo         = regexp.MustCompile(`(?i)\bRENAME TO (` + qualified + `)`)
 
 	renameColumn = regexp.MustCompile(`(?i)\bRENAME (?:COLUMN )?` + nameToken + ` TO\b`)
-	dropColumn   = regexp.MustCompile(`(?i)\bDROP COLUMN\b`)
+	dropColumn   = regexp.MustCompile(`(?i)\bDROP (?:(COLUMN) )?(?:IF EXISTS )?(` + nameToken + `)`)
 	alterType    = regexp.MustCompile(`(?i)\bALTER (?:COLUMN )?` + nameToken + ` (?:SET DATA )?TYPE\b`)
 	setNotNull   = regexp.MustCompile(`(?i)\bALTER (?:COLUMN )?` + nameToken + ` SET NOT NULL\b`)
 	tableName    = regexp.MustCompile(`^[a-z]{2,4}_[a-z0-9_]+$`)
@@ -68,9 +68,25 @@ func (l *linter) checkStatement(file string, info *moduleInfo, statement Stateme
 	}
 }
 
+// otherDrops are the ALTER TABLE ... DROP subcommands that do not drop a column.
+var otherDrops = map[string]bool{"CONSTRAINT": true, "DEFAULT": true, "NOT": true, "IDENTITY": true, "EXPRESSION": true}
+
+// dropsColumn reports whether an ALTER TABLE statement drops a column, with or
+// without the optional COLUMN keyword. The other DROP subcommands are skipped.
+func dropsColumn(text string) bool {
+	for _, m := range dropColumn.FindAllStringSubmatch(text, -1) {
+		hasColumnKeyword := m[1] != ""
+		isOtherSubcommand := otherDrops[strings.ToUpper(m[2])]
+		if hasColumnKeyword || !isOtherSubcommand {
+			return true
+		}
+	}
+	return false
+}
+
 func alterKinds(text string) []string {
 	var kinds []string
-	if dropColumn.MatchString(text) {
+	if dropsColumn(text) {
 		kinds = append(kinds, "DROP COLUMN")
 	}
 	if renameColumn.MatchString(text) {

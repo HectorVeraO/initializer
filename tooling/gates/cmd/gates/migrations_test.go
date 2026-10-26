@@ -93,7 +93,7 @@ func TestMigrationsModifiedFileIsCaughtAgainstTheBase(t *testing.T) {
 func TestMigrationsGitHubActionsEmitsWorkflowCommands(t *testing.T) {
 	dir := migrationsRepo(t, "CREATE TABLE sys_x (id int);\n")
 	r := invoke([]string{"migrations", "--root", dir, "--base-rev", "main"}, fixedNow, map[string]string{"GITHUB_ACTIONS": "true"})
-	if r.code != 1 || !strings.Contains(r.stdout, "::error file="+strings.ReplaceAll(migrationFile, ":", "%3A")+"::MIGRATION_GOOSE_UP_MISSING: ") {
+	if r.code != 1 || !strings.Contains(r.stdout, "::error file="+migrationFile+"::MIGRATION_GOOSE_UP_MISSING: ") {
 		t.Fatalf("got %+v", r)
 	}
 }
