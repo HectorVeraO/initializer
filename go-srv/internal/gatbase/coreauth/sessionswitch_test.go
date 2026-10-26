@@ -223,6 +223,15 @@ func TestRefreshRefusalsComeFromTheGuard(t *testing.T) {
 		expectError(t, rec, http.StatusForbidden, "CSRF_TOKEN_INVALID")
 		expectNoCookies(t, rec)
 	})
+	t.Run("another session's csrf value", func(t *testing.T) {
+		e := newSessEnv(t, sessEnvOptions{})
+		p := e.person()
+		a, _ := signedInOn(e, p, "acme", "admin")
+		b := e.signIn(p)
+		rec := b.do(http.MethodPost, refreshPath, map[string]string{csrfHeader: a.cookies["XSRF-TOKEN"]})
+		expectError(t, rec, http.StatusForbidden, "CSRF_TOKEN_INVALID")
+		expectNoCookies(t, rec)
+	})
 	t.Run("no session", func(t *testing.T) {
 		e := newSessEnv(t, sessEnvOptions{})
 		expectError(t, e.client().do(http.MethodPost, refreshPath, nil), http.StatusUnauthorized, "SESSION_INVALID")
