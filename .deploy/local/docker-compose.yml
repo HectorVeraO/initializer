@@ -17,5 +17,53 @@ services:
       timeout: 3s
       retries: 10
 
+  # One-shot, idempotent: creates or updates role and database `kratos` (L11).
+  postgres-init:
+    image: postgres:18
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: initializer
+      PGDATABASE: initializer
+      PGPASSWORD: ${INITIALIZER_PG_PASSWORD:?set INITIALIZER_PG_PASSWORD in .deploy/local/.env}
+      KRATOS_PG_PASSWORD: ${KRATOS_PG_PASSWORD:?set KRATOS_PG_PASSWORD in .deploy/local/.env}
+    volumes:
+      - ./postgres-init:/postgres-init:ro
+    entrypoint: ["bash", "/postgres-init/10-kratos-database.sh"]
+    restart: "no"
+
+  kratos-migrate:
+    image: oryd/kratos:v26.2.0
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+    environment:
+      DSN: postgres://kratos:${KRATOS_PG_PASSWORD}@postgres:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+    command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
+    restart: "no"
+
+  kratos:
+    image: oryd/kratos:v26.2.0
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    environment:
+      DSN: postgres://kratos:${KRATOS_PG_PASSWORD}@postgres:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+      SERVE_PUBLIC_BASE_URL: ${GATBASE_PUBLIC_BASE_URL:-http://localhost:10120}/kratos/
+      SELFSERVICE_DEFAULT_BROWSER_RETURN_URL: ${GATBASE_PUBLIC_BASE_URL:-http://localhost:10120}/
+    ports:
+      - "127.0.0.1:10133:4433"
+      - "127.0.0.1:10134:4434"
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+    # --dev only in this local file (L11); --sqa-opt-out stops recurring telemetry.
+    command: serve -c /etc/config/kratos/kratos.yml --dev --sqa-opt-out
+    restart: unless-stopped
+
 volumes:
   postgres-data:
