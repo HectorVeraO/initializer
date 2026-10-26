@@ -96,7 +96,7 @@ Run from the relevant subproject directory before pushing, each command prefixed
 | Go (`go-srv`) | `go vet ./...`, `go build ./...`, `go test ./...` |
 | Angular (`ng-web`) | `npm run lint`, `npm run build`, `npm test -- --watch=false` |
 | Playwright E2E (`initializer-e2e`) | `npm run typecheck`, `npm run lint` |
-| Gates CLI (`tooling/gates`) | `gofmt -l .` (empty), `go vet ./...`, `go test ./...`, `go run ./cmd/gates flags --root ../..`, `... migrations --root ../..`, `... contracts --root ../..` (oasdiff from `mise install`) |
+| Gates CLI (`tooling/gates`) | `gofmt -l .` (empty), `go vet ./...`, `go test ./...`, `go run ./cmd/gates flags --root ../..`, `... migrations --root ../..`, `... contracts --root ../..` (oasdiff from `mise install`), `... versions --root ../..` |
 | No real suite | `initializer-e2e` (one skipped placeholder spec; run `npm test` there once real specs exist) |
 
 If a check fails, fix it before pushing by default. When the developer chooses to push with a failing or skipped check, push and name that check in the PR description and final report; `--no-verify` and skip-flags stay blocked (see "Blocked actions"). Failures are subject to the **Healthy Baseline Rule** below - do not silently classify them as pre-existing.
@@ -182,7 +182,7 @@ Assume the source branch is GREEN at the start: tests pass, lint is clean, build
 
 ## Gatbase rules
 
-Full text: `.claude/references/architecture.md` -> "Gatbase rules". `tooling/gates` enforces `flags.yaml` (`gates flags`), migration names and table prefixes (`gates migrations`) and contract structure and breaking changes (`gates contracts`, with `oasdiff`) in CI job `gates`; agents and reviewers apply the remaining rules by reading.
+Full text: `.claude/references/architecture.md` -> "Gatbase rules". `tooling/gates` enforces `flags.yaml` (`gates flags`), migration names and table prefixes (`gates migrations`), contract structure and breaking changes (`gates contracts`, with `oasdiff`) and manifest version bumps (`gates versions`) in CI job `gates`; agents and reviewers apply the remaining rules by reading.
 
 - **Trunk-based development**, five rules for agents:
   1. No flag on a bugfix or refactor (`A -> A'`): fix `A` directly, with a regression test.
@@ -192,6 +192,7 @@ Full text: `.claude/references/architecture.md` -> "Gatbase rules". `tooling/gat
   5. Cleanup: every feature that added a release flag ends with a PR that deletes the flag and the old implementation.
 - **`flags.yaml`** (repo root) declares every flag: `key`, `type: release | ops`, `default`, `expires_at`. A release flag has `default: false` and `expires_at` at most 30 days out; an ops flag is permanent. Evaluation: tenant override -> global override -> manifest default; an unknown key is `false`. Detail: `go-srv/cookbooks/tbd-feature-flags.md`.
 - **Contracts and SemVer**: a module's contract is `specs/<module>/openapi.yaml`, its TCK `specs/<module>/tck/`; both share one tag `spec-<module>-vX.Y.Z`. A breaking wire change needs a MAJOR bump in `spec.manifest.json` plus the `BREAKING CHANGE:` trailer on a commit touching the spec (`gates contracts` fails it otherwise); the contract changes in the same PR as the code.
+- **Versions and tags**: the PR that changes a spec or a module bumps its manifest `version` (`gates versions` fails `VERSION_NOT_BUMPED` otherwise); a stack's `core` module bumps PATCH only in this milestone. A job on `main` (`tags.yml`) pushes `spec-<spec>-vX.Y.Z` and `<stack>-<module>-vX.Y.Z` for every version without a tag.
 - **Tables**: every name matches `^[a-z]{2,4}_[a-z0-9_]+$` with the owning module's registered prefix. Registry and migration naming: `go-srv/cookbooks/data-migrations.md`.
 - **Wire format**: every `/api/v1/` response is `ApiEnvelope<T>` (`{ data, meta: { traceId, timestamp }, error }`); invalid input answers one `422` with every problem in `error.issues[]`; error codes are SCREAMING_SNAKE and part of the contract.
 - **Tenant isolation**: the active tenant comes only from the session token or the API key; every `:id` access filters by it; another tenant's resource answers `404`.

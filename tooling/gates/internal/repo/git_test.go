@@ -209,3 +209,27 @@ func TestTrailerValuesRejectsBadInput(t *testing.T) {
 		}
 	}
 }
+
+func TestListTags(t *testing.T) {
+	dir := newRepo(t)
+	tags, err := repo.ListTags(dir)
+	if err != nil || len(tags) != 0 {
+		t.Fatalf("fresh repo: tags = %v, err = %v", tags, err)
+	}
+	runGit(t, dir, "tag", "spec-b-v0.1.0")
+	runGit(t, dir, "tag", "spec-a-v0.1.0")
+	tags, err = repo.ListTags(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tags) != 2 || tags[0] != "spec-a-v0.1.0" || tags[1] != "spec-b-v0.1.0" {
+		t.Fatalf("tags = %v", tags)
+	}
+}
+
+func TestListTagsOutsideRepositoryIsAnError(t *testing.T) {
+	_, err := repo.ListTags(t.TempDir())
+	if err == nil {
+		t.Fatal("want an error")
+	}
+}

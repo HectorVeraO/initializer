@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -254,4 +255,21 @@ func ListFiles(dir, rev, pathspec string) ([]string, error) {
 		}
 	}
 	return files, nil
+}
+
+// ListTags returns the names of the tags of the repository at dir, sorted.
+func ListTags(dir string) ([]string, error) {
+	out, _, err := git(dir, "tag", "--list")
+	if err != nil {
+		return nil, err
+	}
+	var tags []string
+	for _, line := range strings.Split(string(out), "\n") {
+		name := strings.TrimSpace(line)
+		if name != "" {
+			tags = append(tags, name)
+		}
+	}
+	sort.Strings(tags)
+	return tags, nil
 }

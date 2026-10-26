@@ -16,6 +16,7 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/migrationlint"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/repo"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/report"
+	"github.com/HectorVeraO/initializer/tooling/gates/internal/versions"
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 	defaultBaseRev  = "origin/main"
 	defaultWarnDays = 7
 	flagsFileName   = "flags.yaml"
-	usage           = "usage: gates flags --root <dir> [--base-rev <rev>] [--today YYYY-MM-DD] [--warn-days N]\n       gates migrations --root <dir> [--base-rev <rev>]\n       gates contracts --root <dir> [--base-rev <rev>] [--oasdiff <path>]"
+	usage           = "usage: gates flags --root <dir> [--base-rev <rev>] [--today YYYY-MM-DD] [--warn-days N]\n       gates migrations --root <dir> [--base-rev <rev>]\n       gates contracts --root <dir> [--base-rev <rev>] [--oasdiff <path>]\n       gates versions --root <dir> [--base-rev <rev>]\n       gates tags --root <dir>"
 )
 
 func main() {
@@ -51,6 +52,10 @@ func runWith(args []string, stdout, stderr io.Writer, now func() time.Time, gete
 		return runMigrations(args[1:], stdout, stderr, getenv)
 	case "contracts":
 		return runContracts(args[1:], stdout, stderr, getenv)
+	case "versions":
+		return runVersions(args[1:], stdout, stderr, getenv)
+	case "tags":
+		return runTags(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown subcommand %q\n%s\n", args[0], usage)
 		return exitUsage
@@ -194,6 +199,75 @@ func runContracts(args []string, stdout, stderr io.Writer, getenv func(string) s
 		return exitUsage
 	}
 	return finish(violations, stdout, stderr, getenv)
+}
+
+func runVersions(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
+	fs := flag.NewFlagSet("gates versions", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	root := fs.String("root", ".", "repository root")
+	baseRev := fs.String("base-rev", "", "base revision (default origin/main)")
+	err := fs.Parse(args)
+	if errors.Is(err, flag.ErrHelp) {
+		return exitOK
+	}
+	if err != nil {
+		return exitUsage
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(stderr, "unexpected argument %q\n%s\n", fs.Arg(0), usage)
+		return exitUsage
+	}
+	rootDir, err := filepath.Abs(*root)
+	if err != nil {
+		fmt.Fprintf(stderr, "resolve root: %v\n", err)
+		return exitUsage
+	}
+	rev := *baseRev
+	if rev == "" {
+		rev = defaultBaseRev
+	}
+	sha, err := resolveBase(rootDir, rev)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	violations, err := versions.CheckBumps(context.Background(), rootDir, sha)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	return finish(violations, stdout, stderr, getenv)
+}
+
+func runTags(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("gates tags", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	root := fs.String("root", ".", "repository root")
+	err := fs.Parse(args)
+	if errors.Is(err, flag.ErrHelp) {
+		return exitOK
+	}
+	if err != nil {
+		return exitUsage
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(stderr, "unexpected argument %q\n%s\n", fs.Arg(0), usage)
+		return exitUsage
+	}
+	rootDir, err := filepath.Abs(*root)
+	if err != nil {
+		fmt.Fprintf(stderr, "resolve root: %v\n", err)
+		return exitUsage
+	}
+	tags, err := versions.MissingTags(context.Background(), rootDir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	for _, tag := range tags {
+		fmt.Fprintln(stdout, tag)
+	}
+	return exitOK
 }
 
 // finish prints the violations and returns the exit code for them.
