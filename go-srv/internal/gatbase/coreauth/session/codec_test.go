@@ -69,6 +69,17 @@ func TestEncodeDropsSubSecondPrecision(t *testing.T) {
 	}
 }
 
+func TestEncodeRejectsATTLThatTruncatesToZeroSeconds(t *testing.T) {
+	codec := newCodec(t, testNow, newTestKey(t, testKid))
+	claims := tenantlessClaims(t)
+	claims.IssuedAt = testNow
+	claims.ExpiresAt = testNow.Add(500 * time.Millisecond)
+	_, err := codec.Encode(claims)
+	if err == nil {
+		t.Fatal("sub-second TTL encoded into a token Verify would reject")
+	}
+}
+
 func TestEncodeRejectsInvalidClaims(t *testing.T) {
 	codec := newCodec(t, testNow, newTestKey(t, testKid))
 	bad := tenantClaims(t)

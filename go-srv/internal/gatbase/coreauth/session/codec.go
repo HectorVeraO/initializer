@@ -275,8 +275,8 @@ func validateClaims(claims Claims) error {
 			return errors.New("invalid tid, tslug or role")
 		}
 	}
-	if !claims.ExpiresAt.After(claims.IssuedAt) {
-		return errors.New("exp must be after iat")
+	if claims.ExpiresAt.Unix() <= claims.IssuedAt.Unix() {
+		return errors.New("exp must be after iat by at least one second")
 	}
 	return nil
 }
