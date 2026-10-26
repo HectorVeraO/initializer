@@ -10,13 +10,13 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/parameters"
 )
 
-func TestModuleDeclaresItsIdentityAndNoRoute(t *testing.T) {
+func TestModuleDeclaresItsIdentityAndRoutes(t *testing.T) {
 	module := parameters.Module()
 	if module.ID != "parameters" || module.Migrations == nil || module.Provide == nil {
 		t.Fatalf("module = %+v", module)
 	}
-	if module.Mount != nil || module.Start != nil {
-		t.Fatal("this module must mount no route yet")
+	if module.Mount == nil || module.Start != nil {
+		t.Fatal("this module must mount routes and start nothing")
 	}
 	if parameters.MigrationsVersionTable() != "cor_migrations_parameters" {
 		t.Fatalf("version table = %s", parameters.MigrationsVersionTable())

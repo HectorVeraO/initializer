@@ -16,13 +16,14 @@ type module struct {
 	service *Service
 }
 
-// Module returns the parameters catalog module. It mounts no route yet.
+// Module returns the parameters catalog module with its six routes.
 func Module() core.Module {
 	m := &module{}
 	return core.Module{
 		ID:         moduleID,
 		Migrations: migrationsFS,
 		Provide:    m.provide,
+		Mount:      m.mount,
 	}
 }
 
