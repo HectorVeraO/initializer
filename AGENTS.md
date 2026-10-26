@@ -96,6 +96,7 @@ Run from the relevant subproject directory before pushing, each command prefixed
 | Go (`go-srv`) | `go vet ./...`, `go build ./...`, `go test ./...` |
 | Angular (`ng-web`) | `npm run lint`, `npm run build`, `npm test -- --watch=false` |
 | Playwright E2E (`initializer-e2e`) | `npm run typecheck`, `npm run lint` |
+| Generator (`tooling/generator`) | `gofmt -l .` (empty), `go vet ./...`, `go test ./...` |
 | Gates CLI (`tooling/gates`) | `gofmt -l .` (empty), `go vet ./...`, `go test ./...`, `go run ./cmd/gates flags --root ../..`, `... migrations --root ../..`, `... contracts --root ../..` (oasdiff from `mise install`), `... versions --root ../..` |
 | TCK runner (`specs`) | `npm run typecheck`, `npm run check:tags`, `npm run test:scripts`; against a running instance: `TCK_BASE_URL=http://localhost:10100 npm run tck` (CI job `tck`) |
 | No real suite | `initializer-e2e` (one skipped placeholder spec; run `npm test` there once real specs exist) |

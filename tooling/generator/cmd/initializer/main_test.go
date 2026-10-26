@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -198,8 +200,7 @@ func TestValidFlagSelectionAndAllModules(t *testing.T) {
 
 func TestUnimplementedSubcommandsExitThree(t *testing.T) {
 	cases := map[string][]string{
-		"catalog build": {"catalog", "build", "--root", ".", "--files", "f.txt", "--out", "c.json"},
-		"verify":        {"verify", "--project", "p"},
+		"verify": {"verify", "--project", "p"},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -238,5 +239,121 @@ func TestHelpExitsZero(t *testing.T) {
 				t.Fatalf("exit %d stdout %q", code, stdout)
 			}
 		})
+	}
+}
+
+const cleanFixture = "../../internal/catalog/testdata/clean"
+
+// writeFileList writes the NUL-separated file list of the clean fixture.
+func writeFileList(t *testing.T, extra ...string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(cleanFixture, "files.txt"))
+	if err != nil {
+		t.Fatalf("read files.txt: %v", err)
+	}
+	names := append(strings.Split(strings.TrimSpace(string(data)), "\n"), extra...)
+	path := filepath.Join(t.TempDir(), "files.bin")
+	if err := os.WriteFile(path, []byte(strings.Join(names, "\x00")+"\x00"), 0o600); err != nil {
+		t.Fatalf("write list: %v", err)
+	}
+	return path
+}
+
+func TestCatalogBuildWritesTheCatalogTwiceIdentically(t *testing.T) {
+	list := writeFileList(t)
+	dir := t.TempDir()
+	outA, outB := filepath.Join(dir, "a", "catalog.lock.json"), filepath.Join(dir, "b.json")
+	root := filepath.Join(cleanFixture, "repo")
+	for _, out := range []string{outA, outB} {
+		code, stdout, stderr := execute(t, "catalog", "build", "--root", root, "--files", list, "--out", out)
+		if code != exitOK {
+			t.Fatalf("exit %d: %s", code, stderr)
+		}
+		var result map[string]string
+		if err := json.Unmarshal([]byte(stdout), &result); err != nil || result["catalog"] == "" {
+			t.Fatalf("stdout = %q (%v)", stdout, err)
+		}
+		written, readErr := os.ReadFile(out)
+		if readErr != nil {
+			t.Fatalf("read %s: %v", out, readErr)
+		}
+		digest := sha256.Sum256(written)
+		if result["sha256"] != hex.EncodeToString(digest[:]) {
+			t.Fatalf("stdout sha256 %q does not match the written catalog", result["sha256"])
+		}
+	}
+	a, errA := os.ReadFile(outA)
+	b, errB := os.ReadFile(outB)
+	if errA != nil || errB != nil || !bytes.Equal(a, b) {
+		t.Fatalf("catalogs differ or are unreadable: %v %v", errA, errB)
+	}
+	golden, err := os.ReadFile(filepath.Join(cleanFixture, "catalog.lock.json"))
+	if err != nil || !bytes.Equal(a, golden) {
+		t.Fatalf("catalog differs from the golden file (%v)", err)
+	}
+}
+
+func TestCatalogBuildIssueExit(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "specs", "stray"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "specs", "stray", "x.md"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list := filepath.Join(t.TempDir(), "files.bin")
+	if err := os.WriteFile(list, []byte("specs/stray/x.md\x00"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "c.json")
+	code, stdout, stderr := execute(t, "catalog", "build", "--root", repo, "--files", list, "--out", out)
+	if code != exitIssues || stdout != "" {
+		t.Fatalf("exit %d stdout %q", code, stdout)
+	}
+	hasUnowned := false
+	for _, issue := range issueArray(t, stderr) {
+		if issue["code"] == "FILE_UNOWNED" && issue["path"] == "specs/stray/x.md" {
+			hasUnowned = true
+		}
+	}
+	if !hasUnowned {
+		t.Fatalf("want a FILE_UNOWNED issue for specs/stray/x.md on stderr: %q", stderr)
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Fatalf("no catalog may be written when issues exist")
+	}
+}
+
+func TestCatalogBuildInputErrorsExitThree(t *testing.T) {
+	root := filepath.Join(cleanFixture, "repo")
+	out := filepath.Join(t.TempDir(), "c.json")
+	badList := filepath.Join(t.TempDir(), "bad.bin")
+	if err := os.WriteFile(badList, []byte("../escape\x00"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	emptyElement := filepath.Join(t.TempDir(), "empty.bin")
+	if err := os.WriteFile(emptyElement, []byte("a\x00\x00b\x00"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string][]string{
+		"unreadable list": {"--root", root, "--files", filepath.Join(t.TempDir(), "missing.bin"), "--out", out},
+		"escaping path":   {"--root", root, "--files", badList, "--out", out},
+		"empty element":   {"--root", root, "--files", emptyElement, "--out", out},
+		"root not a dir":  {"--root", filepath.Join(t.TempDir(), "none"), "--files", writeFileList(t), "--out", out},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			code, _, _ := execute(t, append([]string{"catalog", "build"}, args...)...)
+			if code != exitInternal {
+				t.Fatalf("exit %d, want %d", code, exitInternal)
+			}
+		})
+	}
+}
+
+func TestCatalogBuildRequiresFilesFlag(t *testing.T) {
+	code, _, stderr := execute(t, "catalog", "build", "--root", ".", "--out", "c.json")
+	if code != exitUsage || !strings.Contains(stderr, "files") {
+		t.Fatalf("exit %d: %s", code, stderr)
 	}
 }

@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "spec": "parameters",
+  "version": "0.1.0",
+  "tckTags": ["@parameters"],
+  "tckEnv": {}
+}
