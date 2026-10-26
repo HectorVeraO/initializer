@@ -2,7 +2,7 @@
   "schema": 1,
   "stack": "go-srv",
   "module": "core-auth",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "implied": true,
   "implementsSpec": { "core-auth": "0.1.0" },
   "requiresCore": "^0.1.0",
