@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "stack": "go-srv",
+  "module": "parameters",
+  "version": "0.1.0",
+  "implied": false,
+  "implementsSpec": { "parameters": "0.1.0" },
+  "requiresCore": "^0.1.0",
+  "requiresModules": [
+    { "module": "feature-flags", "range": "^0.1.0" }
+  ],
+  "tablePrefixes": ["sys"],
+  "files": [
+    "go-srv/internal/gatbase/parameters/",
+    { "path": "specs/parameters/openapi.yaml", "target": "api/parameters.yaml" }
+  ],
+  "exclude": ["go-srv/internal/gatbase/parameters/testdata/"]
+}
