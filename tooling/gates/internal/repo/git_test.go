@@ -135,3 +135,77 @@ func TestShowFileIsRelativeToDir(t *testing.T) {
 		t.Fatalf("ShowFile(sub) = %q, %v, %v", content, found, err)
 	}
 }
+
+func TestTrailerValuesFindsOnlyRealTrailersOnTouchingCommits(t *testing.T) {
+	dir := newRepo(t)
+	keys := []string{"BREAKING CHANGE", "BREAKING-CHANGE"}
+
+	// Body line without a blank line before it is not a trailer.
+	writeFile(t, filepath.Join(dir, "specs", "a", "f.txt"), "1\n")
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-m", "feature(a): Change a\n\nBody text\nBREAKING CHANGE: not a trailer")
+	got, err := repo.TrailerValues(dir, "main", "HEAD", "specs/a/", keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("body line returned as trailer: %v", got)
+	}
+
+	// Real trailer on a commit touching another path is not counted.
+	writeFile(t, filepath.Join(dir, "specs", "b", "f.txt"), "1\n")
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-m", "feature(b): Change b\n\nWhy.\n\nBREAKING CHANGE: b wire change")
+	got, err = repo.TrailerValues(dir, "main", "HEAD", "specs/a/", keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("trailer of another path counted: %v", got)
+	}
+
+	writeFile(t, filepath.Join(dir, "specs", "a", "f.txt"), "2\n")
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-m", "feature(a): Break a\n\nWhy.\n\nBREAKING CHANGE: a wire change")
+	got, err = repo.TrailerValues(dir, "main", "HEAD", "specs/a/", keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "a wire change" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestTrailerValuesAcceptsIndentedContinuationLines(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, filepath.Join(dir, "specs", "a", "f.txt"), "1\n")
+	runGit(t, dir, "add", "-A")
+	message := "feature(a): Break a\n\nWhy.\n\nBREAKING CHANGE: a wire change\n  that spans two lines\nRefs: #1"
+	runGit(t, dir, "commit", "-m", message)
+	got, err := repo.TrailerValues(dir, "main", "HEAD", "specs/a/", []string{"BREAKING CHANGE"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "a wire change" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestTrailerValuesRejectsBadInput(t *testing.T) {
+	dir := newRepo(t)
+	cases := []struct {
+		name, from, path string
+		keys             []string
+	}{
+		{"option rev", "--all", "specs/", []string{"X"}},
+		{"option path", "main", "--x", []string{"X"}},
+		{"no keys", "main", "specs/", nil},
+		{"bad key", "main", "specs/", []string{"a:b"}},
+	}
+	for _, tc := range cases {
+		_, err := repo.TrailerValues(dir, tc.from, "HEAD", tc.path, tc.keys)
+		if err == nil {
+			t.Errorf("%s: want error", tc.name)
+		}
+	}
+}
