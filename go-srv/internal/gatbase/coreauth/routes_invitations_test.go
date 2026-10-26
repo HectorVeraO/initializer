@@ -513,6 +513,37 @@ func TestAcceptNewSupersededTokenIsInvalid(t *testing.T) {
 	}
 }
 
+func TestAcceptRoutesRefuseAnExpiredInvitation(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	_, admin := e.actor(tenant, "admin", false)
+	jane := e.person()
+	janeClient := e.signIn(jane)
+	created := decodeData[InvitationCreated](t, admin.send(http.MethodPost, "/api/v1/invitations", invitationJSON(jane.email, "member")))
+	token := tokenOf(t, created.InvitationURL)
+	e.exec("UPDATE ten_invitations SET expires_at = $1", e.clock.Now().Add(-time.Hour))
+
+	viaSession := janeClient.send(http.MethodPost, "/api/v1/invitations/accept", tokenJSON(token))
+	viaNew := e.client().send(http.MethodPost, "/api/v1/invitations/accept-new", acceptNewJSON(token, randomPassword(t), "Jane Doe"))
+
+	expectError(t, viaSession, http.StatusNotFound, "INVITATION_INVALID")
+	expectError(t, viaNew, http.StatusNotFound, "INVITATION_INVALID")
+}
+
+func TestAcceptIntoASuspendedTenantIsForbidden(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	_, admin := e.actor(tenant, "admin", false)
+	jane := e.person()
+	janeClient := e.signIn(jane)
+	created := decodeData[InvitationCreated](t, admin.send(http.MethodPost, "/api/v1/invitations", invitationJSON(jane.email, "member")))
+	e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", tenant)
+
+	rec := janeClient.send(http.MethodPost, "/api/v1/invitations/accept", tokenJSON(tokenOf(t, created.InvitationURL)))
+
+	expectError(t, rec, http.StatusForbidden, "TENANT_SUSPENDED")
+}
+
 func TestAcceptNewValidationAccumulatesInFieldOrder(t *testing.T) {
 	e := newInvEnv(t, "")
 	anonymous := e.client()
