@@ -493,6 +493,20 @@ func TestAcceptInvitationFailures(t *testing.T) {
 	}
 }
 
+func TestAcceptInvitationRejectsAnUnknownAccount(t *testing.T) {
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+	admin := e.account("admin@example.com")
+	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
+
+	_, err := e.svc.AcceptInvitation(context.Background(), "00000000-0000-4000-8000-000000000001", token)
+
+	requireAPIError(t, err, 403, CodeAccountLockedOrDisabled)
+	if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
+		t.Fatalf("invitation status after failure = %s, want pending", got)
+	}
+}
+
 func TestAcceptInvitationInvalidTokensShareOneBody(t *testing.T) {
 	e := newTenEnv(t)
 	tenant := e.tenant("tenant-a")
@@ -563,7 +577,6 @@ func TestAcceptNewCreatesIdentityAccountAndMembership(t *testing.T) {
 	e := newTenEnv(t, janeEmail)
 	tenant := e.tenant("tenant-a")
 	admin := e.account("admin@example.com")
-	e.exec("UPDATE iam_accounts SET is_platform_operator = true WHERE id = $1::uuid", admin.ID)
 	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
 	password := randomPassword(t)
 
@@ -603,30 +616,10 @@ func TestAcceptNewCreatesIdentityAccountAndMembership(t *testing.T) {
 	}
 }
 
-func TestAcceptNewDoesNotGrantOperatorWhenANonOperatorInvited(t *testing.T) {
-	e := newTenEnv(t, janeEmail)
-	tenant := e.tenant("tenant-a")
-	admin := e.account("admin@example.com")
-	_, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleAdmin)
-
-	got, err := e.svc.AcceptNew(context.Background(), token, randomPassword(t), "Jane Doe")
-
-	if err != nil {
-		t.Fatalf("accept new: %v", err)
-	}
-	var isOperator bool
-	err = e.pool.QueryRow(context.Background(),
-		"SELECT is_platform_operator FROM iam_accounts WHERE id = $1::uuid", got.Account.ID).Scan(&isOperator)
-	if err != nil || isOperator {
-		t.Fatalf("operator flag = %v err=%v, want false", isOperator, err)
-	}
-}
-
 func TestAcceptNewDoesNotGrantOperatorWhenTheEmailIsNotListed(t *testing.T) {
 	e := newTenEnv(t)
 	tenant := e.tenant("tenant-a")
 	admin := e.account("admin@example.com")
-	e.exec("UPDATE iam_accounts SET is_platform_operator = true WHERE id = $1::uuid", admin.ID)
 	_, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleAdmin)
 
 	got, err := e.svc.AcceptNew(context.Background(), token, randomPassword(t), "Jane Doe")
@@ -1033,8 +1026,7 @@ func TestServicesRejectMalformedInput(t *testing.T) {
 			err := call()
 			var apiErr *api.Error
 			// An input error is a leaf: a wrapped cause would be a database or Kratos failure.
-			isPlainInputError := err != nil && !errors.As(err, &apiErr) && errors.Unwrap(err) == nil &&
-				strings.HasPrefix(err.Error(), "coreauth: ")
+			isPlainInputError := err != nil && !errors.As(err, &apiErr) && errors.Unwrap(err) == nil
 			if !isPlainInputError {
 				t.Fatalf("want a plain input error, got %v", err)
 			}

@@ -394,17 +394,8 @@ func (s *tenancy) AcceptNew(ctx context.Context, token, password, fullName strin
 		if err != nil {
 			return err
 		}
-		// The flag is granted at creation only when a platform operator issued the
-		// invitation: the inviter holds the URL, and accept-new proves no email ownership.
-		var inviterIsOperator bool
-		err = tx.QueryRow(ctx,
-			`SELECT EXISTS (SELECT 1 FROM iam_accounts a
-JOIN ten_invitations i ON i.created_by_account_id = a.id
-WHERE i.id = $1::uuid AND a.is_platform_operator)`, invitation.ID).Scan(&inviterIsOperator)
-		if err != nil {
-			return err
-		}
-		isOperator := inviterIsOperator && slices.Contains(s.operatorEmails, invitation.Email)
+		// The flag is granted at creation when the invited email is listed in the operator emails.
+		isOperator := slices.Contains(s.operatorEmails, invitation.Email)
 		var accountID string
 		err = tx.QueryRow(ctx,
 			`INSERT INTO iam_accounts (kratos_identity_id, email, full_name, is_platform_operator, created_at, updated_at)
