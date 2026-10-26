@@ -1,0 +1,33 @@
+name: tags
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tags:
+    name: push component tags
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: tooling/gates/go.mod
+          cache-dependency-path: tooling/gates/go.sum
+      - name: Push missing component tags
+        run: |
+          set -euo pipefail
+          tags="$(go -C tooling/gates run ./cmd/gates tags --root "$GITHUB_WORKSPACE")"
+          for tag in $tags; do
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              continue
+            fi
+            git tag "$tag" "$GITHUB_SHA"
+            git push origin "refs/tags/$tag"
+          done
