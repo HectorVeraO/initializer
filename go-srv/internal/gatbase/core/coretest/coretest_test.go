@@ -121,8 +121,8 @@ func TestNewServesModuleRoutesAndTheCoreFallback(t *testing.T) {
 func TestNewAnswersHealthAsServing(t *testing.T) {
 	handler := coretest.New(t, nil, coretest.Options{})
 	rec := send(handler, http.MethodGet, "/health/ready", nil)
-	if rec.Code != http.StatusNoContent && rec.Code != http.StatusOK {
-		t.Fatalf("ready = %d, want a success status", rec.Code)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("ready = %d, want 204", rec.Code)
 	}
 }
 
