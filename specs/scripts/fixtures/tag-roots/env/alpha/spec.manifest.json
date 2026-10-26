@@ -1,0 +1,1 @@
+{ "schema": 1, "spec": "alpha", "tckTags": ["@alpha"], "tckEnv": { "TCK_FIXTURE_VALUE": "from-manifest" } }

@@ -246,3 +246,19 @@ test('the Playwright config refuses to load without TCK_BASE_URL', () => {
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}${result.stderr}`, /TCK_BASE_URL is required/);
 });
+
+test('run-tck gives the Playwright process the manifests tckEnv values', () => {
+  const root = join(fixtures, 'tag-roots', 'env');
+  const env = { ...process.env };
+  delete env.TCK_FIXTURE_VALUE;
+  delete env.TCK_FIXTURE_EXPECTED;
+  const result = runNode('run-tck.mjs', ['--specs-dir', root], { stdio: 'pipe', env });
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+});
+
+test('run-tck keeps a value the caller already exported', () => {
+  const root = join(fixtures, 'tag-roots', 'env');
+  const env = { ...process.env, TCK_FIXTURE_VALUE: 'from-caller', TCK_FIXTURE_EXPECTED: 'from-caller' };
+  const result = runNode('run-tck.mjs', ['--specs-dir', root], { stdio: 'pipe', env });
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+});
