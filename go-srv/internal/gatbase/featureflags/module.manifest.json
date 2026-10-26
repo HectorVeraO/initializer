@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "stack": "go-srv",
+  "module": "feature-flags",
+  "version": "0.1.0",
+  "implied": false,
+  "implementsSpec": { "feature-flags": "0.1.0" },
+  "requiresCore": "^0.1.0",
+  "requiresModules": [],
+  "tablePrefixes": ["flg"],
+  "files": [
+    { "path": ".gatbase/project/flags.yaml", "target": "flags.yaml" },
+    "go-srv/internal/gatbase/featureflags/"
+  ],
+  "exclude": []
+}
