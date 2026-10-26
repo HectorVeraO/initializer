@@ -11,6 +11,8 @@ permissions:
 
 env:
   GITLEAKS_VERSION: 8.30.1
+  # sha256 of oasdiff_1.34.1_linux_amd64.tar.gz: 75775f65b0adebd26a8e013af51a799342dfdc6262d89efa9e3b7bdf89657d90
+  OASDIFF_VERSION: 1.34.1
 
 jobs:
   gitleaks:
@@ -76,6 +78,18 @@ jobs:
         with:
           go-version-file: tooling/gates/go.mod
           cache-dependency-path: tooling/gates/go.sum
+      - name: Install oasdiff
+        run: |
+          set -euo pipefail
+          base="https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}"
+          archive="oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "${RUNNER_TEMP}/${archive}" "${base}/${archive}"
+          curl -sSfL -o "${RUNNER_TEMP}/checksums.txt" "${base}/checksums.txt"
+          cd "${RUNNER_TEMP}"
+          grep " ${archive}\$" checksums.txt | sha256sum --check -
+          mkdir -p "${RUNNER_TEMP}/oasdiff-bin"
+          tar -xzf "${archive}" -C "${RUNNER_TEMP}/oasdiff-bin" oasdiff
+          echo "${RUNNER_TEMP}/oasdiff-bin" >> "${GITHUB_PATH}"
       - name: Format
         working-directory: tooling/gates
         run: |
@@ -88,7 +102,7 @@ jobs:
         run: go -C tooling/gates vet ./...
       - name: Test
         run: go -C tooling/gates test ./...
-      - name: Check flags.yaml and migrations
+      - name: Check flags.yaml, migrations and contracts
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
@@ -102,6 +116,7 @@ jobs:
           fi
           go -C tooling/gates run ./cmd/gates flags --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
           go -C tooling/gates run ./cmd/gates migrations --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
+          go -C tooling/gates run ./cmd/gates contracts --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
 
   node-ng-web:
     name: node (ng-web)

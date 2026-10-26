@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/HectorVeraO/initializer/tooling/gates/internal/contractgate"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/flagscheck"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/migrationlint"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/repo"
@@ -24,7 +26,7 @@ const (
 	defaultBaseRev  = "origin/main"
 	defaultWarnDays = 7
 	flagsFileName   = "flags.yaml"
-	usage           = "usage: gates flags --root <dir> [--base-rev <rev>] [--today YYYY-MM-DD] [--warn-days N]\n       gates migrations --root <dir> [--base-rev <rev>]"
+	usage           = "usage: gates flags --root <dir> [--base-rev <rev>] [--today YYYY-MM-DD] [--warn-days N]\n       gates migrations --root <dir> [--base-rev <rev>]\n       gates contracts --root <dir> [--base-rev <rev>] [--oasdiff <path>]"
 )
 
 func main() {
@@ -47,6 +49,8 @@ func runWith(args []string, stdout, stderr io.Writer, now func() time.Time, gete
 		return runFlags(args[1:], stdout, stderr, now, getenv)
 	case "migrations":
 		return runMigrations(args[1:], stdout, stderr, getenv)
+	case "contracts":
+		return runContracts(args[1:], stdout, stderr, getenv)
 	default:
 		fmt.Fprintf(stderr, "unknown subcommand %q\n%s\n", args[0], usage)
 		return exitUsage
@@ -151,6 +155,45 @@ func runMigrations(args []string, stdout, stderr io.Writer, getenv func(string) 
 	}
 	fmt.Fprintf(stdout, "%d migration files checked\n", checked)
 	return code
+}
+
+func runContracts(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
+	fs := flag.NewFlagSet("gates contracts", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	root := fs.String("root", ".", "repository root")
+	baseRev := fs.String("base-rev", "", "base revision (default origin/main)")
+	oasdiff := fs.String("oasdiff", "", "oasdiff binary (default oasdiff from PATH)")
+	err := fs.Parse(args)
+	if errors.Is(err, flag.ErrHelp) {
+		return exitOK
+	}
+	if err != nil {
+		return exitUsage
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(stderr, "unexpected argument %q\n%s\n", fs.Arg(0), usage)
+		return exitUsage
+	}
+	rootDir, err := filepath.Abs(*root)
+	if err != nil {
+		fmt.Fprintf(stderr, "resolve root: %v\n", err)
+		return exitUsage
+	}
+	rev := *baseRev
+	if rev == "" {
+		rev = defaultBaseRev
+	}
+	sha, err := resolveBase(rootDir, rev)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	violations, err := contractgate.Check(context.Background(), contractgate.Options{Root: rootDir, BaseRev: sha, OasdiffBin: *oasdiff})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	return finish(violations, stdout, stderr, getenv)
 }
 
 // finish prints the violations and returns the exit code for them.

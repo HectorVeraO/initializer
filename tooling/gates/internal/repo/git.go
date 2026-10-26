@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 )
 
@@ -166,6 +167,71 @@ func DiffNameStatus(dir, from, to, pathspec string) ([]Change, error) {
 		}
 	}
 	return changes, nil
+}
+
+// footerLine is a footer entry: "Token: value", where the token may also be
+// "BREAKING CHANGE" (git itself does not parse a token with a space).
+var footerLine = regexp.MustCompile(`^(?:[A-Za-z][A-Za-z0-9-]*|BREAKING CHANGE): \S`)
+
+// TrailerValues returns the values of the footer entries named by keys, over
+// the commits in from..to that touch pathspec. The footer is the last
+// paragraph of the message, after the subject paragraph, and every line of it
+// must be a "Token: value" entry (or an indented continuation): a matching
+// line inside a body paragraph is not a trailer. Keys match without regard to
+// case. Git's own %(trailers) cannot be used because it ignores a
+// "BREAKING CHANGE" key and discards the whole block that holds one.
+func TrailerValues(dir, from, to, pathspec string, keys []string) ([]string, error) {
+	for _, rev := range []string{from, to} {
+		err := validateRev(rev)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if pathspec == "" || strings.HasPrefix(pathspec, "-") {
+		return nil, fmt.Errorf("invalid path %q", pathspec)
+	}
+	if len(keys) == 0 {
+		return nil, errors.New("no trailer keys given")
+	}
+	wanted := map[string]bool{}
+	for _, key := range keys {
+		if key == "" || strings.ContainsAny(key, ":\r\n\x00") {
+			return nil, fmt.Errorf("invalid trailer key %q", key)
+		}
+		wanted[strings.ToLower(key)] = true
+	}
+	out, _, err := git(dir, "log", "-z", "--format=%B", from+".."+to, "--", pathspec)
+	if err != nil {
+		return nil, err
+	}
+	var values []string
+	for _, message := range strings.Split(string(out), "\x00") {
+		values = append(values, footerValues(message, wanted)...)
+	}
+	return values, nil
+}
+
+func footerValues(message string, wanted map[string]bool) []string {
+	text := strings.TrimSpace(strings.ReplaceAll(message, "\r\n", "\n"))
+	paragraphs := strings.Split(text, "\n\n")
+	if len(paragraphs) < 2 {
+		return nil
+	}
+	var values []string
+	for _, line := range strings.Split(paragraphs[len(paragraphs)-1], "\n") {
+		isContinuation := strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
+		if isContinuation {
+			continue
+		}
+		if !footerLine.MatchString(line) {
+			return nil
+		}
+		token, value, _ := strings.Cut(line, ": ")
+		if wanted[strings.ToLower(token)] {
+			values = append(values, strings.TrimSpace(value))
+		}
+	}
+	return values
 }
 
 // ListFiles returns the files under pathspec at rev, sorted, with forward slashes.
