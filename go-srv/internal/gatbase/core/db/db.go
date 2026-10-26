@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/config"
+	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/health"
 )
 
 const (
@@ -110,4 +111,16 @@ func IsUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	isPgError := errors.As(err, &pgErr)
 	return isPgError && pgErr.Code == uniqueViolation
+}
+
+// PingCheck is the readiness check named "postgres": it pings pool within the
+// deadline of the context it receives. It panics on a nil pool.
+func PingCheck(pool *pgxpool.Pool) health.Check {
+	if pool == nil {
+		panic("db: PingCheck requires a pool")
+	}
+	return health.Check{
+		Name:  "postgres",
+		Probe: func(ctx context.Context) error { return Ping(ctx, pool) },
+	}
 }

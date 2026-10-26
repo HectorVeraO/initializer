@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/internal/ctxkey"
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/reqctx"
@@ -39,6 +42,8 @@ func (g *Guard) Require(p Policy, h http.Handler) http.Handler {
 		panic(err)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		span := trace.SpanFromContext(r.Context())
+		span.SetAttributes(attribute.String("http.route", r.Pattern))
 		if p.Kind == KindNone {
 			h.ServeHTTP(w, r)
 			return
@@ -47,6 +52,10 @@ func (g *Guard) Require(p Policy, h http.Handler) http.Handler {
 		if err != nil {
 			g.writer.Fail(w, r, err)
 			return
+		}
+		span.SetAttributes(attribute.String("actor_id", principal.ActorID))
+		if principal.TenantID != nil {
+			span.SetAttributes(attribute.String("tenant_id", string(*principal.TenantID)))
 		}
 		ctx := context.WithValue(r.Context(), ctxkey.Principal, principal)
 		if info, ok := ctxkey.RequestInfoFrom(ctx); ok {

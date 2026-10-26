@@ -57,6 +57,45 @@ func TestOpenRejectsBadMaxConns(t *testing.T) {
 	}
 }
 
+func TestPingCheckIsNamedPostgresAndProbesThePool(t *testing.T) {
+	pool := testpg.New(t, "dbcheck").Pool(t, 2)
+	check := db.PingCheck(pool)
+
+	if check.Name != "postgres" {
+		t.Fatalf("Name = %q", check.Name)
+	}
+	if err := check.Probe(context.Background()); err != nil {
+		t.Fatalf("Probe on a live pool: %v", err)
+	}
+	pool.Close()
+	if err := check.Probe(context.Background()); err == nil {
+		t.Fatal("Probe succeeded on a closed pool")
+	}
+}
+
+func TestPingCheckHonoursTheContextDeadline(t *testing.T) {
+	pool, err := db.Open(context.Background(), secret(t, "postgres://u:change-me@127.0.0.1:1/x?sslmode=disable"), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := db.PingCheck(pool).Probe(ctx); err == nil {
+		t.Fatal("Probe ignored a canceled context")
+	}
+}
+
+func TestPingCheckPanicsOnNilPool(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected a panic")
+		}
+	}()
+	db.PingCheck(nil)
+}
+
 func TestPingSucceedsOnLiveDatabase(t *testing.T) {
 	pool := testpg.New(t, "db").Pool(t, 2)
 	if err := db.Ping(context.Background(), pool); err != nil {

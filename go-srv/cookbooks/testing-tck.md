@@ -13,7 +13,7 @@ Read before writing or changing tests in `go-srv`. Project-wide test discipline:
 
 ## Go tests
 
-- Test through the public surface: build the module's handlers with `Register` on a fresh `http.ServeMux`, serve them with `net/http/httptest`, and assert status codes, headers and decoded JSON. `internal/gatbase/health/health_test.go` is the reference.
+- Test through the public surface: build the module's handlers with `Mount` on a fresh `http.ServeMux`, serve them with `net/http/httptest`, and assert status codes, headers and decoded JSON. `internal/gatbase/core/health/health_test.go` is the reference.
 - Use the external test package (`package <module>_test`) so tests see only exported API.
 - No mocks of the module's own collaborators (repositories, services). Fakes only at real boundaries: external HTTP providers (an `httptest.Server` playing the provider), the clock, randomness.
 - One behavior per test function; the name states it (`TestSwitchTenantRejectsNonMember`).
