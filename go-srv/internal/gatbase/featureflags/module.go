@@ -1,6 +1,7 @@
 // Package featureflags is the feature-flags catalog module: the flags.yaml
-// manifest loader and the evaluator behind the core featureflag port, with
-// global and per-tenant overrides in the flg_* tables.
+// manifest loader, the evaluator behind the core featureflag port, and the
+// platform-operator routes over the global and per-tenant overrides in the
+// flg_* tables.
 package featureflags
 
 import (
@@ -17,13 +18,22 @@ const (
 	problemLogName = "flags_manifest_invalid"
 )
 
+// module is the state Provide builds and Mount reads.
+type module struct {
+	manifest Manifest
+	store    store
+	ready    bool
+}
+
 // Module returns the feature-flags module. It publishes the flag evaluator
-// port and mounts no route.
+// port and mounts the five operator routes.
 func Module() core.Module {
+	m := &module{}
 	return core.Module{
 		ID:         moduleID,
 		Migrations: migrationsFS,
-		Provide:    provide,
+		Provide:    m.provide,
+		Mount:      m.mount,
 	}
 }
 
@@ -31,7 +41,7 @@ func Module() core.Module {
 // evaluator. A missing key is recorded by the config reader and reported with
 // the other config problems; an unreadable or invalid file fails Provide with
 // every problem listed.
-func provide(ctx context.Context, b *core.Builder) error {
+func (m *module) provide(ctx context.Context, b *core.Builder) error {
 	path := b.Config().RequiredString(flagsFileKey)
 	if path == "" {
 		return nil
@@ -46,6 +56,9 @@ func provide(ctx context.Context, b *core.Builder) error {
 	if b.Pool() == nil {
 		return nil
 	}
+	m.manifest = manifest
+	m.store = store{pool: b.Pool()}
+	m.ready = true
 	evaluator := NewEvaluator(manifest, b.Pool(), b.Logger())
 	return b.ProvideFlagEvaluator(evaluator)
 }

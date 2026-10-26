@@ -7,6 +7,8 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/coreauth"
 
+	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/featureflags"
+
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/parameters"
 )
 
@@ -14,6 +16,7 @@ import (
 func installedModules() []core.Module {
 	return []core.Module{
 		coreauth.Module(),
+		featureflags.Module(),
 		parameters.Module(),
 	}
 }
