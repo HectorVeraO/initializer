@@ -1,6 +1,6 @@
 # go-srv -- Architecture and module layout
 
-Read before adding or changing a module, route, handler or error response. Canonical example today: `go-srv/internal/gatbase/health` (registration, handler, black-box test).
+Read before adding or changing a module, route, handler or error response. Canonical example today: `go-srv/internal/gatbase/core/health` (mounting, handler, black-box test).
 
 ## Layout
 
@@ -19,7 +19,7 @@ Read before adding or changing a module, route, handler or error response. Canon
 ## Routing
 
 - Stdlib `net/http` `ServeMux` with method patterns: `mux.HandleFunc("GET /api/v1/parameters", h.list)`.
-- Each module exposes one `Register(mux *http.ServeMux, ...)` entry point, called from `cmd/server/main.go`. It panics on a nil mux (programmer error), as `health.Register` does.
+- Each module exposes `Module() core.Module` and registers routes through `Host.Handle` in its `Mount`, listed in `cmd/server/modules.go`; `core/health` is mounted by core itself with `Mount(mux *http.ServeMux, r *Readiness)`, which panics on a nil mux (programmer error).
 - Path parameters come from `r.PathValue("id")`; validate them before use.
 - Versioned API routes start with the path prefix /api/v1; probes start with /health.
 
