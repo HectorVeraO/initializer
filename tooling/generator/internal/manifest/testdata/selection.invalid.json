@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "project": { "name": "Acme", "goModule": "Example.com/acme" },
+  "stacks": ["go-srv", "go-srv"],
+  "modules": ["Parameters"]
+}

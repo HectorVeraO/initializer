@@ -1,0 +1,12 @@
+{
+  "schema": 2,
+  "stack": "rust-srv",
+  "module": "Parameters",
+  "version": "1.0",
+  "implied": "no",
+  "implementsSpec": {},
+  "requiresModules": [],
+  "tablePrefixes": ["sys"],
+  "files": ["../escape"],
+  "exclude": []
+}
