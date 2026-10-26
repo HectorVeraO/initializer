@@ -1079,6 +1079,17 @@ func TestRunReturnsBuildErrorFromConfig(t *testing.T) {
 	}
 }
 
+func TestMainExitsOneWhenStartupFails(t *testing.T) {
+	t.Setenv("GATBASE_DATABASE_URL", "")
+	t.Setenv("GATBASE_PUBLIC_BASE_URL", "")
+
+	code := core.Main(nil)
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+}
+
 func waitFor(t *testing.T, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
