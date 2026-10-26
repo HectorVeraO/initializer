@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core"
+	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/coreauth/kratos"
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/coreauth/session"
 )
 
@@ -18,6 +19,8 @@ type service struct {
 	store   *store
 	codec   *session.Codec
 	cookies session.Cookies
+	// admin is nil only when GATBASE_KRATOS_ADMIN_URL is invalid, which fails Build.
+	admin *kratos.Admin
 }
 
 // provideSession builds the token codec and the cookie helpers. A bad
@@ -51,6 +54,7 @@ func Module() core.Module {
 		ID:         moduleID,
 		Migrations: migrationsFS,
 		Provide:    s.provide,
+		Start:      s.start,
 	}
 }
 
@@ -61,6 +65,7 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 	s.cfg = parseConfig(b.Config(), b.PublicBaseURL())
 	s.store = newStore(b.Pool(), b.Clock())
 	s.provideSession(b)
+	s.provideKratos(b)
 
 	scopes := []struct{ name, description string }{
 		{"tenant:read", "Read the key's own tenant"},
@@ -73,4 +78,18 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 		}
 	}
 	return nil
+}
+
+// provideKratos builds the admin client without any I/O. Its transport
+// carries the W3C traceparent of the request or job context.
+func (s *service) provideKratos(b *core.Builder) {
+	if s.cfg.KratosAdminURL == nil {
+		return
+	}
+	var opts []kratos.Option
+	telemetry := b.Telemetry()
+	if telemetry != nil {
+		opts = append(opts, kratos.WithTransport(telemetry.Transport(nil)))
+	}
+	s.admin = kratos.NewAdmin(s.cfg.KratosAdminURL, opts...)
 }
