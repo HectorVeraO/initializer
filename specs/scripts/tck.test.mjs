@@ -51,17 +51,35 @@ function workersOf(pass) {
   return workers;
 }
 
-test('installed @feature-flags adds a serial second pass and is inverted out of the first', () => {
-  const passes = planRun({ specsDir: join(fixtures, 'manifests') });
+const flagsPlan = () => planRun({ specsDir: join(fixtures, 'manifests') });
+
+test('installed @feature-flags plans two passes', () => {
+  const passes = flagsPlan();
   assert.equal(passes.length, 2);
-  const [main, flags] = passes;
+});
+
+test('the main pass excludes @feature-flags and runs on default workers', () => {
+  const [main] = flagsPlan();
   assert.doesNotMatch('x @feature-flags', grepOf(main));
   const invert = new RegExp(main.args[main.args.indexOf('--grep-invert') + 1]);
   assert.match('x @feature-flags', invert);
   assert.doesNotMatch('x @core', invert);
-  assert.equal(workersOf(flags), '1');
   assert.equal(workersOf(main), undefined);
+});
+
+test('the @feature-flags pass is serial and selects only @feature-flags', () => {
+  const [, flags] = flagsPlan();
+  assert.equal(workersOf(flags), '1');
   assert.match('x @feature-flags', grepOf(flags));
+  assert.doesNotMatch('x @core', grepOf(flags));
+});
+
+test('--tags @feature-flags alone plans one serial pass without an invert', () => {
+  const passes = planRun({ specsDir: join(fixtures, 'manifests'), tags: '@feature-flags' });
+  assert.equal(passes.length, 1);
+  assert.equal(workersOf(passes[0]), '1');
+  assert.equal(passes[0].args.includes('--grep-invert'), false);
+  assert.match('x @feature-flags', grepOf(passes[0]));
 });
 
 test('no @feature-flags means a single pass', () => {
@@ -216,6 +234,7 @@ test('run-tck exits 1 when a Playwright pass fails', () => {
   const root = join(fixtures, 'tag-roots', 'failing');
   const result = runNode('run-tck.mjs', ['--specs-dir', root], { stdio: 'pipe' });
   assert.equal(result.status, 1);
+  assert.match(`${result.stdout}${result.stderr}`, /alpha fails/);
 });
 
 test('the Playwright config refuses to load without TCK_BASE_URL', () => {
