@@ -269,6 +269,8 @@ func TestBodyValidation(t *testing.T) {
 	wantIssue(t, wantError(t, e.json("operator", http.MethodPut, path, `[]`), 422, api.CodeValidationFailed), "", api.CodeBodyMalformed)
 	wantIssue(t, wantError(t, e.json("operator", http.MethodPut, flagsPath+"/"+releaseKey, `{"enabled": 1}`), 422, api.CodeValidationFailed), "enabled", api.CodeFieldTypeInvalid)
 	wantError(t, e.call("operator", http.MethodPut, path, "text/plain", enabledOn), http.StatusUnsupportedMediaType, api.CodeUnsupportedMediaType)
+	huge := `{"enabled": true, "pad": "` + strings.Repeat("a", api.MaxBodyBytes+1) + `"}`
+	wantError(t, e.json("operator", http.MethodPut, path, huge), http.StatusRequestEntityTooLarge, api.CodePayloadTooLarge)
 }
 
 func TestTenantDirectoryFailureIs500(t *testing.T) {
