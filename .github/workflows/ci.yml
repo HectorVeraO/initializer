@@ -64,6 +64,44 @@ jobs:
       - name: Test
         run: go test ./...
 
+  gates:
+    name: gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: tooling/gates/go.mod
+          cache-dependency-path: tooling/gates/go.sum
+      - name: Format
+        working-directory: tooling/gates
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "${unformatted}" ]; then
+            echo "${unformatted}"
+            exit 1
+          fi
+      - name: Vet
+        run: go -C tooling/gates vet ./...
+      - name: Test
+        run: go -C tooling/gates test ./...
+      - name: Check flags.yaml
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base="origin/main"
+          if [ -n "${PR_BASE_SHA}" ]; then
+            base="${PR_BASE_SHA}"
+          elif [ -n "${PUSH_BEFORE_SHA}" ] && [ -n "${PUSH_BEFORE_SHA//0/}" ]; then
+            base="${PUSH_BEFORE_SHA}"
+          fi
+          go -C tooling/gates run ./cmd/gates flags --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
+
   node-ng-web:
     name: node (ng-web)
     runs-on: ubuntu-latest
