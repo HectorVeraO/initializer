@@ -26,6 +26,10 @@ const (
 	maxTableName = 63
 )
 
+// inProcess serializes Apply calls of this process: two concurrent calls on one
+// small pool would each hold a connection while waiting for the other's.
+var inProcess = make(chan struct{}, 1)
+
 var moduleIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 // Set is one module's migrations.
@@ -44,10 +48,16 @@ func VersionTable(module string) string {
 // files in version order within a set, under one Postgres session advisory lock
 // held for the whole run (concurrent replicas serialize). It stops at the first
 // failing file, whose transaction is rolled back. The pool needs at least two
-// connections: one holds the lock, one runs the migrations.
+// connections: one holds the lock, one runs the migrations. Calls in one process run one at a time.
 func Apply(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger, sets []Set) (err error) {
 	if err := validate(pool, logger, sets); err != nil {
 		return err
+	}
+	select {
+	case inProcess <- struct{}{}:
+		defer func() { <-inProcess }()
+	case <-ctx.Done():
+		return fmt.Errorf("migrate: wait for another Apply in this process: %w", ctx.Err())
 	}
 	lockConn, err := pool.Acquire(ctx)
 	if err != nil {

@@ -80,6 +80,7 @@ func TestApplyRejectsInvalidInput(t *testing.T) {
 		"too long":         {[]migrate.Set{{Module: strings.Repeat("a", 60), Files: fsys}}, "invalid module id"},
 		"duplicate":        {[]migrate.Set{{Module: "alpha", Files: fsys}, {Module: "alpha", Files: fsys}}, "duplicate module"},
 		"nil files":        {[]migrate.Set{{Module: "alpha"}}, "no files"},
+		"49 chars":         {[]migrate.Set{{Module: strings.Repeat("a", 49), Files: fsys}}, "invalid module id"},
 	}
 	// A lazy pool never connects: validation fails before any connection is used.
 	pool, err := pgxpool.New(context.Background(), "postgres://u@127.0.0.1:1/x?pool_max_conns=2")
@@ -94,6 +95,46 @@ func TestApplyRejectsInvalidInput(t *testing.T) {
 				t.Fatalf("err = %v, want it to contain %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestApplyRejectsNilDependencies(t *testing.T) {
+	sets := []migrate.Set{{Module: "alpha", Files: fstest.MapFS{}}}
+	lazy, err := pgxpool.New(context.Background(), "postgres://u@127.0.0.1:1/x?pool_max_conns=2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lazy.Close()
+	cases := map[string]struct {
+		pool   *pgxpool.Pool
+		logger *slog.Logger
+		want   string
+	}{
+		"nil pool":   {nil, slog.Default(), "requires a pool"},
+		"nil logger": {lazy, nil, "requires a logger"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := migrate.Apply(context.Background(), tc.pool, tc.logger, sets)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestApplyAcceptsLongestModuleID(t *testing.T) {
+	lazy, err := pgxpool.New(context.Background(), "postgres://u@127.0.0.1:1/x?pool_max_conns=2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lazy.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sets := []migrate.Set{{Module: strings.Repeat("a", 48), Files: fstest.MapFS{}}}
+	err = migrate.Apply(ctx, lazy, slog.Default(), sets)
+	if err == nil || strings.Contains(err.Error(), "invalid module id") {
+		t.Fatalf("err = %v, want a connection failure, not a validation error", err)
 	}
 }
 

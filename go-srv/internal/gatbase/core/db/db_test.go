@@ -130,18 +130,44 @@ func TestInTxRollsBackOnError(t *testing.T) {
 	}
 }
 
+func TestInTxRollsBackWhenContextCanceled(t *testing.T) {
+	d := testpg.New(t, "db")
+	createTable(t, context.Background(), d)
+	pool := d.Pool(t, 2)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := db.InTx(ctx, pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "INSERT INTO sys_examples VALUES (1)"); err != nil {
+			return err
+		}
+		cancel()
+		return ctx.Err()
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	assertNoOpenTx(t, pool)
+	if got := count(t, context.Background(), d); got != 0 {
+		t.Fatalf("rows = %d, want 0 after rollback", got)
+	}
+}
+
 func TestInTxRollsBackOnPanic(t *testing.T) {
 	ctx := context.Background()
 	d := testpg.New(t, "db")
 	createTable(t, ctx, d)
 	pool := d.Pool(t, 2)
+	var recovered any
 	func() {
-		defer func() { _ = recover() }()
+		defer func() { recovered = recover() }()
 		_ = db.InTx(ctx, pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 			_, _ = tx.Exec(ctx, "INSERT INTO sys_examples VALUES (1)")
 			panic("boom")
 		})
 	}()
+	if recovered != "boom" {
+		t.Fatalf("recovered = %v, want the panic value to reach the caller", recovered)
+	}
 	assertNoOpenTx(t, pool)
 	if got := count(t, ctx, d); got != 0 {
 		t.Fatalf("rows = %d, want 0 after panic", got)

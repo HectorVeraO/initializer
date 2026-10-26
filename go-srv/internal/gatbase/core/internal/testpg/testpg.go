@@ -32,8 +32,9 @@ type Database struct {
 	Name string
 }
 
-// New skips the test when EnvURL is unset or the server is unreachable; otherwise it creates the database
-// it_<pkg>_<random hex> on that server and drops it (WITH FORCE) in t.Cleanup.
+// New skips the test when EnvURL is unset and fails it when the server is
+// unreachable; otherwise it creates the database it_<pkg>_<random hex> on that
+// server and drops it (WITH FORCE) in t.Cleanup.
 func New(t testing.TB, pkg string) Database {
 	t.Helper()
 	adminURL := os.Getenv(EnvURL)
@@ -46,7 +47,7 @@ func New(t testing.TB, pkg string) Database {
 	defer cancel()
 	admin, err := pgx.Connect(ctx, adminURL)
 	if err != nil {
-		t.Skipf("testpg: admin database unreachable, skipping database test: %v", err)
+		t.Fatalf("testpg: admin database unreachable: %v", err)
 	}
 	defer func() { _ = admin.Close(ctx) }()
 	quoted := pgx.Identifier{name}.Sanitize()
