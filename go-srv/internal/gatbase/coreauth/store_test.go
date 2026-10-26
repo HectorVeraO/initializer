@@ -122,6 +122,13 @@ func TestAccountUpsertRefreshesByIdentity(t *testing.T) {
 	if second.ID != first.ID || second.Email != "jane.doe@example.com" || second.FullName == nil || *second.FullName != name {
 		t.Fatalf("not refreshed: %+v", second)
 	}
+	third, err := s.UpsertAccount(ctx, identity, "jane.doe@example.com", nil)
+	if err != nil {
+		t.Fatalf("third: %v", err)
+	}
+	if third.FullName == nil || *third.FullName != name {
+		t.Fatalf("nil name must keep the stored one: %+v", third)
+	}
 	byIdentity, err := s.AccountByKratosIdentity(ctx, identity)
 	if err != nil || byIdentity.ID != first.ID {
 		t.Fatalf("by identity: %+v %v", byIdentity, err)
@@ -155,8 +162,10 @@ func TestUpperCaseEmailIsRejectedByTheSchema(t *testing.T) {
 	_, pool := newTestStore(t)
 	_, err := pool.Exec(context.Background(),
 		"INSERT INTO iam_accounts (kratos_identity_id, email) VALUES ($1::uuid, 'Jane@example.com')", randomUUID(t))
-	if err == nil {
-		t.Fatal("upper-case email accepted")
+	var pgErr *pgconn.PgError
+	isCheckViolation := errors.As(err, &pgErr) && pgErr.Code == "23514"
+	if !isCheckViolation {
+		t.Fatalf("want check_violation, got %v", err)
 	}
 }
 

@@ -261,6 +261,23 @@ func TestBootstrapIsAllOrNone(t *testing.T) {
 	}
 }
 
+func TestBootstrapReportsEveryMissingKey(t *testing.T) {
+	partial := map[string]string{keyBootstrapSlug: "acme"}
+	_, problems := parse(t, partial)
+	for _, missing := range []string{keyBootstrapEmail, keyBootstrapPassword} {
+		if !strings.Contains(problems, missing) {
+			t.Errorf("missing %s not reported: problems=%q", missing, problems)
+		}
+	}
+}
+
+func TestBootstrapTenantNameLimitAppliesWithoutBootstrap(t *testing.T) {
+	_, problems := parse(t, map[string]string{keyBootstrapName: strings.Repeat("n", 101)})
+	if !strings.Contains(problems, keyBootstrapName) {
+		t.Fatalf("101 characters accepted without bootstrap: %q", problems)
+	}
+}
+
 func TestBootstrapTenantNameRules(t *testing.T) {
 	cfg, problems := parse(t, with(bootstrapTriple(), keyBootstrapName, "  Acme Corp  "))
 	if problems != "" || cfg.Bootstrap.TenantName != "Acme Corp" {
