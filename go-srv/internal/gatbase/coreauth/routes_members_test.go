@@ -543,7 +543,10 @@ func TestUpdateMembershipStampsUpdatedAtFromTheClockOnlyOnChange(t *testing.T) {
 		return e.scan(`SELECT to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') FROM ten_memberships WHERE id = $1::uuid`, id)
 	}
 
-	admin.send(http.MethodPatch, "/api/v1/memberships/"+id, `{"role":"viewer"}`)
+	first := admin.send(http.MethodPatch, "/api/v1/memberships/"+id, `{"role":"viewer"}`)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first PATCH status = %d: %s", first.Code, first.Body.String())
+	}
 	if got := stamp(); got != changedAt {
 		t.Fatalf("updated_at = %s, want %s", got, changedAt)
 	}
