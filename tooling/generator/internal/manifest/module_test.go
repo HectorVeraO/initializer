@@ -405,22 +405,26 @@ func TestDecodeModulePathSecurity(t *testing.T) {
 		"../x", "a/../b", "/etc/x", "C:/x", "a\\b", "a//b", "./a", "a/./b",
 		"a\x00b", "a\nb", "a\x7fb", "", "/", "a/..", "a:b", "a/b//",
 	}
-	places := map[string]func(m map[string]any, path string){
-		"files string":   func(m map[string]any, path string) { m["files"] = []any{path} },
-		"exclude string": func(m map[string]any, path string) { m["exclude"] = []any{path} },
-		"object path": func(m map[string]any, path string) {
-			m["files"] = []any{map[string]any{"path": path, "target": "ok/file"}}
-		},
-		"object target": func(m map[string]any, path string) {
-			m["files"] = []any{map[string]any{"path": "ok/file", "target": path}}
-		},
+	type placement struct {
+		set     func(m map[string]any, path string)
+		pointer string
 	}
-	for place, set := range places {
+	places := map[string]placement{
+		"files string":   {func(m map[string]any, path string) { m["files"] = []any{path} }, "#/files/0"},
+		"exclude string": {func(m map[string]any, path string) { m["exclude"] = []any{path} }, "#/exclude/0"},
+		"object path": {func(m map[string]any, path string) {
+			m["files"] = []any{map[string]any{"path": path, "target": "ok/file"}}
+		}, "#/files/0/path"},
+		"object target": {func(m map[string]any, path string) {
+			m["files"] = []any{map[string]any{"path": "ok/file", "target": path}}
+		}, "#/files/0/target"},
+	}
+	for place, where := range places {
 		for _, path := range bad {
-			data := mutateFixture(t, "module.valid.json", func(m map[string]any) { set(m, path) })
+			data := mutateFixture(t, "module.valid.json", func(m map[string]any) { where.set(m, path) })
 			_, issues := manifest.DecodeModule(modulePath, data)
-			if len(issues) == 0 {
-				t.Errorf("%s accepted %q", place, path)
+			if !hasIssue(issues, manifest.CodeManifestInvalid, modulePath+where.pointer) {
+				t.Errorf("%s: want MANIFEST_INVALID at %s for %q, got %v", place, where.pointer, path, issues)
 			}
 		}
 	}

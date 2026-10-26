@@ -174,7 +174,10 @@ func decodedEvent(t *testing.T, stderr string) map[string]any {
 }
 
 func TestValidSelectionFileIsDecodedBeforeGenerate(t *testing.T) {
-	_, stdout, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", writeSelection(t, validSelection))
+	code, stdout, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", writeSelection(t, validSelection))
+	if code != exitInternal || !strings.Contains(stderr, "not implemented") {
+		t.Fatalf("want exit %d with not implemented: %d %s", exitInternal, code, stderr)
+	}
 	if issueArray(t, stderr) != nil || stdout != "" {
 		t.Fatalf("want no issues and empty stdout: %q %s", stdout, stderr)
 	}
