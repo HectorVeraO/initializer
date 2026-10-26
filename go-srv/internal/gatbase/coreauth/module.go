@@ -7,14 +7,41 @@ import (
 	"fmt"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core"
+	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/coreauth/session"
 )
 
 const moduleID = "core-auth"
 
 // service is the state Provide builds and later phases use.
 type service struct {
-	cfg   Config
-	store *store
+	cfg     Config
+	store   *store
+	codec   *session.Codec
+	cookies session.Cookies
+}
+
+// provideSession builds the token codec and the cookie helpers. A bad
+// GATBASE_SESSION_KEYS joins the shared report (rule text only, never the
+// value); a missing one is already reported as required.
+func (s *service) provideSession(b *core.Builder) {
+	s.cookies = session.NewCookies(s.cfg.PublicBaseURL, s.cfg.SessionRefreshMaxAge)
+	raw := s.cfg.SessionKeys.Reveal()
+	if raw == "" {
+		return
+	}
+	ring, problems := session.ParseKeyring(raw)
+	for _, problem := range problems {
+		b.Config().Invalid(keySessionKeys, problem.Error())
+	}
+	if ring == nil {
+		return
+	}
+	isHTTPS := s.cfg.PublicBaseURL != nil && s.cfg.PublicBaseURL.Scheme == "https"
+	if ring.HasPassphrase() && isHTTPS {
+		b.Config().Invalid(keySessionKeys, "passphrase entries are local only")
+		return
+	}
+	s.codec = session.NewCodec(ring, b.Clock())
 }
 
 // Module returns the core-auth catalog module. modules.go lists it first.
@@ -33,6 +60,7 @@ func Module() core.Module {
 func (s *service) provide(_ context.Context, b *core.Builder) error {
 	s.cfg = parseConfig(b.Config(), b.PublicBaseURL())
 	s.store = newStore(b.Pool(), b.Clock())
+	s.provideSession(b)
 
 	scopes := []struct{ name, description string }{
 		{"tenant:read", "Read the key's own tenant"},

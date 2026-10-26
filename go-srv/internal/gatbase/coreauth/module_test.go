@@ -163,3 +163,68 @@ func TestModuleMountsNoRoutes(t *testing.T) {
 		t.Fatalf("GET /api/v1/tenant answered %d, want 404", rec.Code)
 	}
 }
+
+// buildWithKeys runs Build against an unreachable database with the given
+// keyring text and public URL, and returns its error.
+func buildWithKeys(t *testing.T, keys, publicURL string, extra map[string]string) error {
+	t.Helper()
+	settings := map[string]string{
+		"GATBASE_PUBLIC_BASE_URL": publicURL,
+		"GATBASE_SESSION_KEYS":    keys,
+	}
+	for key, value := range extra {
+		settings[key] = value
+	}
+	app, err := core.Build(context.Background(), core.Options{
+		Logger: slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		Config: config.MapSource(settings),
+		Clock:  clock.System{},
+		Pool:   lazyPool(t),
+	}, []core.Module{Module()})
+	if err == nil {
+		_ = app.Close(context.Background())
+	}
+	return err
+}
+
+func TestBadSessionKeysJoinTheSingleBuildReport(t *testing.T) {
+	leak := "dGhpcy1pcy1ub3QtMzItYnl0ZXM"
+	err := buildWithKeys(t, "bad kid!:"+leak+",short:QUJD", "http://localhost:10120",
+		map[string]string{"GATBASE_SESSION_TTL": "99h"})
+	if err == nil {
+		t.Fatal("Build accepted bad session keys")
+	}
+	text := err.Error()
+	for _, want := range []string{"GATBASE_SESSION_KEYS", "kid must match", "seed must be 32 bytes", "GATBASE_SESSION_TTL"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("report does not mention %q: %s", want, text)
+		}
+	}
+	if strings.Contains(text, leak) {
+		t.Errorf("report leaks key material: %s", text)
+	}
+}
+
+func TestPassphraseKeyIsRejectedUnderAnHTTPSPublicURL(t *testing.T) {
+	keys := "local-1:passphrase:" + strings.Repeat("x", 30)
+	err := buildWithKeys(t, keys, "https://app.example.com", nil)
+	if err == nil || !strings.Contains(err.Error(), "GATBASE_SESSION_KEYS") ||
+		!strings.Contains(err.Error(), "passphrase entries are local only") {
+		t.Fatalf("want the passphrase problem, got %v", err)
+	}
+}
+
+func TestPassphraseKeyIsAcceptedUnderAnHTTPPublicURL(t *testing.T) {
+	keys := "local-1:passphrase:" + strings.Repeat("x", 30)
+	err := buildWithKeys(t, keys, "http://localhost:10120", nil)
+	if err != nil && strings.Contains(err.Error(), "GATBASE_SESSION_KEYS") {
+		t.Fatalf("keys were rejected: %v", err)
+	}
+}
+
+func TestSeedKeyIsAcceptedUnderAnHTTPSPublicURL(t *testing.T) {
+	err := buildWithKeys(t, randomSessionKeys(t), "https://app.example.com", nil)
+	if err != nil && strings.Contains(err.Error(), "GATBASE_SESSION_KEYS") {
+		t.Fatalf("keys were rejected: %v", err)
+	}
+}
