@@ -6,7 +6,7 @@ test('P10 roles gate overrides and only operators define parameters', { tag: '@p
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'p10-a', members: [{ label: 'p10-member', role: 'member' }] });
   const member = tenantA.members['p10-member'];
-  const key = paramKey('export.max_rows_inline');
+  const key = paramKey('export.p10_max_rows');
   await defineParameter(operator, { key, valueType: 'number', defaultValue: 50, minValue: 1, maxValue: 500 });
 
   await expectError(await mutate(member, 'PUT', overridePath(key), { value: 5 }), 403, 'INSUFFICIENT_ROLE');

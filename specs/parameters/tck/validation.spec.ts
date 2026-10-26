@@ -5,7 +5,7 @@ import { defineParameter, expectView, issueSet, overridePath, paramKey, rawMutat
 test('P6 an override must match the type and the range', { tag: '@parameters' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'p6-a' });
-  const key = paramKey('export.max_rows_inline');
+  const key = paramKey('export.p6_max_rows');
   await defineParameter(operator, { key, valueType: 'number', defaultValue: 50, minValue: 1, maxValue: 500 });
 
   const cases: Array<[unknown, string]> = [
@@ -52,7 +52,7 @@ test('P8 an override must be an allowed value', { tag: '@parameters' }, async ({
 test('P9 new constraints cannot strand an existing override', { tag: '@parameters' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'p9-a' });
-  const key = paramKey('export.max_rows_inline');
+  const key = paramKey('export.p9_max_rows');
   await defineParameter(operator, { key, valueType: 'number', defaultValue: 50, minValue: 1, maxValue: 500 });
   await expectView(await mutate(tenantA.admin, 'PUT', overridePath(key), { value: 400 }), 200, key);
 
