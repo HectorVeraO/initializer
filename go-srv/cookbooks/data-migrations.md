@@ -17,6 +17,7 @@ Every table matches `^[a-z]{2,4}_[a-z0-9_]+$`: a 2 to 4 letter module prefix, an
 | `iam_` | Identity and API keys (core) | `iam_accounts`, `iam_api_keys` |
 | `sys_` | Parameters | `sys_parameters`, `sys_parameter_overrides` |
 | `flg_` | Feature flags | `flg_overrides`, `flg_tenant_overrides` |
+| `cor_` | Core migration runner | `cor_migrations_<module>` (one goose version table per module) |
 
 Reserved for planned catalog modules; do not use them for anything else: `aud_` (audit log), `pln_` (plans and entitlements), `mtr_` (metering), `bil_` (billing), `mkc_` (maker-checker), `jbr_` (support ticket bridge), `stg_` (file storage).
 

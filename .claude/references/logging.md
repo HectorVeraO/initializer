@@ -33,6 +33,10 @@ restating it.
 The logger adds `time`, `level`, `service`, `component` and, when a trace span is active,
 `trace_id`/`span_id`. Call sites never write those fields; they write the event name and their own fields.
 
+Go: always call the `*Context` logger methods (`InfoContext`, `WarnContext`, `ErrorContext`) with the request
+or job context, so `trace_id`, `span_id`, `tenant_id` and `actor_id` reach the record; the plain `Info`,
+`Warn` and `Error` methods carry none of them.
+
 ## The PII boundary
 
 The platform may strip what the **transport** attaches on its own - headers, request configuration, and
