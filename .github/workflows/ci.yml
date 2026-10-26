@@ -44,6 +44,19 @@ jobs:
     defaults:
       run:
         working-directory: go-srv
+    env:
+      GATBASE_TEST_DATABASE_URL: postgres://initializer@localhost:10132/initializer?sslmode=disable
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: initializer
+          POSTGRES_USER: initializer
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["10132:5432"]
+        options: >-
+          --health-cmd "pg_isready -U initializer -d initializer"
+          --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -118,6 +131,94 @@ jobs:
           go -C tooling/gates run ./cmd/gates migrations --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
           go -C tooling/gates run ./cmd/gates contracts --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
           go -C tooling/gates run ./cmd/gates versions --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
+
+  tck:
+    name: tck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      GATBASE_PUBLIC_BASE_URL: http://localhost:10100
+      TCK_BASE_URL: http://localhost:10100
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go-srv/go.mod
+          cache-dependency-path: go-srv/go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: specs/package.json
+          cache: npm
+          cache-dependency-path: specs/package-lock.json
+      - name: Install and check the TCK runner
+        working-directory: specs
+        run: |
+          npm ci
+          npm run typecheck
+          npm run check:tags
+          npm run test:scripts
+      - name: Prepare the local stack env
+        run: cp .deploy/local/.example.env .deploy/local/.env
+      - name: Start the local stack
+        run: |
+          set -euo pipefail
+          compose="docker compose -f .deploy/local/docker-compose.yml"
+          ${compose} up -d
+          for _ in $(seq 1 60); do
+            state="$(${compose} ps --format json postgres | jq -rs 'flatten | .[0].Health // empty')"
+            if [ "${state}" = "healthy" ] && curl -fsS http://localhost:10133/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "timeout waiting for the local stack" >&2
+          exit 1
+      - name: Build and start go-srv
+        run: |
+          set -euo pipefail
+          go -C go-srv build -o "${RUNNER_TEMP}/go-srv" ./cmd/server
+          set -a; . .deploy/local/.env; set +a
+          export GATBASE_PUBLIC_BASE_URL=http://localhost:10100
+          eval "$(node specs/scripts/tck-env.mjs)"
+          "${RUNNER_TEMP}/go-srv" > "${RUNNER_TEMP}/go-srv.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/go-srv.pid"
+          url=http://localhost:10100/health/ready
+          for _ in $(seq 1 60); do
+            if curl -fsS "${url}" > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "timeout waiting for ${url}" >&2
+          exit 1
+      - name: Run the TCK
+        working-directory: specs
+        run: npm run tck
+      - name: Collect logs
+        if: always()
+        run: |
+          docker compose -f .deploy/local/docker-compose.yml logs --no-color > "${RUNNER_TEMP}/compose.log" 2>&1 || true
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tck-${{ github.run_id }}
+          path: |
+            specs/test-results/
+            ${{ runner.temp }}/go-srv.log
+            ${{ runner.temp }}/compose.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Stop go-srv and the stack
+        if: always()
+        run: |
+          if [ -f "${RUNNER_TEMP}/go-srv.pid" ]; then
+            kill "$(cat "${RUNNER_TEMP}/go-srv.pid")" || true
+          fi
+          docker compose -f .deploy/local/docker-compose.yml down -v
 
   node-ng-web:
     name: node (ng-web)
