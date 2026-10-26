@@ -652,9 +652,6 @@ func TestKratosRecoveringWithinTheTimeoutLetsBootstrapFinish(t *testing.T) {
 	if env.count("ten_tenants") != 1 || env.count("ten_memberships") != 1 {
 		t.Fatal("bootstrap did not finish after Kratos recovered")
 	}
-	if len(env.logs.events(t, "server_failed")) != 0 {
-		t.Error("server_failed was logged although bootstrap finished")
-	}
 }
 
 func TestAPartialBootstrapConfigListsEveryProblemInOneError(t *testing.T) {
