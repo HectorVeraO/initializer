@@ -44,6 +44,8 @@ func (s *service) mountSession(h *core.Host) {
 	}
 	h.Handle("GET /api/v1/auth/session", auth.Public, http.HandlerFunc(routes.getSession))
 	h.Handle("POST /api/v1/auth/logout", auth.Policy{Kind: auth.KindSessionAllowExpired}, http.HandlerFunc(routes.logout))
+	h.Handle("POST /api/v1/auth/refresh", auth.Policy{Kind: auth.KindSessionAllowExpired}, http.HandlerFunc(routes.refresh))
+	h.Handle("POST /api/v1/auth/switch-tenant", auth.Policy{Kind: auth.KindSession}, http.HandlerFunc(routes.switchTenant))
 
 	var opts []kratos.Option
 	telemetry := h.Telemetry()
@@ -141,32 +143,38 @@ func (rt *sessionRoutes) issue(ctx context.Context, w http.ResponseWriter, r *ht
 		rt.writer.Fail(w, r, unavailable)
 		return
 	}
-	account, err := rt.access.linkIdentity(ctx, kratosSession.IdentityID, kratosSession.Email)
-	if err != nil {
-		rt.writer.Fail(w, r, err)
-		return
-	}
-	_, err = rt.access.checkAccess(ctx, account.ID, nil)
-	if err != nil {
-		rt.writer.Fail(w, r, err)
-		return
-	}
-	tenantID, grant, err := rt.access.selectTenant(ctx, account.ID)
-	if err != nil {
-		rt.writer.Fail(w, r, err)
-		return
-	}
-	claims, err := rt.newChain(account, kratosSession.ID, tenantID, grant)
-	if err != nil {
-		rt.writer.Fail(w, r, err)
-		return
-	}
-	err = rt.setCookies(w, claims)
+	claims, err := rt.startChain(ctx, w, kratosSession)
 	if err != nil {
 		rt.writer.Fail(w, r, err)
 		return
 	}
 	rt.respondView(ctx, w, r, claims)
+}
+
+// startChain is steps 2.3 to 2.6 of the session route: link the identity,
+// check the account, select a tenant, mint a new chain and set both cookies.
+func (rt *sessionRoutes) startChain(ctx context.Context, w http.ResponseWriter, kratosSession kratos.Session) (session.Claims, error) {
+	account, err := rt.access.linkIdentity(ctx, kratosSession.IdentityID, kratosSession.Email)
+	if err != nil {
+		return session.Claims{}, err
+	}
+	_, err = rt.access.checkAccess(ctx, account.ID, nil)
+	if err != nil {
+		return session.Claims{}, err
+	}
+	tenantID, grant, err := rt.access.selectTenant(ctx, account.ID)
+	if err != nil {
+		return session.Claims{}, err
+	}
+	claims, err := rt.newChain(account, kratosSession.ID, tenantID, grant)
+	if err != nil {
+		return session.Claims{}, err
+	}
+	err = rt.setCookies(w, claims)
+	if err != nil {
+		return session.Claims{}, err
+	}
+	return claims, nil
 }
 
 // newChain builds the claims of a new session chain.

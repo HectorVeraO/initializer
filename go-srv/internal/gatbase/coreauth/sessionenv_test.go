@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -318,7 +319,16 @@ func (c *sessClient) sessionCookieName() string {
 
 func (c *sessClient) do(method, path string, headers map[string]string) *httptest.ResponseRecorder {
 	c.e.t.Helper()
-	req := httptest.NewRequest(method, path, nil)
+	return c.doBody(method, path, headers, "")
+}
+
+// doBody is do with a JSON body (sent as application/json when not empty).
+func (c *sessClient) doBody(method, path string, headers map[string]string, body string) *httptest.ResponseRecorder {
+	c.e.t.Helper()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	for name, value := range c.cookies {
 		req.AddCookie(&http.Cookie{Name: name, Value: value})
 	}
