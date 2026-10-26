@@ -105,6 +105,10 @@ func TestDurationBoundaries(t *testing.T) {
 			if got != tc.invalid {
 				t.Fatalf("invalid=%v, problems=%q", got, problems)
 			}
+			hasFalseConflict := strings.Contains(problems, keyRefreshMaxAge) && tc.key != keyRefreshMaxAge
+			if hasFalseConflict {
+				t.Fatalf("false refresh conflict: %q", problems)
+			}
 		})
 	}
 }

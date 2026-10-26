@@ -187,6 +187,10 @@ func TestMembershipRoundTripAndUniqueness(t *testing.T) {
 	if err != nil || len(list) != 2 {
 		t.Fatalf("list: %+v %v", list, err)
 	}
+	_, err = s.MembershipsByAccount(ctx, "not-a-uuid")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("non-uuid account id: want ErrNotFound, got %v", err)
+	}
 }
 
 func TestMembershipOfAnotherTenantIsNotFound(t *testing.T) {
@@ -282,6 +286,11 @@ VALUES ($1::uuid, 'ci', $2, $3, $4, $5::uuid)`,
 	return err
 }
 
+func isCheckViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23514"
+}
+
 func TestAPIKeyConstraints(t *testing.T) {
 	s, pool := newTestStore(t)
 	tenant := mustTenant(t, s, "acme")
@@ -289,12 +298,12 @@ func TestAPIKeyConstraints(t *testing.T) {
 	valid := "gbk_live_abcdefghijklmnop"
 
 	err := insertAPIKey(pool, tenant.ID, admin.ID, valid, []string{})
-	if err == nil {
-		t.Error("empty scopes accepted")
+	if !isCheckViolation(err) {
+		t.Errorf("empty scopes: want check_violation, got %v", err)
 	}
 	err = insertAPIKey(pool, tenant.ID, admin.ID, "gbk_live_ABCDEFGHIJKLMNOP", []string{"tenant:read"})
-	if err == nil {
-		t.Error("upper-case prefix accepted")
+	if !isCheckViolation(err) {
+		t.Errorf("upper-case prefix: want check_violation, got %v", err)
 	}
 	err = insertAPIKey(pool, tenant.ID, admin.ID, valid, []string{"tenant:read"})
 	if err != nil {

@@ -66,6 +66,9 @@ func TestExampleEnvLinesPassValidationInProvide(t *testing.T) {
 	if strings.Contains(err.Error(), "invalid configuration") {
 		t.Fatalf("example env rejected: %v", err)
 	}
+	if !strings.Contains(err.Error(), "db: ") {
+		t.Fatalf("want a database ping failure, got %v", err)
+	}
 }
 
 func TestBuildBootsAndReportsReady(t *testing.T) {

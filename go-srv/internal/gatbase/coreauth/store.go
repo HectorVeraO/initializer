@@ -229,10 +229,11 @@ func (s *store) MembershipByTenantAccount(ctx context.Context, tenantID, account
 }
 
 // MembershipsByAccount lists every membership of an account, oldest first.
+// An id that is not a UUID answers ErrNotFound.
 func (s *store) MembershipsByAccount(ctx context.Context, accountID string) ([]Membership, error) {
 	account, ok := canonicalID(accountID)
 	if !ok {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	rows, err := s.pool.Query(ctx,
 		"SELECT "+membershipColumns+" FROM ten_memberships WHERE account_id = $1::uuid ORDER BY created_at, id",
