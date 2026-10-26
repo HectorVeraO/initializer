@@ -1,0 +1,10 @@
+{
+  "name": 5,
+  "title": null,
+  "active": "yes",
+  "count": 1.5,
+  "scopes": ["read", 2, "write"],
+  "limits": {
+    "maxValue": "big"
+  }
+}
