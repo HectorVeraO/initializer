@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"time"
 
@@ -172,4 +173,139 @@ func readMemberView(ctx context.Context, tx pgx.Tx, m Membership) (MemberView, e
 		Account:        account,
 		CreatedAt:      m.CreatedAt.UTC(),
 	}, nil
+}
+
+// memberSortColumn maps a wire sort name of the member list to its column.
+func memberSortColumn(field string) (string, bool) {
+	switch field {
+	case "createdAt":
+		return "m.created_at", true
+	case "email":
+		return "a.email", true
+	}
+	return "", false
+}
+
+// ListMembers pages the members of the tenant whose status is one of
+// statuses, optionally only those with role (empty means any).
+func (s *tenancy) ListMembers(ctx context.Context, tenantID string, statuses []string, role string, q api.PageQuery) ([]MemberView, int64, error) {
+	tenantUUID, tenantOK := api.ParseUUID(tenantID)
+	column, sortOK := memberSortColumn(q.SortField)
+	if !tenantOK || !sortOK || len(statuses) == 0 || q.Page < 1 || q.Size < 1 {
+		return nil, 0, errors.New("coreauth: list members: tenant id, statuses, a known sort field and a page are required")
+	}
+	const filter = "m.tenant_id = $1::uuid AND m.status = ANY($2) AND ($3 = '' OR m.role = $3)"
+	var total int64
+	err := s.pool.QueryRow(ctx,
+		"SELECT count(*) FROM ten_memberships m WHERE "+filter, tenantUUID, statuses, role).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: count members: %w", err)
+	}
+	tenantRow := s.pool.QueryRow(ctx, "SELECT "+tenantColumns+" FROM ten_tenants WHERE id = $1::uuid", tenantUUID)
+	tenant, err := scanTenant(tenantRow)
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: read tenant: %w", err)
+	}
+	direction := sortDirection(q)
+	rows, err := s.pool.Query(ctx,
+		`SELECT m.id::text, m.role, m.status, m.created_at, a.id::text, a.email, a.full_name
+FROM ten_memberships m JOIN iam_accounts a ON a.id = m.account_id
+WHERE `+filter+" ORDER BY "+column+" "+direction+", m.id "+direction+" LIMIT $4 OFFSET $5",
+		tenantUUID, statuses, role, q.Size, q.Offset())
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: list members: %w", err)
+	}
+	views, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (MemberView, error) {
+		var (
+			id, memberRole, memberStatus string
+			createdAt                    time.Time
+			account                      MemberAccount
+		)
+		scanErr := row.Scan(&id, &memberRole, &memberStatus, &createdAt, &account.ID, &account.Email, &account.FullName)
+		view := MemberView{
+			MembershipView: newMembershipView(id, tenant, memberRole, memberStatus),
+			Account:        account,
+			CreatedAt:      createdAt.UTC(),
+		}
+		return view, scanErr
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: list members: %w", err)
+	}
+	return views, total, nil
+}
+
+var membershipRoles = []string{string(reqctx.RoleAdmin), string(reqctx.RoleMember), string(reqctx.RoleViewer)}
+
+func (rt *tenancyRoutes) listMemberships(w http.ResponseWriter, r *http.Request) {
+	principal, ok := callerOf(r)
+	tenantID, hasTenant := activeTenantOf(principal)
+	if !ok || !hasTenant {
+		rt.writer.Fail(w, r, sessionInvalid())
+		return
+	}
+	var p api.Problems
+	statuses := []string{statusActive, statusSuspended}
+	requested := r.URL.Query().Get("status")
+	if requested != "" && api.CheckOneOf(&p, "status", requested, statusActive, statusSuspended, statusRevoked) {
+		statuses = []string{requested}
+	}
+	role := r.URL.Query().Get("role")
+	if role != "" {
+		api.CheckOneOf(&p, "role", role, membershipRoles...)
+	}
+	query := api.ParsePageQuery(r, &p, api.PageSpec{Sorts: []string{"createdAt", "email"}, DefaultSort: "email"})
+	err := p.Err()
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	items, total, err := rt.tenancy.ListMembers(r.Context(), tenantID, statuses, role, query)
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	rt.writer.Data(w, r, http.StatusOK, api.NewPage(items, query, total))
+}
+
+func (rt *tenancyRoutes) updateMembership(w http.ResponseWriter, r *http.Request) {
+	principal, ok := callerOf(r)
+	tenantID, hasTenant := activeTenantOf(principal)
+	if !ok || !hasTenant {
+		rt.writer.Fail(w, r, sessionInvalid())
+		return
+	}
+	body, err := api.DecodeBody(r)
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	var p api.Problems
+	var role *reqctx.Role
+	var status *string
+	roleText, hasRole := body.String(&p, "role", api.Optional)
+	if hasRole && api.CheckOneOf(&p, "role", roleText, membershipRoles...) {
+		parsed := reqctx.Role(roleText)
+		role = &parsed
+	}
+	statusText, hasStatus := body.String(&p, "status", api.Optional)
+	if hasStatus && api.CheckOneOf(&p, "status", statusText, statusActive, statusSuspended, statusRevoked) {
+		status = &statusText
+	}
+	noRole := !body.Has("role") || body.IsNull("role")
+	noStatus := !body.Has("status") || body.IsNull("status")
+	if noRole && noStatus {
+		p.Add("", api.CodeFieldRequired, "At least one of role, status is required")
+	}
+	err = p.Err()
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	view, err := rt.tenancy.UpdateMembership(r.Context(), tenantID, r.PathValue("id"), role, status)
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	rt.writer.Data(w, r, http.StatusOK, view)
 }

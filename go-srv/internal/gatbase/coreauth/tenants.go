@@ -13,8 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/api"
+	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/auth"
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/db"
+	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/coreauth/kratos"
 )
 
@@ -148,4 +150,173 @@ func readSlug(body *api.Body, p *api.Problems) (string, bool) {
 		return "", false
 	}
 	return value, true
+}
+
+// TenantSummary reads the tenant row of id for GET /api/v1/tenant. An
+// unknown or malformed id is 404.
+func (s *tenancy) TenantSummary(ctx context.Context, tenantID string) (tenantSummary, error) {
+	id, isUUID := api.ParseUUID(tenantID)
+	if !isUUID {
+		return tenantSummary{}, api.NotFound()
+	}
+	row := s.pool.QueryRow(ctx, "SELECT "+tenantColumns+" FROM ten_tenants WHERE id = $1::uuid", id)
+	tenant, err := scanTenant(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tenantSummary{}, api.NotFound()
+	}
+	if err != nil {
+		return tenantSummary{}, fmt.Errorf("coreauth: read tenant: %w", err)
+	}
+	return tenantSummary{ID: tenant.ID, Slug: tenant.Slug, Name: tenant.Name, Status: tenant.Status}, nil
+}
+
+// tenantSortColumns maps the wire sort names of the tenant list to columns.
+var tenantSortColumns = map[string]string{"createdAt": "created_at", "slug": "slug"}
+
+// ListTenants pages every tenant, optionally only those in status (empty
+// means all). It is the operator's cross-tenant view by design.
+func (s *tenancy) ListTenants(ctx context.Context, status string, q api.PageQuery) ([]TenantView, int64, error) {
+	column, sortOK := tenantSortColumns[q.SortField]
+	if !sortOK || q.Page < 1 || q.Size < 1 {
+		return nil, 0, errors.New("coreauth: list tenants: a known sort field and a page are required")
+	}
+	var total int64
+	err := s.pool.QueryRow(ctx, "SELECT count(*) FROM ten_tenants WHERE ($1 = '' OR status = $1)", status).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: count tenants: %w", err)
+	}
+	direction := sortDirection(q)
+	rows, err := s.pool.Query(ctx,
+		"SELECT "+tenantColumns+" FROM ten_tenants WHERE ($1 = '' OR status = $1) ORDER BY "+
+			column+" "+direction+", id "+direction+" LIMIT $2 OFFSET $3",
+		status, q.Size, q.Offset())
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: list tenants: %w", err)
+	}
+	found, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Tenant, error) {
+		return scanTenant(row)
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: list tenants: %w", err)
+	}
+	views := make([]TenantView, 0, len(found))
+	for _, tenant := range found {
+		views = append(views, tenantView(tenant))
+	}
+	return views, total, nil
+}
+
+func sortDirection(q api.PageQuery) string {
+	if q.SortDesc {
+		return "DESC"
+	}
+	return "ASC"
+}
+
+// SetTenantStatus sets a tenant's status to active or suspended. Setting the
+// current status writes nothing. An unknown or malformed id is 404.
+func (s *tenancy) SetTenantStatus(ctx context.Context, tenantID, status string) (TenantView, error) {
+	if status != statusActive && status != statusSuspended {
+		return TenantView{}, errors.New("coreauth: set tenant status: status must be active or suspended")
+	}
+	id, isUUID := api.ParseUUID(tenantID)
+	if !isUUID {
+		return TenantView{}, api.NotFound()
+	}
+	row := s.pool.QueryRow(ctx,
+		`UPDATE ten_tenants SET status = $2,
+updated_at = CASE WHEN status = $2 THEN updated_at ELSE $3 END
+WHERE id = $1::uuid RETURNING `+tenantColumns,
+		id, status, s.clock.Now())
+	tenant, err := scanTenant(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return TenantView{}, api.NotFound()
+	}
+	if err != nil {
+		return TenantView{}, fmt.Errorf("coreauth: set tenant status: %w", err)
+	}
+	return tenantView(tenant), nil
+}
+
+// tenantDirectory is core's auth.TenantDirectory over ten_tenants.
+type tenantDirectory struct {
+	pool *pgxpool.Pool
+}
+
+// TenantExists reports whether the tenant exists, whatever its status.
+func (d *tenantDirectory) TenantExists(ctx context.Context, id reqctx.TenantID) (bool, error) {
+	canonical, isUUID := canonicalID(string(id))
+	if !isUUID {
+		return false, nil
+	}
+	var exists bool
+	err := d.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM ten_tenants WHERE id = $1::uuid)", canonical).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("coreauth: tenant exists: %w", err)
+	}
+	return exists, nil
+}
+
+// getTenant serves GET /api/v1/tenant: the caller's own tenant, never another.
+func (rt *tenancyRoutes) getTenant(w http.ResponseWriter, r *http.Request) {
+	principal, ok := reqctx.PrincipalFrom(r.Context())
+	if !ok || principal.TenantID == nil {
+		rt.writer.Fail(w, r, sessionInvalid())
+		return
+	}
+	err := auth.CheckTenantRef(principal, r.URL.Query().Get("tenantId"))
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	summary, err := rt.tenancy.TenantSummary(r.Context(), string(*principal.TenantID))
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	rt.writer.Data(w, r, http.StatusOK, summary)
+}
+
+func (rt *tenancyRoutes) listTenants(w http.ResponseWriter, r *http.Request) {
+	var p api.Problems
+	status := r.URL.Query().Get("status")
+	if status != "" {
+		api.CheckOneOf(&p, "status", status, statusActive, statusSuspended)
+	}
+	query := api.ParsePageQuery(r, &p, api.PageSpec{Sorts: []string{"createdAt", "slug"}, DefaultSort: "slug"})
+	err := p.Err()
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	items, total, err := rt.tenancy.ListTenants(r.Context(), status, query)
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	rt.writer.Data(w, r, http.StatusOK, api.NewPage(items, query, total))
+}
+
+func (rt *tenancyRoutes) setTenantStatus(w http.ResponseWriter, r *http.Request) {
+	body, err := api.DecodeBody(r)
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	var p api.Problems
+	status, statusOK := body.String(&p, "status", api.Required)
+	if statusOK {
+		statusOK = api.CheckOneOf(&p, "status", status, statusActive, statusSuspended)
+	}
+	err = p.Err()
+	if err != nil || !statusOK {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	view, err := rt.tenancy.SetTenantStatus(r.Context(), r.PathValue("id"), status)
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	rt.writer.Data(w, r, http.StatusOK, view)
 }

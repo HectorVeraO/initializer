@@ -30,11 +30,17 @@ type tenancyRoutes struct {
 	writer  *api.Writer
 }
 
-// mountTenancy registers the tenant creation and invitation routes.
+// mountTenancy registers the tenant, membership and invitation routes.
 func (s *service) mountTenancy(h *core.Host) {
 	routes := &tenancyRoutes{tenancy: s.tenancy, writer: h.API()}
 	admin := auth.Policy{Kind: auth.KindSession, MinRole: reqctx.RoleAdmin}
-	h.Handle("POST /api/v1/tenants", auth.Policy{Kind: auth.KindSession, PlatformOperator: true}, http.HandlerFunc(routes.createTenant))
+	operator := auth.Policy{Kind: auth.KindSession, PlatformOperator: true}
+	h.Handle("GET /api/v1/tenant", auth.Policy{Kind: auth.KindSessionOrAPIKey, Scope: "tenant:read", MinRole: reqctx.RoleViewer}, http.HandlerFunc(routes.getTenant))
+	h.Handle("GET /api/v1/tenants", operator, http.HandlerFunc(routes.listTenants))
+	h.Handle("POST /api/v1/tenants", operator, http.HandlerFunc(routes.createTenant))
+	h.Handle("PATCH /api/v1/tenants/{id}/status", operator, http.HandlerFunc(routes.setTenantStatus))
+	h.Handle("GET /api/v1/memberships", auth.Policy{Kind: auth.KindSession, MinRole: reqctx.RoleViewer}, http.HandlerFunc(routes.listMemberships))
+	h.Handle("PATCH /api/v1/memberships/{id}", admin, http.HandlerFunc(routes.updateMembership))
 	h.Handle("GET /api/v1/invitations", admin, http.HandlerFunc(routes.listInvitations))
 	h.Handle("POST /api/v1/invitations", admin, http.HandlerFunc(routes.createInvitation))
 	h.Handle("DELETE /api/v1/invitations/{id}", admin, http.HandlerFunc(routes.revokeInvitation))

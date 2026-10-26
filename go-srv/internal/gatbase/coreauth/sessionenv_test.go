@@ -191,6 +191,8 @@ type sessEnvOptions struct {
 	adminURL string
 	// operatorEmails is GATBASE_PLATFORM_OPERATOR_EMAILS.
 	operatorEmails string
+	// keys is the API key resolver; nil keeps the instance without API keys.
+	keys auth.APIKeyResolver
 }
 
 // sessEnv is core.Build with the module, a probe route and fakes at the boundary.
@@ -204,6 +206,8 @@ type sessEnv struct {
 	codec   *session.Codec
 	access  *access
 	app     *core.App
+	// directory is the TenantDirectory port the host exposes to modules.
+	directory auth.TenantDirectory
 }
 
 const sessTestPublicURL = "http://localhost:10120"
@@ -215,9 +219,11 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 	clk := &settableClock{now: time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)}
 	logs := &logSink{}
 	keys := randomSessionKeys(t)
+	var directory auth.TenantDirectory
 	probe := core.Module{
 		ID: "session-probe",
 		Mount: func(_ context.Context, h *core.Host) error {
+			directory = h.TenantDirectory()
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				principal, _ := reqctx.PrincipalFrom(r.Context())
 				h.API().Data(w, r, http.StatusOK, map[string]any{
@@ -241,11 +247,12 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 		settings["GATBASE_PLATFORM_OPERATOR_EMAILS"] = opts.operatorEmails
 	}
 	app, err := core.Build(context.Background(), core.Options{
-		Logger:        slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Config:        config.MapSource(settings),
-		Clock:         clk,
-		Pool:          pool,
-		FlagEvaluator: opts.flags,
+		Logger:         slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Config:         config.MapSource(settings),
+		Clock:          clk,
+		Pool:           pool,
+		FlagEvaluator:  opts.flags,
+		APIKeyResolver: opts.keys,
 	}, []core.Module{Module(), probe})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -259,7 +266,7 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 	}
 	return &sessEnv{
 		t: t, handler: app.Handler(), pool: pool, kratos: fake, clock: clk, logs: logs,
-		codec: session.NewCodec(ring, clk), access: newAccess(pool, clk, nil), app: app,
+		codec: session.NewCodec(ring, clk), access: newAccess(pool, clk, nil), app: app, directory: directory,
 	}
 }
 
