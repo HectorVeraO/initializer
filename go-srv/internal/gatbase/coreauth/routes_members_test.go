@@ -92,38 +92,27 @@ func TestGetTenantAnswersTheSuspendedStatusOfTheCallersTenant(t *testing.T) {
 	}
 }
 
-// headerKeyResolver is an API key port fake: any request with an X-Test-Key
-// header resolves to a key of the given tenant holding the given scopes.
-type headerKeyResolver struct {
-	tenantID string
-	scopes   []string
-}
-
-func (f *headerKeyResolver) Present(r *http.Request) bool {
-	return r.Header.Get("X-Test-Key") != ""
-}
-
-func (f *headerKeyResolver) Resolve(_ context.Context, _ *http.Request) (reqctx.Principal, error) {
-	tenantID, _ := reqctx.ParseTenantID(f.tenantID)
-	return reqctx.Principal{Kind: reqctx.ActorAPIKey, ActorID: "apikey:gbk_test", TenantID: &tenantID, Scopes: f.scopes}, nil
-}
-
 func TestGetTenantRequiresTheTenantReadScopeOnAnAPIKey(t *testing.T) {
 	cases := map[string]struct {
 		scopes []string
 		status int
+		code   string
 	}{
-		"scope held":    {[]string{"tenant:read"}, http.StatusOK},
-		"scope missing": {[]string{"api-keys:read"}, http.StatusForbidden},
+		"scope held":    {[]string{"tenant:read"}, http.StatusOK, ""},
+		"scope missing": {[]string{"api-keys:read"}, http.StatusForbidden, "INSUFFICIENT_SCOPE"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			resolver := &headerKeyResolver{scopes: tc.scopes}
-			e := newSessEnv(t, sessEnvOptions{keys: resolver})
-			resolver.tenantID = e.tenant("tenant-a", "active")
+			e := newSessEnv(t, sessEnvOptions{})
+			tenant := e.tenant("tenant-a", "active")
+			plain := e.apiKey(tenant, tc.scopes, nil)
 
-			rec := e.client().do(http.MethodGet, "/api/v1/tenant", map[string]string{"X-Test-Key": "key"})
+			rec := e.client().do(http.MethodGet, "/api/v1/tenant", map[string]string{apiKeyHeader: plain})
 
+			if tc.code != "" {
+				expectError(t, rec, tc.status, tc.code)
+				return
+			}
 			if rec.Code != tc.status {
 				t.Fatalf("status = %d, want %d: %s", rec.Code, tc.status, rec.Body.String())
 			}

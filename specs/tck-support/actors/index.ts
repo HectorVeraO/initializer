@@ -58,6 +58,11 @@ export async function newContext(playwright: Playwright): Promise<APIRequestCont
   return playwright.request.newContext({ baseURL: baseUrl() });
 }
 
+/** Standalone context sending only X-API-Key (no cookies). */
+export async function apiKeyClient(playwright: Playwright, plainTextKey: string): Promise<APIRequestContext> {
+  return playwright.request.newContext({ baseURL: baseUrl(), extraHTTPHeaders: { 'X-API-Key': plainTextKey } });
+}
+
 /** Asserts status, envelope keys, error.code, meta.traceId == X-Trace-Id; returns the error object. */
 export async function expectError(
   response: APIResponse,
