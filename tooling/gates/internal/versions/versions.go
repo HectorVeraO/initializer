@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -164,6 +165,11 @@ func load(src source) ([]Component, []report.Violation, error) {
 			if !usable {
 				continue
 			}
+			folderProblems, err := folderEntriesWithoutSlash(src, component)
+			if err != nil {
+				return nil, nil, err
+			}
+			violations = append(violations, folderProblems...)
 			first, duplicated := byName[component.Name]
 			if duplicated {
 				violations = append(violations, violation(RuleVersionInvalid, manifestPath,
@@ -226,6 +232,29 @@ func buildComponent(loc location, dir, manifestPath string, raw []byte) (Compone
 		sort.Strings(component.Exclude)
 	}
 	return component, true, violations
+}
+
+// folderEntriesWithoutSlash reports every path or exclude entry of c that
+// names an existing folder but lacks the trailing "/", because matches would
+// treat it as a single file and its contents would never require a bump.
+func folderEntriesWithoutSlash(src source, c Component) ([]report.Violation, error) {
+	var violations []report.Violation
+	entries := append(append([]string{}, c.Paths...), c.Exclude...)
+	for _, entry := range entries {
+		parent := path.Dir(entry)
+		if strings.HasSuffix(entry, "/") || parent == "." {
+			continue
+		}
+		siblings, err := src.subdirs(parent)
+		if err != nil {
+			return nil, err
+		}
+		if slices.Contains(siblings, path.Base(entry)) {
+			violations = append(violations, violation(RuleVersionInvalid, c.ManifestPath,
+				"path entry %q is a folder and must end with \"/\"", entry))
+		}
+	}
+	return violations, nil
 }
 
 func isSpec(c Component) bool {

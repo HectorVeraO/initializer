@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -288,8 +290,23 @@ func TestDiscoverReportsUnsafeAndBrokenManifests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover error: %v", err)
 	}
-	if len(violations) < 3 {
+	if len(violations) != 4 {
 		t.Fatalf("violations = %v", violations)
+	}
+	var rejectedPaths []string
+	for _, v := range violations {
+		rejectedPaths = append(rejectedPaths, v.Path)
+	}
+	sort.Strings(rejectedPaths)
+	wantPaths := []string{
+		"go-srv/internal/gatbase/x/module.manifest.json",
+		"go-srv/internal/gatbase/y/module.manifest.json",
+		"specs/Bad_Name/spec.manifest.json",
+		"specs/alpha/spec.manifest.json",
+	}
+	sort.Strings(wantPaths)
+	if !slices.Equal(rejectedPaths, wantPaths) {
+		t.Fatalf("violation paths = %v, want %v", rejectedPaths, wantPaths)
 	}
 	for _, v := range violations {
 		if v.Rule != versions.RuleVersionInvalid {
@@ -300,6 +317,38 @@ func TestDiscoverReportsUnsafeAndBrokenManifests(t *testing.T) {
 		if strings.ContainsAny(c.Name, " _") {
 			t.Errorf("unsafe component name %q", c.Name)
 		}
+	}
+}
+
+func TestDiscoverRejectsUnsafePathEntriesIndividually(t *testing.T) {
+	requireGit(t)
+	dir := t.TempDir()
+	writeAt(t, dir, "go-srv/internal/gatbase/y/module.manifest.json",
+		moduleManifest("y", "0.1.0", `["../outside", "/abs", "a//b", "ok.go"]`, `["../x", "C:/y"]`))
+	components, violations, err := versions.Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover error: %v", err)
+	}
+	if len(violations) != 5 {
+		t.Fatalf("violations = %v", violations)
+	}
+	if len(components) != 1 || !slices.Equal(components[0].Paths, []string{"ok.go"}) || len(components[0].Exclude) != 0 {
+		t.Fatalf("components = %+v", components)
+	}
+}
+
+func TestFolderEntryWithoutTrailingSlashIsInvalid(t *testing.T) {
+	requireGit(t)
+	dir := t.TempDir()
+	writeAt(t, dir, "go-srv/cookbooks/a.md", "docs\n")
+	writeAt(t, dir, "go-srv/internal/gatbase/y/module.manifest.json",
+		moduleManifest("y", "0.1.0", `["go-srv/cookbooks", "go-srv/cookbooks/a.md"]`, `[]`))
+	_, violations, err := versions.Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover error: %v", err)
+	}
+	if len(violations) != 1 || violations[0].Rule != versions.RuleVersionInvalid {
+		t.Fatalf("violations = %v", violations)
 	}
 }
 
@@ -330,8 +379,9 @@ func TestMissingTagsSkipsInvalidVersions(t *testing.T) {
 	dir := baseRepo(t)
 	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("1.0"))
 	tags, err := versions.MissingTags(context.Background(), dir)
-	if err != nil || strings.Contains(rules(tags), "spec-alpha") {
-		t.Fatalf("got %v, %v", tags, err)
+	want := "go-srv-core-v0.1.0,go-srv-parameters-v0.1.0"
+	if err != nil || rules(tags) != want {
+		t.Fatalf("got %v, %v, want %s", tags, err, want)
 	}
 }
 
