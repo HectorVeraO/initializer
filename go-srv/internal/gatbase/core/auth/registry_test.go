@@ -117,6 +117,17 @@ func TestCheckTenantRefWithoutTenant(t *testing.T) {
 	}
 }
 
+// foldASCII lowers only A-Z, an oracle independent of the implementation.
+func foldASCII(s string) string {
+	out := []byte(s)
+	for i, c := range out {
+		if c >= 'A' && c <= 'Z' {
+			out[i] = c + ('a' - 'A')
+		}
+	}
+	return string(out)
+}
+
 func FuzzCheckTenantRef(f *testing.F) {
 	f.Add(tenantA)
 	f.Add("")
@@ -125,7 +136,8 @@ func FuzzCheckTenantRef(f *testing.F) {
 	p := reqctx.Principal{TenantID: &tenant, TenantSlug: "tenant-a"}
 	f.Fuzz(func(t *testing.T, ref string) {
 		err := auth.CheckTenantRef(p, ref)
-		isKnown := ref == "" || ref == tenantA || ref == "tenant-a"
+		folded := foldASCII(ref)
+		isKnown := ref == "" || folded == foldASCII(tenantA) || folded == "tenant-a"
 		if isKnown && err != nil {
 			t.Fatalf("%q rejected", ref)
 		}
