@@ -200,7 +200,7 @@ func TestGitHubActionsEnablesWorkflowCommands(t *testing.T) {
 func TestUsageErrorsExitTwo(t *testing.T) {
 	cases := map[string][]string{
 		"no subcommand":      {},
-		"unknown subcommand": {"migrations"},
+		"unknown subcommand": {"bogus"},
 		"unknown flag":       {"flags", "--nope"},
 		"bad today":          {"flags", "--today", "26-10-2026"},
 		"negative warn days": {"flags", "--warn-days", "-1"},
