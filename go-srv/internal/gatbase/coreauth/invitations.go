@@ -167,6 +167,12 @@ func (s *tenancy) CreateInvitation(ctx context.Context, tenantID, actorID, email
 		return InvitationCreated{}, errors.New("coreauth: create invitation: tenant id, actor id, email and role are required")
 	}
 	lowered := strings.ToLower(email)
+	if slices.Contains(s.operatorEmails, lowered) {
+		err := s.requirePlatformOperator(ctx, actor)
+		if err != nil {
+			return InvitationCreated{}, err
+		}
+	}
 	const attempts = 4
 	var err error
 	for range attempts {
@@ -177,6 +183,26 @@ func (s *tenancy) CreateInvitation(ctx context.Context, tenantID, actorID, email
 		}
 	}
 	return InvitationCreated{}, fmt.Errorf("coreauth: create invitation: %w", err)
+}
+
+// requirePlatformOperator answers 403 PLATFORM_OPERATOR_REQUIRED unless the
+// actor's account is a platform operator. Accept-new grants the operator flag
+// to a listed address without proving the address, so only an operator may
+// invite one.
+func (s *tenancy) requirePlatformOperator(ctx context.Context, actor string) error {
+	denied := forbidden(api.CodePlatformOperatorNeeded, "Only a platform operator may invite this address.")
+	var isOperator bool
+	err := s.pool.QueryRow(ctx, `SELECT is_platform_operator FROM iam_accounts WHERE id = $1::uuid`, actor).Scan(&isOperator)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return denied
+	}
+	if err != nil {
+		return fmt.Errorf("coreauth: read inviter: %w", err)
+	}
+	if !isOperator {
+		return denied
+	}
+	return nil
 }
 
 func (s *tenancy) createInvitationOnce(ctx context.Context, tenant, actor, email, role string) (InvitationCreated, error) {

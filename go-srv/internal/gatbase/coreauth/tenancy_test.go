@@ -327,6 +327,25 @@ func TestConcurrentCreatesLeaveOnePendingInvitation(t *testing.T) {
 	}
 }
 
+func TestOnlyAPlatformOperatorMayInviteAnOperatorAddress(t *testing.T) {
+	const operatorEmail = "ops@example.com"
+	e := newTenEnv(t, operatorEmail)
+	tenant := e.tenant("tenant-a")
+	admin := e.account("admin@example.com")
+
+	_, err := e.svc.CreateInvitation(context.Background(), tenant.ID, admin.ID, "OPS@example.com", reqctx.RoleMember)
+
+	requireAPIError(t, err, 403, api.CodePlatformOperatorNeeded)
+	if n := e.count("SELECT count(*) FROM ten_invitations"); n != 0 {
+		t.Fatalf("invitations = %d, want 0", n)
+	}
+	e.exec("UPDATE iam_accounts SET is_platform_operator = true WHERE id = $1::uuid", admin.ID)
+	created, err := e.svc.CreateInvitation(context.Background(), tenant.ID, admin.ID, operatorEmail, reqctx.RoleMember)
+	if err != nil || created.Invitation.Status != "pending" {
+		t.Fatalf("operator invite: status=%s err=%v", created.Invitation.Status, err)
+	}
+}
+
 func TestCreateInvitationForActiveMemberIsConflict(t *testing.T) {
 	e := newTenEnv(t)
 	tenant := e.tenant("tenant-a")
@@ -600,8 +619,9 @@ func TestAcceptInvitationReactivatesTheSameMembership(t *testing.T) {
 func TestAcceptNewCreatesIdentityAccountAndMembership(t *testing.T) {
 	e := newTenEnv(t, janeEmail)
 	tenant := e.tenant("tenant-a")
-	admin := e.account("admin@example.com")
-	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
+	operator := e.account("admin@example.com")
+	e.exec("UPDATE iam_accounts SET is_platform_operator = true WHERE id = $1::uuid", operator.ID)
+	created, token := e.invite(tenant.ID, operator.ID, janeEmail, reqctx.RoleMember)
 	password := randomPassword(t)
 
 	got, err := e.svc.AcceptNew(context.Background(), token, password, "  Jane Doe  ")
