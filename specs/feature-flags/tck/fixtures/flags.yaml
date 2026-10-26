@@ -1,0 +1,10 @@
+flags:
+  - key: example_outbound_enabled
+    type: ops
+    default: true
+    description: "TCK fixture: ops kill-switch"
+  - key: new_settings_ui
+    type: release
+    default: false
+    expires_at: "2099-12-31"
+    description: "TCK fixture: release flag"

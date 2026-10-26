@@ -28,7 +28,7 @@ docker compose -f .deploy/local/docker-compose.yml down -v
 
 ## Feature flags
 
-`GATBASE_FLAGS_FILE` is the path of the `flags.yaml` manifest, required when the `feature-flags` module is installed (`../flags.yaml` from `go-srv/`). A relative path resolves against the process working directory. A missing, unreadable or invalid file stops startup with exit `1` and every problem listed.
+`GATBASE_FLAGS_FILE` is the path of the `flags.yaml` manifest, required when the `feature-flags` module is installed (`../flags.yaml` from `go-srv/`). A relative path resolves against the process working directory. A missing, unreadable or invalid file stops startup with exit `1` and every problem listed. A local go-srv started from `go-srv/` now needs it: an existing `.deploy/local/.env` that predates the module lacks the key, so re-copy it from `.example.env`.
 
 ## Session keys
 
