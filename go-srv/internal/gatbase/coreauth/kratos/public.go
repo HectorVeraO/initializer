@@ -30,11 +30,11 @@ type Public struct {
 
 // NewPublic returns a client for the Kratos public API at baseURL; cookieName
 // is the Kratos session cookie name (ory_kratos_session).
-func NewPublic(baseURL *url.URL, cookieName string) *Public {
+func NewPublic(baseURL *url.URL, cookieName string, opts ...Option) *Public {
 	return &Public{
 		base:       baseURL,
 		cookieName: cookieName,
-		client:     newHTTPClient(publicTimeout),
+		client:     newHTTPClient(publicTimeout, opts),
 	}
 }
 

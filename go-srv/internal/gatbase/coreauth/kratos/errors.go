@@ -27,10 +27,31 @@ var (
 // maxBodyBytes bounds every Kratos response body read.
 const maxBodyBytes = 1 << 20
 
+// Option configures a Kratos client.
+type Option func(*clientOptions)
+
+type clientOptions struct {
+	transport http.RoundTripper
+}
+
+// WithTransport sets the round tripper of the client, for example
+// Telemetry.Transport(nil) so calls carry the W3C traceparent. A nil
+// transport keeps the default.
+func WithTransport(transport http.RoundTripper) Option {
+	return func(options *clientOptions) {
+		options.transport = transport
+	}
+}
+
 // newHTTPClient returns a client that never follows redirects.
-func newHTTPClient(timeout time.Duration) *http.Client {
+func newHTTPClient(timeout time.Duration, opts []Option) *http.Client {
+	var options clientOptions
+	for _, apply := range opts {
+		apply(&options)
+	}
 	return &http.Client{
-		Timeout: timeout,
+		Timeout:   timeout,
+		Transport: options.transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

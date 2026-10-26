@@ -80,6 +80,12 @@ func jsonReply(status int, body string) http.HandlerFunc {
 	}
 }
 
+// redirectReply answers 302 with a Location header.
+func redirectReply(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Location", "/elsewhere")
+	w.WriteHeader(http.StatusFound)
+}
+
 // closeConnection drops the connection without answering.
 func closeConnection(w http.ResponseWriter, _ *http.Request) {
 	hijacker := w.(http.Hijacker)
@@ -161,6 +167,8 @@ func TestWhoAmIMapsAnswersToErrors(t *testing.T) {
 		{"401", jsonReply(401, `{}`), kratos.ErrNoSession},
 		{"403", jsonReply(403, `{}`), kratos.ErrNoSession},
 		{"inactive", jsonReply(200, `{"id":"s","active":false,"identity":{"id":"i"}}`), kratos.ErrNoSession},
+		{"302", redirectReply, kratos.ErrUnavailable},
+		{"404", jsonReply(404, `{}`), kratos.ErrUnavailable},
 		{"500", jsonReply(500, `{}`), kratos.ErrUnavailable},
 		{"503", jsonReply(503, `{}`), kratos.ErrUnavailable},
 		{"closed connection", closeConnection, kratos.ErrUnavailable},
@@ -317,5 +325,29 @@ func TestLogoutWithoutTokenIsUnavailable(t *testing.T) {
 
 	if !errors.Is(err, kratos.ErrUnavailable) {
 		t.Fatalf("want ErrUnavailable, got %v", err)
+	}
+}
+
+// headerStampTransport adds a header to every request it forwards.
+type headerStampTransport struct{}
+
+func (headerStampTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	stamped := req.Clone(req.Context())
+	stamped.Header.Set("Traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+	return http.DefaultTransport.RoundTrip(stamped)
+}
+
+func TestWithTransportSendsCallsThroughTheGivenTransport(t *testing.T) {
+	fake := newFakeKratos(t, jsonReply(200, `{"id":"s","active":true,"identity":{"id":"i"}}`))
+	public := kratos.NewPublic(fake.url(t), kratosCookieName, kratos.WithTransport(headerStampTransport{}))
+
+	_, err := public.WhoAmI(context.Background(), &http.Cookie{Name: "x", Value: "v"})
+
+	if err != nil {
+		t.Fatalf("WhoAmI: %v", err)
+	}
+	got := fake.requests()[0]
+	if got.Header.Get("Traceparent") == "" {
+		t.Fatalf("traceparent not forwarded, headers %v", got.Header)
 	}
 }

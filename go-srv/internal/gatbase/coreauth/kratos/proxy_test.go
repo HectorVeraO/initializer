@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/coreauth/kratos"
@@ -109,11 +110,13 @@ func TestProxyForwardsOnlyAllowlistedPairs(t *testing.T) {
 			}
 			if !tc.reaches {
 				body, _ := io.ReadAll(resp.Body)
-				isPlain404 := resp.StatusCode == http.StatusNotFound &&
-					strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") &&
+				if resp.StatusCode != http.StatusNotFound {
+					t.Fatalf("want 404, got %d %q", resp.StatusCode, body)
+				}
+				isPlainBody := strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") &&
 					strings.TrimSpace(string(body)) == "Not Found"
-				if tc.method != "HEAD" && !isPlain404 {
-					t.Fatalf("want plain 404, got %d %q", resp.StatusCode, body)
+				if tc.method != "HEAD" && !isPlainBody {
+					t.Fatalf("want plain 404 body, got %d %q", resp.StatusCode, body)
 				}
 			}
 		})
@@ -236,9 +239,12 @@ func FuzzProxyPath(f *testing.F) {
 		"/self-service/login":         true,
 		"/self-service/errors":        true,
 	}
+	var reachedMu sync.Mutex
 	var reachedPaths []string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reachedMu.Lock()
 		reachedPaths = append(reachedPaths, r.URL.Path)
+		reachedMu.Unlock()
 		w.WriteHeader(200)
 	}))
 	f.Cleanup(upstream.Close)
@@ -258,7 +264,9 @@ func FuzzProxyPath(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, path string, method string) {
+		reachedMu.Lock()
 		reachedPaths = reachedPaths[:0]
+		reachedMu.Unlock()
 		req := &http.Request{
 			Method: method,
 			URL:    &url.URL{Path: path},
@@ -269,7 +277,10 @@ func FuzzProxyPath(f *testing.F) {
 
 		proxy.ServeHTTP(rec, req)
 
-		for _, reached := range reachedPaths {
+		reachedMu.Lock()
+		reachedNow := append([]string(nil), reachedPaths...)
+		reachedMu.Unlock()
+		for _, reached := range reachedNow {
 			if !allowedPaths[reached] {
 				t.Fatalf("upstream received %q for %s %q", reached, method, path)
 			}
@@ -277,7 +288,7 @@ func FuzzProxyPath(f *testing.F) {
 				t.Fatalf("upstream path %q does not match input %q", reached, path)
 			}
 		}
-		if len(reachedPaths) == 0 && rec.Code == http.StatusOK {
+		if len(reachedNow) == 0 && rec.Code == http.StatusOK {
 			t.Fatalf("200 without reaching upstream for %s %q", method, path)
 		}
 	})

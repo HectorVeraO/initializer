@@ -27,8 +27,8 @@ type Admin struct {
 }
 
 // NewAdmin returns a client for the Kratos admin API at baseURL.
-func NewAdmin(baseURL *url.URL) *Admin {
-	return &Admin{base: baseURL, client: newHTTPClient(adminTimeout)}
+func NewAdmin(baseURL *url.URL, opts ...Option) *Admin {
+	return &Admin{base: baseURL, client: newHTTPClient(adminTimeout, opts)}
 }
 
 type identityBody struct {
