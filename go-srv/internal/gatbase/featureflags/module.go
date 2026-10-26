@@ -41,6 +41,11 @@ func provide(ctx context.Context, b *core.Builder) error {
 		logProblems(ctx, b.Logger(), err)
 		return err
 	}
+	// Core's pool is nil when its own configuration is invalid; core reports
+	// those problems together after every Provide has run.
+	if b.Pool() == nil {
+		return nil
+	}
 	evaluator := NewEvaluator(manifest, b.Pool(), b.Logger())
 	return b.ProvideFlagEvaluator(evaluator)
 }

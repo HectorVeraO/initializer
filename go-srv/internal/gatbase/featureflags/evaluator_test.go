@@ -136,6 +136,21 @@ func TestStoreFailureFallsBackToTheSafeValue(t *testing.T) {
 	}
 }
 
+func TestTenantRowsFailureDoesNotServeGlobalValues(t *testing.T) {
+	e := newEnv(t, twoFlagManifest)
+	e.setGlobal(t, releaseKey, true)
+	e.exec(t, "DROP TABLE flg_tenant_overrides")
+
+	snapshot := e.Evaluator.Snapshot(context.Background(), &e.Tenant)
+	if snapshot[releaseKey] || !snapshot[opsKey] || len(snapshot) != 2 {
+		t.Fatalf("tenant snapshot with failed tenant query = %v, want safe values", snapshot)
+	}
+	global := e.Evaluator.Snapshot(context.Background(), nil)
+	if !global[releaseKey] {
+		t.Fatalf("global snapshot = %v, want the stored global override", global)
+	}
+}
+
 func TestNewEvaluatorRejectsNilDependencies(t *testing.T) {
 	e := newEnv(t, "flags: []\n")
 	manifest, err := featureflags.ParseManifest(strings.NewReader("flags: []\n"))

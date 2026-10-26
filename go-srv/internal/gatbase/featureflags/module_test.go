@@ -2,6 +2,9 @@ package featureflags_test
 
 import (
 	"context"
+	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -52,13 +55,34 @@ func TestBuildFailsWithTheManifestProblems(t *testing.T) {
 		}
 	}
 	logged := sink.records(t, "flags_manifest_invalid")
-	if len(logged) < 3 {
-		t.Fatalf("flags_manifest_invalid logged %d times, want one per problem", len(logged))
-	}
+	gotCodes := make([]string, 0, len(logged))
 	for _, record := range logged {
-		if record["code"] == nil || record["line"] == nil || record["flag_key"] == nil {
-			t.Fatalf("record without code, line or flag_key: %v", record)
-		}
+		gotCodes = append(gotCodes, fmt.Sprintf("%v@%v:%v", record["code"], record["line"], record["flag_key"]))
+	}
+	wantCodes := []string{
+		"FLAG_KEY_INVALID@2:",
+		"FLAG_TYPE_INVALID@3:",
+		"FLAG_DESCRIPTION_MISSING@2:",
+		"FLAG_DEFAULT_MISSING@2:",
+	}
+	sort.Strings(gotCodes)
+	sort.Strings(wantCodes)
+	if !slices.Equal(gotCodes, wantCodes) {
+		t.Fatalf("flags_manifest_invalid records = %v, want %v", gotCodes, wantCodes)
+	}
+}
+
+func TestBuildReportsConfigProblemsInsteadOfPanickingWithoutADatabaseURL(t *testing.T) {
+	logger, _ := newLogger()
+	path := writeManifest(t, twoFlagManifest)
+	source := config.MapSource(map[string]string{
+		"GATBASE_PUBLIC_BASE_URL": "http://localhost:10120",
+		"GATBASE_FLAGS_FILE":      path,
+	})
+	_, err := core.Build(context.Background(), core.Options{Logger: logger, Config: source},
+		[]core.Module{featureflags.Module()})
+	if err == nil || !strings.Contains(err.Error(), "GATBASE_DATABASE_URL") {
+		t.Fatalf("err = %v, want one naming GATBASE_DATABASE_URL", err)
 	}
 }
 
