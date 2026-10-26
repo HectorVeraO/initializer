@@ -228,8 +228,12 @@ func TestProgressLinesAreStructuredJSON(t *testing.T) {
 }
 
 func TestHelpExitsZero(t *testing.T) {
-	code, stdout, _ := execute(t, "--help")
-	if code != 0 || !strings.Contains(stdout, "usage") {
-		t.Fatalf("exit %d stdout %q", code, stdout)
+	for _, arg := range []string{"--help", "-h", "help"} {
+		t.Run(arg, func(t *testing.T) {
+			code, stdout, _ := execute(t, arg)
+			if code != 0 || !strings.Contains(stdout, "usage") {
+				t.Fatalf("exit %d stdout %q", code, stdout)
+			}
+		})
 	}
 }

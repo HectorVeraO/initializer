@@ -231,6 +231,32 @@ func TestDecodeModuleStacks(t *testing.T) {
 			t.Fatalf("want STACK_UNKNOWN, got %v", issues)
 		}
 	})
+	t.Run("unknown stack still validates tablePrefixes", func(t *testing.T) {
+		data := mutateFixture(t, "module.valid.json", func(m map[string]any) {
+			m["stack"] = "rust-srv"
+			m["tablePrefixes"] = []any{"X"}
+		})
+		_, issues := manifest.DecodeModule(modulePath, data)
+		if !hasIssue(issues, manifest.CodeStackUnknown, modulePath+"#/stack") {
+			t.Fatalf("want STACK_UNKNOWN, got %v", issues)
+		}
+		if !hasIssue(issues, manifest.CodeManifestInvalid, modulePath+"#/tablePrefixes/0") {
+			t.Fatalf("want tablePrefixes/0 rejected, got %v", issues)
+		}
+	})
+	t.Run("missing module id does not demand requiresCore", func(t *testing.T) {
+		data := mutateFixture(t, "module.valid.json", func(m map[string]any) {
+			delete(m, "module")
+			delete(m, "requiresCore")
+		})
+		_, issues := manifest.DecodeModule(modulePath, data)
+		if !hasIssue(issues, manifest.CodeManifestInvalid, modulePath+"#/module") {
+			t.Fatalf("want module rejected, got %v", issues)
+		}
+		if hasIssue(issues, manifest.CodeManifestInvalid, modulePath+"#/requiresCore") {
+			t.Fatalf("requiresCore must not be reported without a module id, got %v", issues)
+		}
+	})
 	t.Run("ng-web forbids tablePrefixes", func(t *testing.T) {
 		data := mutateFixture(t, "module.valid.json", func(m map[string]any) { m["stack"] = "ng-web" })
 		_, issues := manifest.DecodeModule(modulePath, data)
