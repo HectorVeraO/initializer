@@ -250,6 +250,17 @@ func TestSQLOutsideGoSrvIsNotScanned(t *testing.T) {
 	}
 }
 
+func TestSQLUnderTestdataIsNotScanned(t *testing.T) {
+	root := sysModule(t, goodName, upLine)
+	put(t, root, "go-srv/internal/gatbase/core/migrate/testdata/alpha/migrations/20260101120000_sys_create_examples.sql", "CREATE TABLE parameters (id int);")
+	put(t, root, "go-srv/internal/gatbase/parameters/testdata/bad.sql", "DROP TABLE sys_parameters;")
+	vs, n := lint(t, root, "")
+	expectRules(t, vs)
+	if n != 1 {
+		t.Fatalf("n = %d", n)
+	}
+}
+
 func TestDuplicateTimestampAcrossModules(t *testing.T) {
 	root := sysModule(t, goodName, upLine)
 	put(t, root, "go-srv/internal/gatbase/flags/module.manifest.json", `{"module":"flags","tablePrefixes":["flg"]}`)
