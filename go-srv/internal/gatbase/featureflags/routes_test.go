@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	pathpkg "path"
 	"strings"
 	"testing"
 
@@ -378,8 +379,13 @@ func FuzzFlagRoutes(f *testing.F) {
 		if recorder.Code >= http.StatusInternalServerError {
 			t.Fatalf("%s %q -> %d", path, body, recorder.Code)
 		}
-		// The mux answers a path it must clean with a bodiless redirect.
+		// Only the mux, for a path it must clean, answers with a bodiless redirect.
+		escapedPath := request.URL.EscapedPath()
+		isUncleanPath := pathpkg.Clean(escapedPath) != escapedPath
 		isRedirect := recorder.Code >= http.StatusMultipleChoices && recorder.Code < http.StatusBadRequest
+		if isRedirect && !isUncleanPath {
+			t.Fatalf("%s answered %d for a clean path", path, recorder.Code)
+		}
 		if !isRedirect {
 			decode(t, recorder)
 		}
