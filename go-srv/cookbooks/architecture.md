@@ -1,15 +1,18 @@
 # go-srv -- Architecture and module layout
 
-Read before adding or changing a module, route, handler or error response. Canonical example today: `go-srv/internal/gatbase/core/health` (mounting, handler, black-box test).
+Read before adding or changing a module, route, handler or error response. Canonical examples: `go-srv/internal/gatbase/core/health` (mounting, handler, black-box test) and `go-srv/internal/gatbase/core/coretest` (a module under test).
 
 ## Layout
 
 | Path | Holds |
 |---|---|
-| `cmd/server/main.go` | Process wiring only: logger, config from env, `http.ServeMux`, module registration, graceful shutdown. No business logic. |
-| `internal/gatbase/<module>/` | One package tree per Gatbase module (`health`, `tenancy`, `iam`, `parameters`, `flags`, ...). |
+| `cmd/server/main.go` | Fixed: `os.Exit(core.Main(installedModules()))`. `cmd/server/modules.go` is generated and lists the installed modules. No business logic. |
+| `internal/gatbase/core/` | The always-installed foundation: module seam (`Module`, `Builder`, `Host`, `Build`, `Run`), request chain, `api`, `auth`, `reqctx`, `featureflag`, `config`, `telemetry`, `db`, `migrate`, `health`, `clock`, `coretest`. |
+| `internal/gatbase/<module>/` | One package tree per catalog module (`coreauth`, `parameters`, `featureflags`). |
 | `specs/<module>/openapi.yaml` (repo root) | The module's HTTP contract. The Go code implements it; it never defines it. |
 
+- Import rules, enforced by `internal/gatbase/core/boundary_test.go`: a package under `core/` imports no other `internal/gatbase/<x>`; a module imports from this Go module only `core/...` and its own subtree; `cmd/server` imports only `core` and the module root packages named in `modules.go`; core subpackages never import the `core` root (`core/coretest` is the one exception); the Go module path appears only in `go.mod` and import specs, in an import group of its own.
+- Ports (session resolver, API key resolver, tenant directory, flag evaluator) are declared in core only; a module publishes one with `Builder.Provide*` in `Provide`, once, and reads it from `Host` in `Mount`.
 - One module owns its routes, its handlers, its persistence prefix and its tests. Nothing outside the module reads its tables.
 - Modules talk to each other through exported Go functions or interfaces of the other module's package, never through its tables.
 - Module paths are stable: the generator copies `internal/gatbase/<module>/` into generated projects at the same path, and each records its version in `gatbase.lock.json` (copy-and-own). Do not move a module directory.
@@ -18,8 +21,8 @@ Read before adding or changing a module, route, handler or error response. Canon
 
 ## Routing
 
-- Stdlib `net/http` `ServeMux` with method patterns: `mux.HandleFunc("GET /api/v1/parameters", h.list)`.
-- Each module exposes `Module() core.Module` and registers routes through `Host.Handle` in its `Mount`, listed in `cmd/server/modules.go`; `core/health` is mounted by core itself with `Mount(mux *http.ServeMux, r *Readiness)`, which panics on a nil mux (programmer error).
+- Stdlib `net/http` `ServeMux` method patterns, registered only through `Host.Handle(pattern, policy, handler)` in a module's `Mount`: `h.Handle("GET /api/v1/parameters", auth.Policy{Kind: auth.KindSession}, handler)`. Every `/api/v1/` pattern carries a method; `/health/` belongs to core.
+- Each module exposes `Module() core.Module` (no package-level registry), listed in `cmd/server/modules.go`. `Register(mux, ...)` no longer exists; the policy replaces hand-written auth checks. `core/health` is mounted by core itself.
 - Path parameters come from `r.PathValue("id")`; validate them before use.
 - Versioned API routes start with the path prefix /api/v1; probes start with /health.
 
@@ -45,6 +48,7 @@ Every /api/v1 response body is one JSON object:
 - Error codes are SCREAMING_SNAKE constants declared in the module that raises them (`TENANT_MISMATCH`, `LAST_TENANT_ADMIN`, `SYSTEM_PARAMETER_PROTECTED`). A code is part of the contract: renaming one is a breaking change.
 - Validation is accumulated: a `POST`, `PUT` or `PATCH` with invalid data collects every problem and answers `422` with all of them in `error.issues[]` (`{ "field": "<json path>", "code": "<CODE>", "message": "<text>" }`). Never stop at the first invalid field.
 - Status mapping: `401` credentials missing or rejected, `403` authenticated but not allowed (with its code), `404` not found or not visible to the active tenant, `409` state conflict, `422` validation.
+- The registry of codes lives in `internal/gatbase/core/api/codes.go`; add a code there with its contract change. Body decoding answers `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE` and `422` with every issue (`api.DecodeBody`).
 - Never return an internal error message, SQL error or stack trace in `error.message`. Log it with the trace id; answer a generic `500`.
 
 ## Tenant scoping
@@ -56,7 +60,7 @@ Every /api/v1 response body is one JSON object:
 ## Implementation checklist
 
 - [ ] The contract change is in `specs/<module>/openapi.yaml` first, in the same PR.
-- [ ] Routes are registered through the module's `Register` and use method patterns.
+- [ ] Routes are registered through `Host.Handle` with an `auth.Policy` and use method patterns.
 - [ ] Every /api/v1 response uses the envelope; validation errors are accumulated `422`.
 - [ ] Every `:id` access is scoped to the active tenant (`404` across tenants).
 - [ ] Tables use the module prefix (`cookbooks/data-migrations.md`).

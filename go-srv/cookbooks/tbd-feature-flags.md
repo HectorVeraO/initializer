@@ -48,7 +48,7 @@ Precedence, first match wins:
 
 An unknown key evaluates to `false` (default-closed).
 
-The flags module (slice 1.2) exposes one evaluation call taking the request context and the key. Use only that call; never read flag tables directly.
+The port is `core/featureflag` (`Evaluator.Enabled(ctx, key)`, `Snapshot`, `Route`); the `feature-flags` module implements it and a project without that module gets `featureflag.Disabled{}`. Use only the port, read from `Host.FlagEvaluator()`; never read flag tables directly.
 
 ## Single seam (Branch by Abstraction)
 
