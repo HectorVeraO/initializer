@@ -37,6 +37,14 @@ func TestParsePageQueryValidValues(t *testing.T) {
 	}
 }
 
+func TestParsePageQueryAcceptsMaxPage(t *testing.T) {
+	var p api.Problems
+	q := api.ParsePageQuery(pageRequest("page=2147483647"), &p, testSpec)
+	if !p.Empty() || q.Page != 2147483647 {
+		t.Fatalf("q = %+v issues %v", q, issuesOf(&p))
+	}
+}
+
 func TestParsePageQueryProblemsAccumulate(t *testing.T) {
 	cases := []struct {
 		query string

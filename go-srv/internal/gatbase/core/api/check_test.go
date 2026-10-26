@@ -179,9 +179,13 @@ func TestInjectionLookingStringsStayPlainData(t *testing.T) {
 	for _, v := range []string{"%253Cscript%253E", "//evil.example.com/x", "'; DROP TABLE x;--", "../../etc/passwd"} {
 		var p api.Problems
 		isRequiredOK := api.CheckRequired(&p, "f", v)
-		isLengthOK := api.CheckLength(&p, "f", v, len(v), len(v))
+		isLengthOK := api.CheckLength(&p, "f", v, 1, len(v))
 		if !isRequiredOK || !isLengthOK || p.Len() != 0 {
 			t.Errorf("%q: required=%v length=%v problems=%d", v, isRequiredOK, isLengthOK, p.Len())
+		}
+		var tooLong api.Problems
+		if api.CheckLength(&tooLong, "f", v, 1, len(v)-1) {
+			t.Errorf("%q: over-long value accepted", v)
 		}
 	}
 }

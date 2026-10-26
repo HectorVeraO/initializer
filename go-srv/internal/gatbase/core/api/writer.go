@@ -62,7 +62,7 @@ func (w *Writer) Fail(rw http.ResponseWriter, r *http.Request, err error) {
 		apiErr = NewError(http.StatusInternalServerError, CodeInternalError, "Internal error")
 	} else if apiErr.Status >= 500 {
 		w.logger.ErrorContext(r.Context(), "request_failed",
-			slog.Int("status", apiErr.Status),
+			slog.Int("status_code", apiErr.Status),
 			slog.String("code", string(apiErr.Code)),
 			slog.Any("err", apiErr.Unwrap()))
 	}

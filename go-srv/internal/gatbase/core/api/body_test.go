@@ -245,7 +245,10 @@ func TestIntBoundaries(t *testing.T) {
 
 func TestNumberRejectsNonNumbers(t *testing.T) {
 	for _, v := range []string{`"1"`, `true`, `[1]`, `1e999`} {
-		body, _ := api.DecodeBody(jsonRequest("application/json", []byte(`{"n":`+v+`}`)))
+		body, err := api.DecodeBody(jsonRequest("application/json", []byte(`{"n":`+v+`}`)))
+		if err != nil {
+			t.Fatalf("%s: decode: %v", v, err)
+		}
 		var p api.Problems
 		if _, ok := body.Number(&p, "n", api.Required); ok {
 			t.Errorf("%s accepted", v)
