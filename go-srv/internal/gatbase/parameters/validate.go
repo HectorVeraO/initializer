@@ -88,9 +88,12 @@ func checkValue(c constraints, raw json.RawMessage) *valueFailure {
 		return &valueFailure{CodeTypeMismatch, "Must be a " + string(c.valueType) + " value"}
 	}
 	if c.valueType == typeNumber {
-		number, _ := strconv.ParseFloat(string(bytes.TrimSpace(raw)), 64)
-		isBelow := c.min != nil && number < *c.min
-		isAbove := c.max != nil && number > *c.max
+		number, isParsed := new(big.Rat).SetString(string(bytes.TrimSpace(raw)))
+		if !isParsed {
+			return &valueFailure{CodeTypeMismatch, "Must be a number value"}
+		}
+		isBelow := c.min != nil && number.Cmp(new(big.Rat).SetFloat64(*c.min)) < 0
+		isAbove := c.max != nil && number.Cmp(new(big.Rat).SetFloat64(*c.max)) > 0
 		if isBelow || isAbove {
 			return &valueFailure{CodeOutOfRange, "Outside the allowed range"}
 		}

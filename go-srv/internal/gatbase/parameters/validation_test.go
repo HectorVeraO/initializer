@@ -58,6 +58,7 @@ func TestCreateRejectsInvalidBodies(t *testing.T) {
 		{"number default beyond float range", `{"key":"a","valueType":"number","defaultValue":1e999}`, []string{"defaultValue:PARAMETER_TYPE_MISMATCH"}},
 		{"number below min", `{"key":"a","valueType":"number","minValue":1,"maxValue":10,"defaultValue":0.9}`, []string{"defaultValue:PARAMETER_OUT_OF_RANGE"}},
 		{"number above max", `{"key":"a","valueType":"number","minValue":1,"maxValue":10,"defaultValue":10.1}`, []string{"defaultValue:PARAMETER_OUT_OF_RANGE"}},
+		{"integer beyond 2^53 above max", `{"key":"a","valueType":"number","maxValue":9007199254740992,"defaultValue":9007199254740993}`, []string{"defaultValue:PARAMETER_OUT_OF_RANGE"}},
 		{"only max set and exceeded", `{"key":"a","valueType":"number","maxValue":10,"defaultValue":11}`, []string{"defaultValue:PARAMETER_OUT_OF_RANGE"}},
 		{"min above max", `{"key":"a","valueType":"number","minValue":5,"maxValue":1,"defaultValue":3}`, []string{"maxValue:PARAMETER_CONSTRAINT_INVALID"}},
 		{"min on a string", `{"key":"a","valueType":"string","minValue":1,"defaultValue":"x"}`, []string{"minValue:PARAMETER_CONSTRAINT_INVALID"}},

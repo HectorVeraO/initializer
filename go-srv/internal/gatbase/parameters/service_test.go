@@ -600,6 +600,13 @@ func TestListRejectsAnUnsupportedSort(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error")
 	}
+	var apiErr *api.Error
+	if errors.As(err, &apiErr) {
+		t.Fatalf("want a plain error for a caller bug, got the API error %v", err)
+	}
+	if !strings.Contains(err.Error(), "sorted by key") {
+		t.Fatalf("error = %q, want it to name the key sort", err)
+	}
 }
 
 func TestLogsEventsWithoutValues(t *testing.T) {
