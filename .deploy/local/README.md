@@ -26,6 +26,10 @@ docker compose -f .deploy/local/docker-compose.yml down -v
 - `go run` from `go-srv/` resolves relative path config values against `go-srv/`.
 - Kratos readiness: `http://localhost:10133/health/ready` (public), `http://localhost:10134/admin/health/ready` (admin).
 
+## Feature flags
+
+`GATBASE_FLAGS_FILE` is the path of the `flags.yaml` manifest, required when the `feature-flags` module is installed (`../flags.yaml` from `go-srv/`). A relative path resolves against the process working directory. A missing, unreadable or invalid file stops startup with exit `1` and every problem listed.
+
 ## Session keys
 
 `GATBASE_SESSION_KEYS` is a comma-separated keyring of `<kid>:<seed>` entries (`kid` matches `^[A-Za-z0-9._-]{1,32}$`, seed is 32 random bytes in unpadded base64url). The first entry signs; every entry verifies.
