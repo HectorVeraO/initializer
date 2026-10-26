@@ -24,6 +24,8 @@ type service struct {
 	// public is nil only when GATBASE_KRATOS_PUBLIC_URL is invalid, which fails Build.
 	public *kratos.Public
 	access *access
+	// tenancy is built for the invitation and membership routes of later tracks.
+	tenancy *tenancy
 }
 
 // provideSession builds the token codec and the cookie helpers. A bad
@@ -76,6 +78,7 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 	s.access = newAccess(b.Pool(), b.Clock(), s.cfg.PlatformOperatorEmails)
 	s.provideSession(b)
 	s.provideKratos(b)
+	s.tenancy = newTenancy(b.Pool(), b.Clock(), s.admin, s.cfg)
 
 	scopes := []struct{ name, description string }{
 		{"tenant:read", "Read the key's own tenant"},

@@ -22,5 +22,17 @@ var (
 )
 
 // CodeIdentityProviderUnavailable is the 503 answered when Kratos cannot
-// answer during a session issue.
+// answer during a session issue or an invitation accept.
 const CodeIdentityProviderUnavailable api.Code = "IDENTITY_PROVIDER_UNAVAILABLE"
+
+// Error codes the tenancy services raise; the statuses are in api.Registry.
+const (
+	CodeTenantSlugTaken         api.Code = "TENANT_SLUG_TAKEN"
+	CodeMembershipAlreadyActive api.Code = "MEMBERSHIP_ALREADY_ACTIVE"
+	CodeInvitationNotPending    api.Code = "INVITATION_NOT_PENDING"
+	CodeInvitationRequired      api.Code = "INVITATION_REQUIRED"
+	CodeInvitationInvalid       api.Code = "INVITATION_INVALID"
+	CodeInvitationEmailMismatch api.Code = "INVITATION_EMAIL_MISMATCH"
+	CodeLastTenantAdmin         api.Code = "LAST_TENANT_ADMIN"
+	CodeIdentityAlreadyExists   api.Code = "IDENTITY_ALREADY_EXISTS"
+)
