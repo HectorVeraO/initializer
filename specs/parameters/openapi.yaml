@@ -1,0 +1,747 @@
+openapi: 3.1.0
+info:
+  title: Gatbase parameters
+  version: 0.1.0
+  description: >-
+    Typed global parameters with per-tenant overrides. Operators define parameters;
+    admins of a tenant override their values. Every /api/v1 body is the envelope of
+    the core contract. Request schemas describe their constraints in prose: a
+    violation answers 422 VALIDATION_FAILED with every problem in error.issues.
+servers:
+  - url: /
+security: []
+tags:
+  - name: parameters
+paths:
+  /api/v1/parameters:
+    get:
+      operationId: listParameters
+      summary: List parameters
+      description: >-
+        One page of parameters resolved for the caller's active tenant; without an active
+        tenant every item resolves to the global value. Sorted by key.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: A page of parameters.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ParameterPage'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '422':
+          description: VALIDATION_FAILED (issues FIELD_TYPE_INVALID, FIELD_OUT_OF_RANGE, FIELD_NOT_ALLOWED).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+    post:
+      operationId: createParameter
+      summary: Define a parameter
+      description: >-
+        Platform operator only. Creates a global parameter definition.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/ActiveTenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParameterCreate'
+      responses:
+        '201':
+          description: The created parameter, source global.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ParameterView'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID, PLATFORM_OPERATOR_REQUIRED.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: PARAMETER_ALREADY_EXISTS, ACTIVE_TENANT_CHANGED, CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '413':
+          description: PAYLOAD_TOO_LARGE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '422':
+          description: VALIDATION_FAILED (issues BODY_MALFORMED, FIELD_REQUIRED, FIELD_TYPE_INVALID, FIELD_TOO_LONG, PARAMETER_KEY_INVALID, PARAMETER_TYPE_MISMATCH, PARAMETER_OUT_OF_RANGE, PARAMETER_VALUE_NOT_ALLOWED, PARAMETER_CONSTRAINT_INVALID).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+  /api/v1/parameters/{key}:
+    parameters:
+      - $ref: '#/components/parameters/Key'
+    put:
+      operationId: replaceParameter
+      summary: Replace a definition
+      description: >-
+        Platform operator only. Replaces the mutable fields of a definition. Refused when a tenant
+        override would fall outside the new constraints.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/ActiveTenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParameterReplace'
+      responses:
+        '200':
+          description: The replaced parameter, resolved for the caller's active tenant.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ParameterView'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID, PLATFORM_OPERATOR_REQUIRED.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '404':
+          description: RESOURCE_NOT_FOUND (unknown or malformed key).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: PARAMETER_OVERRIDES_VIOLATE_CONSTRAINTS, ACTIVE_TENANT_CHANGED, CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '413':
+          description: PAYLOAD_TOO_LARGE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '422':
+          description: VALIDATION_FAILED (issues BODY_MALFORMED, FIELD_REQUIRED, FIELD_TYPE_INVALID, FIELD_TOO_LONG, PARAMETER_TYPE_MISMATCH, PARAMETER_OUT_OF_RANGE, PARAMETER_VALUE_NOT_ALLOWED, PARAMETER_FIELD_IMMUTABLE, PARAMETER_CONSTRAINT_INVALID).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+    delete:
+      operationId: deleteParameter
+      summary: Delete a definition
+      description: >-
+        Platform operator only. Deletes a definition and, by cascade, every tenant override.
+        A system-required parameter cannot be deleted.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/ActiveTenantId'
+      responses:
+        '200':
+          description: The deleted key and the number of overrides removed.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ParameterDeleted'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID, PLATFORM_OPERATOR_REQUIRED.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '404':
+          description: RESOURCE_NOT_FOUND (unknown or malformed key).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: SYSTEM_PARAMETER_PROTECTED, ACTIVE_TENANT_CHANGED, CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+  /api/v1/parameters/{key}/tenant-override:
+    parameters:
+      - $ref: '#/components/parameters/Key'
+    put:
+      operationId: setParameterOverride
+      summary: Set the active tenant's value
+      description: >-
+        Admin of the active tenant only; a platform operator is not an implicit tenant admin.
+        The value must satisfy the definition.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/ActiveTenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParameterOverride'
+      responses:
+        '200':
+          description: The parameter with source tenant.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ParameterView'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID, ACTIVE_TENANT_REQUIRED, INSUFFICIENT_ROLE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '404':
+          description: RESOURCE_NOT_FOUND (unknown or malformed key).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: ACTIVE_TENANT_CHANGED, CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '413':
+          description: PAYLOAD_TOO_LARGE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '422':
+          description: VALIDATION_FAILED (issues BODY_MALFORMED, FIELD_REQUIRED, PARAMETER_TYPE_MISMATCH, PARAMETER_OUT_OF_RANGE, PARAMETER_VALUE_NOT_ALLOWED).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+    delete:
+      operationId: clearParameterOverride
+      summary: Clear the active tenant's value
+      description: >-
+        Admin of the active tenant only. Idempotent: clearing an absent override answers 200
+        with source global. Never touches another tenant's override.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/ActiveTenantId'
+      responses:
+        '200':
+          description: The parameter, now source global.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ParameterView'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID, ACTIVE_TENANT_REQUIRED, INSUFFICIENT_ROLE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '404':
+          description: RESOURCE_NOT_FOUND (unknown or malformed key).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: ACTIVE_TENANT_CHANGED, CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: gb_session
+      description: Name is __Host-gb_session over https. Not pinned by the TCK; treat it as opaque.
+  parameters:
+    XsrfToken:
+      name: X-XSRF-TOKEN
+      in: header
+      required: false
+      description: Required on cookie-authenticated mutations; value of the XSRF-TOKEN cookie. Missing or wrong -> 403 CSRF_TOKEN_INVALID.
+      schema: { type: string }
+    ActiveTenantId:
+      name: X-Active-Tenant-Id
+      in: header
+      required: false
+      description: Tenant the client rendered. Differs from the session tenant -> 409 ACTIVE_TENANT_CHANGED, nothing executed. Ignored for API keys.
+      schema: { type: string, format: uuid }
+    Key:
+      name: key
+      in: path
+      required: true
+      description: Parameter key, at most 128 characters. A malformed or unknown key answers 404 RESOURCE_NOT_FOUND.
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 1-based page number. Not an integer -> FIELD_TYPE_INVALID; below 1 -> FIELD_OUT_OF_RANGE.
+      schema:
+        type: string
+        default: '1'
+    Size:
+      name: size
+      in: query
+      required: false
+      description: Page size, 1 to 100. Not an integer -> FIELD_TYPE_INVALID; outside the range -> FIELD_OUT_OF_RANGE.
+      schema:
+        type: string
+        default: '20'
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: '"key" or "-key". Any other field -> FIELD_NOT_ALLOWED.'
+      schema:
+        type: string
+        default: key
+  headers:
+    XTraceId:
+      description: The trace id of the request; equals meta.traceId of the body.
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{32}$'
+  schemas:
+    ApiMeta:
+      type: object
+      required: [traceId, timestamp]
+      additionalProperties: false
+      properties:
+        traceId:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+          description: 32 lowercase hex characters, never all zeros.
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC in whole seconds, ending in Z.
+    ApiIssue:
+      type: object
+      required: [field, code, message]
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+          description: JSON path into the request body or a query parameter name; empty means the whole body.
+        code:
+          $ref: '#/components/schemas/ApiIssueCode'
+        message:
+          type: string
+    ApiError:
+      type: object
+      required: [code, message, issues]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/ApiErrorCode'
+        message:
+          type: string
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiIssue'
+    ApiEnvelopeError:
+      type: object
+      required: [data, meta, error]
+      additionalProperties: false
+      properties:
+        data:
+          type: 'null'
+        meta:
+          $ref: '#/components/schemas/ApiMeta'
+        error:
+          $ref: '#/components/schemas/ApiError'
+    SuccessEnvelope:
+      type: object
+      required: [data, meta, error]
+      properties:
+        data: {}
+        meta:
+          $ref: '#/components/schemas/ApiMeta'
+        error:
+          type: 'null'
+    ApiErrorCode:
+      type: string
+      description: Top-level error.code. The set grows (x-extensible-enum), so a client treats an unknown code as a generic error; renaming or removing a code is a breaking change.
+      x-extensible-enum:
+        - SESSION_INVALID
+        - CREDENTIAL_CONFLICT
+        - CSRF_TOKEN_INVALID
+        - ACTIVE_TENANT_CHANGED
+        - PLATFORM_OPERATOR_REQUIRED
+        - ACTIVE_TENANT_REQUIRED
+        - INSUFFICIENT_ROLE
+        - RESOURCE_NOT_FOUND
+        - ROUTE_NOT_FOUND
+        - PARAMETER_ALREADY_EXISTS
+        - SYSTEM_PARAMETER_PROTECTED
+        - PARAMETER_OVERRIDES_VIOLATE_CONSTRAINTS
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
+        - VALIDATION_FAILED
+        - INTERNAL_ERROR
+    ApiIssueCode:
+      type: string
+      description: error.issues[].code, always under a 422 VALIDATION_FAILED. The set grows (x-extensible-enum), so a client treats an unknown code as a generic problem.
+      x-extensible-enum:
+        - FIELD_REQUIRED
+        - FIELD_TYPE_INVALID
+        - FIELD_NOT_ALLOWED
+        - FIELD_OUT_OF_RANGE
+        - FIELD_TOO_LONG
+        - BODY_MALFORMED
+        - PARAMETER_TYPE_MISMATCH
+        - PARAMETER_OUT_OF_RANGE
+        - PARAMETER_VALUE_NOT_ALLOWED
+        - PARAMETER_FIELD_IMMUTABLE
+        - PARAMETER_KEY_INVALID
+        - PARAMETER_CONSTRAINT_INVALID
+    ParameterValueType: { type: string, enum: [string, number, boolean, json] }
+    ParameterSource: { type: string, enum: [global, tenant] }
+    ParameterView:
+      type: object
+      required: [key, valueType, effectiveValue, defaultValue, minValue, maxValue,
+                 allowedValues, description, isSystemRequired, source]
+      properties:
+        key: { type: string, maxLength: 128 }
+        valueType: { $ref: '#/components/schemas/ParameterValueType' }
+        effectiveValue: { description: 'Tenant override when source is tenant, else defaultValue. Never null.' }
+        defaultValue: { description: 'JSON value of type valueType. Never null.' }
+        minValue: { type: [number, 'null'] }
+        maxValue: { type: [number, 'null'] }
+        allowedValues: { type: [array, 'null'], items: {} }
+        description: { type: string }
+        isSystemRequired: { type: boolean }
+        source: { $ref: '#/components/schemas/ParameterSource' }
+    ParameterCreate:
+      type: object
+      description: >
+        Required: key, valueType, defaultValue. Optional: minValue, maxValue,
+        allowedValues, description (default ""), isSystemRequired (default false).
+      properties:
+        key: { type: string }
+        valueType: { type: string }
+        defaultValue: {}
+        minValue: { type: [number, 'null'] }
+        maxValue: { type: [number, 'null'] }
+        allowedValues: { type: [array, 'null'], items: {} }
+        description: { type: string }
+        isSystemRequired: { type: boolean }
+    ParameterReplace:
+      type: object
+      description: >
+        Full replacement of the mutable fields. Required: defaultValue. Absent or
+        null minValue, maxValue, allowedValues clear them; absent description sets "".
+        valueType and isSystemRequired are immutable: when present they must equal
+        the stored values. A key in the body is ignored (the path names the key).
+      properties:
+        valueType: { type: string }
+        defaultValue: {}
+        minValue: { type: [number, 'null'] }
+        maxValue: { type: [number, 'null'] }
+        allowedValues: { type: [array, 'null'], items: {} }
+        description: { type: string }
+        isSystemRequired: { type: boolean }
+    ParameterOverride:
+      type: object
+      description: 'Required: value, a non-null JSON value of the parameter valueType.'
+      properties:
+        value: {}
+    ParameterDeleted:
+      type: object
+      required: [key, deletedOverrideCount]
+      properties:
+        key: { type: string }
+        deletedOverrideCount: { type: integer, minimum: 0 }
+    ParameterPage:
+      type: object
+      required: [items, page, size, totalItems]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ParameterView' } }
+        page: { type: integer }
+        size: { type: integer }
+        totalItems: { type: integer }

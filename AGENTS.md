@@ -243,6 +243,7 @@ Format: see `.claude/references/code-path-parity-format.md`. Root keeps a one-li
 <!-- Add parity rows below this line. The skill never edits below. -->
 
 - **oasdiff pin**: `mise.toml` and `.github/workflows/ci.yml` pin the same oasdiff version. Full row: `.claude/references/code-path-parity.md`.
+- **Envelope schemas**: `ApiMeta`, `ApiIssue`, `ApiError`, `ApiEnvelopeError` and `XTraceId` are byte-identical in `specs/core/openapi.yaml`, `specs/core-auth/openapi.yaml` and `specs/parameters/openapi.yaml`. Full row: `.claude/references/code-path-parity.md`.
 
 ## Anti-degradation governance
 
