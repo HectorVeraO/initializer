@@ -89,7 +89,7 @@ When invoked on a specific issue (or a described task), all actions target only 
 
 ## Verification before push
 
-Run from the relevant subproject directory before pushing:
+Run from the relevant subproject directory before pushing, each command prefixed with `mise exec --` (for example `mise exec -- npm run build`):
 
 | Stack | Gate |
 |---|---|
@@ -196,7 +196,7 @@ Full text: `.claude/references/architecture.md` -> "Gatbase rules". No validator
 - **Tenant isolation**: the active tenant comes only from the session token or the API key; every `:id` access filters by it; another tenant's resource answers `404`.
 - **Copy-and-own**: modules live at `go-srv/internal/gatbase/<module>/` and `ng-web/src/app/gatbase/<module>/`. The generator copies them into generated projects at the same paths; each generated project records every module's base version and file hashes in `gatbase.lock.json`. Never move a module path; never add empty interfaces for modules that do not exist.
 - **Trace correlation**: every request and async job continues or opens a W3C `traceparent` context; logs and spans carry `trace_id`, `span_id`, `tenant_id`, `actor_id`; the `X-Trace-Id` response header equals `meta.traceId`.
-- **Toolchain and ports**: Go, Node, gitleaks and lefthook are pinned in root `mise.toml` (`mise install`); never rely on a globally installed version. Local host ports come from band `101xx`, mapped in `.deploy/local/README.md`.
+- **Toolchain and ports**: Go, Node, gitleaks and lefthook are pinned in root `mise.toml` (`mise install`). Run every `node`, `npm`, `npx`, `go` and `gofmt` command through `mise exec --`: the versions on the shell PATH are not the pinned ones, and Angular CLI refuses the older Node. Local host ports come from band `101xx`, mapped in `.deploy/local/README.md`.
 
 ## Agent discipline
 
