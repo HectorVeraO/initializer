@@ -80,6 +80,8 @@ jobs:
           cache: npm
           cache-dependency-path: ng-web/package-lock.json
       - run: npm ci
+      - name: Lint
+        run: npm run lint
       - name: Build
         run: npm run build
       - name: Test
