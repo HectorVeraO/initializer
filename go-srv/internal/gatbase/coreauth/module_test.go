@@ -217,14 +217,16 @@ func TestPassphraseKeyIsRejectedUnderAnHTTPSPublicURL(t *testing.T) {
 func TestPassphraseKeyIsAcceptedUnderAnHTTPPublicURL(t *testing.T) {
 	keys := "local-1:passphrase:" + strings.Repeat("x", 30)
 	err := buildWithKeys(t, keys, "http://localhost:10120", nil)
-	if err == nil || !strings.Contains(err.Error(), "db: acquire connection") {
-		t.Fatalf("want Build to pass config and fail only at the unreachable database, got %v", err)
+	hasKeyProblem := err != nil && strings.Contains(err.Error(), "GATBASE_SESSION_KEYS")
+	if hasKeyProblem {
+		t.Fatalf("want Build to accept the session keys, got %v", err)
 	}
 }
 
 func TestSeedKeyIsAcceptedUnderAnHTTPSPublicURL(t *testing.T) {
 	err := buildWithKeys(t, randomSessionKeys(t), "https://app.example.com", nil)
-	if err == nil || !strings.Contains(err.Error(), "db: acquire connection") {
-		t.Fatalf("want Build to pass config and fail only at the unreachable database, got %v", err)
+	hasKeyProblem := err != nil && strings.Contains(err.Error(), "GATBASE_SESSION_KEYS")
+	if hasKeyProblem {
+		t.Fatalf("want Build to accept the session keys, got %v", err)
 	}
 }

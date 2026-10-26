@@ -33,7 +33,7 @@ type Keyring struct {
 // ParseKeyring parses GATBASE_SESSION_KEYS: comma-separated "<kid>:<base64url 32-byte seed>"
 // or "<kid>:passphrase:<text of 24 to 128 characters>" (local only: the seed is
 // SHA-256("gatbase-session-key\x00" + text); Keyring.HasPassphrase reports it so Provide
-// rejects it under an https public URL). The first entry signs, every entry verifies.
+// rejects it under an https public URL; the text cannot contain a comma). The first entry signs, every entry verifies.
 // It returns every problem at once: empty value, duplicate kid, kid not matching
 // ^[A-Za-z0-9._-]{1,32}$, seed not 32 bytes, passphrase out of length.
 // No error text contains a seed or a passphrase.
@@ -52,7 +52,7 @@ func ParseKeyring(value string) (*Keyring, []error) {
 		}
 		kid, material, hasSeparator := strings.Cut(entry, ":")
 		if !hasSeparator {
-			problems = append(problems, fmt.Errorf("entry %d must be <kid>:<seed>", position))
+			problems = append(problems, fmt.Errorf("entry %d must be <kid>:<seed> (entries split on commas, so a passphrase cannot contain one)", position))
 			continue
 		}
 		entryProblems := 0

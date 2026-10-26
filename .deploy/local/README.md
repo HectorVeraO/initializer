@@ -31,6 +31,6 @@ docker compose -f .deploy/local/docker-compose.yml down -v
 `GATBASE_SESSION_KEYS` is a comma-separated keyring of `<kid>:<seed>` entries (`kid` matches `^[A-Za-z0-9._-]{1,32}$`, seed is 32 random bytes in unpadded base64url). The first entry signs; every entry verifies.
 
 - Generate a seed: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`
-- Local only: `<kid>:passphrase:<24 to 128 characters>` derives the seed from the text; `Build` rejects it when `GATBASE_PUBLIC_BASE_URL` is `https`.
+- Local only: `<kid>:passphrase:<24 to 128 characters>` derives the seed from the text (no commas); `Build` rejects it when `GATBASE_PUBLIC_BASE_URL` is `https`.
 - Rotation: add the new key as a second entry and deploy; move it first and deploy; after `GATBASE_SESSION_REFRESH_MAX_AGE` remove the old key.
 - Emergency rotation: replace the whole keyring; every token answers `401 SESSION_INVALID`.
