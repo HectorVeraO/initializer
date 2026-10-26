@@ -413,7 +413,7 @@ func TestEmptyBaseRevSkipsHistoryRules(t *testing.T) {
 	expectRules(t, vs)
 }
 
-func TestBaseUsesMergeBase(t *testing.T) {
+func TestOrderIsCheckedAgainstBaseTip(t *testing.T) {
 	root := baseRepo(t)
 	git(t, root, "switch", "main")
 	put(t, root, modDir+"migrations/20260301120000_sys_three.sql", upLine)
@@ -422,8 +422,8 @@ func TestBaseUsesMergeBase(t *testing.T) {
 	put(t, root, modDir+"migrations/20260215120000_sys_mid.sql", upLine)
 	commitAll(t, root)
 	vs, _ := lint(t, root, "main")
-	// Compared with the merge base (not main's tip), the newest base file is 20260201120000.
-	expectRules(t, vs)
+	// main's tip holds 20260301120000; a file sorting before it is refused even though the fork point did not have it.
+	expectRules(t, vs, migrationlint.RuleOutOfOrder)
 }
 
 func TestUnknownBaseRevIsAnError(t *testing.T) {
@@ -431,5 +431,8 @@ func TestUnknownBaseRevIsAnError(t *testing.T) {
 	_, _, err := migrationlint.Lint(migrationlint.Options{Root: root, BaseRev: "no-such-rev"})
 	if err == nil {
 		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "no-such-rev") {
+		t.Fatalf("error does not name the unknown revision: %v", err)
 	}
 }

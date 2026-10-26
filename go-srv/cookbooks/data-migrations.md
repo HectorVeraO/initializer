@@ -33,7 +33,7 @@ Reserved for planned catalog modules; `gates migrations` rejects a manifest that
 - Every file has the line `-- +goose Up`. Wrap PL/pgSQL bodies in `-- +goose StatementBegin` / `-- +goose StatementEnd`. No `-- +goose Down` (Expand-first), no `-- +goose NO TRANSACTION`.
 - Tables are unquoted, in schema `public` (qualifier optional), and carry the file's module prefix, also in `REFERENCES`, `ALTER TABLE`, `CREATE INDEX ... ON` and `DROP TABLE`; no cross-module foreign keys.
 - A Contract step (`DROP TABLE`, `DROP COLUMN`, `RENAME COLUMN`, `RENAME TO`, `ALTER COLUMN ... TYPE`, `ALTER COLUMN ... SET NOT NULL`) carries the line `-- gatbase:contract-step <reason>` directly above the statement.
-- A new file sorts after the newest file of its module at the base; a file that exists at the base is never edited, renamed or deleted.
+- A new file sorts after the newest file of its module on the base revision (its tip, not the fork point); a file that exists at the base is never edited, renamed or deleted.
 - Files are applied by the migration tool chosen in slice 1.1. Until that tool exists, no migration file is committed.
 - A merged migration is immutable. Fix a mistake with a new migration.
 - A migration touches only its own module's tables.

@@ -319,7 +319,7 @@ func (l *linter) checkAgainstBase() error {
 		if known {
 			return cached, nil
 		}
-		files, listErr := repo.ListFiles(l.opts.Root, mergeBase, path.Join(repo.GatbaseDir, module, "migrations"))
+		files, listErr := repo.ListFiles(l.opts.Root, l.opts.BaseRev, path.Join(repo.GatbaseDir, module, "migrations"))
 		if listErr != nil {
 			return "", listErr
 		}
@@ -358,7 +358,7 @@ func (l *linter) checkAgainstBase() error {
 			return newestErr
 		}
 		if latest != "" && match[2] < latest {
-			l.add(RuleOutOfOrder, addedPath, 0, "%s sorts before %s, the newest migration of this module at the base", match[2], latest)
+			l.add(RuleOutOfOrder, addedPath, 0, "%s sorts before %s, the newest migration of this module on %s", match[2], latest, l.opts.BaseRev)
 		}
 	}
 	return nil

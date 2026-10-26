@@ -1,6 +1,7 @@
 package repo_test
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -92,11 +93,23 @@ func TestDiffNameStatusAndListFiles(t *testing.T) {
 
 func TestDiffNameStatusRejectsBadArguments(t *testing.T) {
 	root := t.TempDir()
-	_, err := repo.DiffNameStatus(root, "--output=x", "HEAD", "g")
+	runGit(t, root, "init", "-b", "main")
+	writeFile(t, filepath.Join(root, "g", "a.txt"), "one\n")
+	runGit(t, root, "add", "-A")
+	runGit(t, root, "commit", "-m", "base")
+
+	// With a real commit, a missing guard lets git accept the option and write
+	// the output file, which the test observes.
+	outputFile := filepath.Join(root, "out.txt")
+	_, err := repo.DiffNameStatus(root, "--output="+outputFile, "HEAD", "g")
 	if err == nil {
 		t.Fatal("option-like revision accepted")
 	}
-	_, err = repo.DiffNameStatus(root, "a", "HEAD", "-g")
+	_, statErr := os.Stat(outputFile)
+	if statErr == nil {
+		t.Fatal("option-like revision reached git and wrote a file")
+	}
+	_, err = repo.DiffNameStatus(root, "HEAD", "HEAD", "-g")
 	if err == nil {
 		t.Fatal("option-like path accepted")
 	}
