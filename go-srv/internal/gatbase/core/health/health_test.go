@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -155,10 +156,18 @@ func TestEvaluateFailsProbeThatOutlivesItsTimeout(t *testing.T) {
 
 func TestEvaluateRunsChecksInParallel(t *testing.T) {
 	readiness := health.NewReadiness()
+	const total = 3
+	var arrived atomic.Int32
+	allArrived := make(chan struct{})
 	for _, name := range []string{"a", "b", "c"} {
 		readiness.Add(health.Check{Name: name, Probe: func(ctx context.Context) error {
+			if arrived.Add(1) == total {
+				close(allArrived)
+			}
+			// Sequential execution never lets the others arrive, so the probe
+			// times out and fails.
 			select {
-			case <-time.After(300 * time.Millisecond):
+			case <-allArrived:
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()
@@ -166,14 +175,10 @@ func TestEvaluateRunsChecksInParallel(t *testing.T) {
 		}})
 	}
 
-	start := time.Now()
-	ok, _ := readiness.Evaluate(context.Background())
+	ok, results := readiness.Evaluate(context.Background())
 
 	if !ok {
-		t.Fatal("checks should pass")
-	}
-	if elapsed := time.Since(start); elapsed > 800*time.Millisecond {
-		t.Fatalf("Evaluate took %v; checks ran in sequence", elapsed)
+		t.Fatalf("checks did not run in parallel: %+v", results)
 	}
 }
 

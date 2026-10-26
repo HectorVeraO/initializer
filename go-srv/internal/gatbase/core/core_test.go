@@ -11,11 +11,16 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
+
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/api"
@@ -934,6 +939,66 @@ func TestAppExposesCoreConfig(t *testing.T) {
 	}
 }
 
+func TestCoreConfigDefaults(t *testing.T) {
+	var reached bool
+	app, _ := startApp(t, core.Options{Config: config.MapSource(map[string]string{})}, mounting("things", func(h *core.Host) {
+		h.Handle("POST /api/v1/things", auth.Public, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			reached = true
+			w.WriteHeader(http.StatusCreated)
+		}))
+	}))
+
+	if app.Addr() != ":10100" || app.ShutdownTimeout() != 10*time.Second {
+		t.Fatalf("Addr = %q ShutdownTimeout = %v, want :10100 and 10s", app.Addr(), app.ShutdownTimeout())
+	}
+	trusted := do(app, http.MethodPost, "/api/v1/things", map[string]string{"Origin": "http://localhost:10120"})
+	if trusted.Code != http.StatusCreated || !reached {
+		t.Fatalf("the default public origin must be trusted: %d", trusted.Code)
+	}
+	foreign := do(app, http.MethodPost, "/api/v1/things", map[string]string{"Origin": "http://localhost:10121"})
+	expectError(t, foreign, http.StatusForbidden, api.CodeCSRFTokenInvalid)
+}
+
+func TestRequestSpansAreNamedByRoute(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	module := core.Module{
+		ID: "things",
+		Provide: func(_ context.Context, b *core.Builder) error {
+			provider, ok := b.Telemetry().TracerProvider().(*sdktrace.TracerProvider)
+			if !ok {
+				return errors.New("tracer provider is not the SDK provider")
+			}
+			provider.RegisterSpanProcessor(recorder)
+			return nil
+		},
+		Mount: func(_ context.Context, h *core.Host) error {
+			h.Handle("GET /api/v1/things/{id}", auth.Public, okHandler("thing"))
+			return nil
+		},
+	}
+	app, sink := startApp(t, core.Options{}, module)
+
+	do(app, http.MethodGet, "/api/v1/things/42", nil)
+	do(app, http.MethodGet, "/api/v1/missing", nil)
+	do(app, http.MethodGet, "/nowhere", nil)
+
+	names := []string{}
+	for _, span := range recorder.Ended() {
+		names = append(names, span.Name())
+	}
+	wantNames := []string{"GET /api/v1/things/{id}", "/api/v1/", http.MethodGet}
+	if !slices.Equal(names, wantNames) {
+		t.Fatalf("span names = %v, want %v", names, wantNames)
+	}
+	routes := []any{}
+	for _, record := range sink.find(t, "http_request_completed") {
+		routes = append(routes, record["route"])
+	}
+	if len(routes) != 3 || routes[0] != "GET /api/v1/things/{id}" || routes[1] != "/api/v1/" || routes[2] != "unmatched" {
+		t.Fatalf("access log routes = %v, want the pattern, the API catch-all, then unmatched", routes)
+	}
+}
+
 func TestRunServesAndShutsDownCleanly(t *testing.T) {
 	database := testpg.New(t, "corerun")
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -1071,6 +1136,8 @@ func FuzzFallbackAlwaysAnswersAnEnvelope(f *testing.F) {
 	})
 }
 
+var moduleIDRule = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
+
 func FuzzModuleIDsNeverPanic(f *testing.F) {
 	for _, seed := range []string{"core", "Core", "a", "", "a--b", "-ab", "ab-", strings.Repeat("z", 40), "ünï", "a b"} {
 		f.Add(seed)
@@ -1081,8 +1148,8 @@ func FuzzModuleIDsNeverPanic(f *testing.F) {
 		if err == nil {
 			t.Fatal("Build with no database URL cannot succeed")
 		}
-		hasUnsafe := strings.ToLower(id) != id || strings.ContainsAny(id, " /\\\n\t") || len(id) < 2 || len(id) > 31
-		if hasUnsafe && !strings.Contains(err.Error(), "core: module 0: id") {
+		isValidID := moduleIDRule.MatchString(id)
+		if !isValidID && !strings.Contains(err.Error(), "core: module 0: id") {
 			t.Fatalf("id %q was not rejected as an id: %v", id, err)
 		}
 	})

@@ -14,8 +14,8 @@ import (
 )
 
 // spanAttributes runs one guarded request inside a recording span and returns
-// the span's attributes by key.
-func spanAttributes(t *testing.T, h *harness, p auth.Policy, headers map[string]string) map[string]string {
+// the span's attributes by key and the response status.
+func spanAttributes(t *testing.T, h *harness, p auth.Policy, headers map[string]string) (map[string]string, int) {
 	t.Helper()
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
@@ -26,7 +26,8 @@ func spanAttributes(t *testing.T, h *harness, p auth.Policy, headers map[string]
 		req.Header.Set(k, v)
 	}
 	ctx, span := provider.Tracer("test").Start(req.Context(), "request")
-	mux.ServeHTTP(httptest.NewRecorder(), req.WithContext(ctx))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req.WithContext(ctx))
 	span.End()
 
 	ended := recorder.Ended()
@@ -39,13 +40,13 @@ func spanAttributes(t *testing.T, h *harness, p auth.Policy, headers map[string]
 			out[string(kv.Key)] = kv.Value.AsString()
 		}
 	}
-	return out
+	return out, rec.Code
 }
 
 func TestGuardSetsSpanAttributesForAuthorizedCaller(t *testing.T) {
 	h := newHarness(t, validSession(memberPrincipal(reqctx.RoleMember)), &fakeKey{})
 
-	got := spanAttributes(t, h, auth.Policy{Kind: auth.KindSession}, nil)
+	got, _ := spanAttributes(t, h, auth.Policy{Kind: auth.KindSession}, nil)
 
 	if got["http.route"] != "GET /api/v1/things" || got["actor_id"] != "acct-1" || got["tenant_id"] != tenantA {
 		t.Fatalf("attributes = %v", got)
@@ -55,7 +56,7 @@ func TestGuardSetsSpanAttributesForAuthorizedCaller(t *testing.T) {
 func TestGuardSetsOnlyRouteOnPublicRoutes(t *testing.T) {
 	h := newHarness(t, &fakeSession{}, &fakeKey{})
 
-	got := spanAttributes(t, h, auth.Public, nil)
+	got, _ := spanAttributes(t, h, auth.Public, nil)
 
 	if got["http.route"] != "GET /api/v1/things" {
 		t.Fatalf("attributes = %v", got)
@@ -68,8 +69,11 @@ func TestGuardSetsOnlyRouteOnPublicRoutes(t *testing.T) {
 func TestGuardLeavesCallerAttributesOffRejectedRequests(t *testing.T) {
 	h := newHarness(t, &fakeSession{present: false}, &fakeKey{})
 
-	got := spanAttributes(t, h, auth.Policy{Kind: auth.KindSession}, nil)
+	got, status := spanAttributes(t, h, auth.Policy{Kind: auth.KindSession}, nil)
 
+	if status != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", status)
+	}
 	if _, hasActor := got["actor_id"]; hasActor {
 		t.Fatalf("rejected request carries an actor: %v", got)
 	}

@@ -174,7 +174,7 @@ func routeCapture(mux *http.ServeMux) http.Handler {
 	})
 }
 
-// apiHeaders is chain step 7.
+// apiHeaders sets the /api/v1 response headers.
 func apiHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := w.Header()
@@ -184,7 +184,7 @@ func apiHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// drainGate is chain step 5: not serving (draining) answers 503.
+// drainGate: not serving (draining) answers 503.
 func drainGate(a *assembly, writer *api.Writer, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !a.readiness.Serving() {
