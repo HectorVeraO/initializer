@@ -2,7 +2,7 @@
   "schema": 1,
   "stack": "go-srv",
   "module": "core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "implied": true,
   "implementsSpec": { "core": "0.1.0" },
   "requiresModules": [],
