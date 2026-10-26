@@ -126,7 +126,8 @@ func loadReserved() (map[string]bool, error) {
 }
 
 // listSQLFiles returns the repo-relative paths (forward slashes) of every .sql
-// file under <root>/go-srv, sorted. Only that tree is walked.
+// file under <root>/go-srv, sorted. Only that tree is walked, and testdata
+// directories are skipped: they hold test fixtures, as the go tool treats them.
 func listSQLFiles(root string) ([]string, error) {
 	base := filepath.Join(root, sqlRoot)
 	_, err := os.Stat(base)
@@ -140,6 +141,10 @@ func listSQLFiles(root string) ([]string, error) {
 	err = filepath.WalkDir(base, func(p string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		isTestdata := entry.IsDir() && entry.Name() == "testdata"
+		if isTestdata {
+			return filepath.SkipDir
 		}
 		isSQL := strings.EqualFold(filepath.Ext(entry.Name()), ".sql")
 		if !entry.Type().IsRegular() || !isSQL {
