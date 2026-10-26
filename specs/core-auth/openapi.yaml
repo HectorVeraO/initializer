@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Gatbase core-auth
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Identity (Ory Kratos behind a stateless BFF session), flat tenancy, invitations,
     memberships and M2M API keys. Every /api/v1 body is ApiEnvelope<T>. Session cookie
@@ -12,6 +12,8 @@ servers:
 security: []
 tags:
   - name: session
+  - name: tenants
+  - name: invitations
 x-gatbase-tck:
   pinned:
     - routes, methods, bodies, status codes and error codes of this file
@@ -81,6 +83,125 @@ paths:
         '200': { $ref: '#/components/responses/LogoutOk' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+  /api/v1/tenants:
+    post:
+      operationId: createTenant
+      tags: [tenants]
+      description: Platform operator only. Creates the tenant and a one-time admin invitation for adminEmail.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTenantRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/TenantCreatedOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/invitations:
+    get:
+      operationId: listInvitations
+      tags: [invitations]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/InvitationStatus' }
+          description: Defaults to pending.
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Size' }
+        - name: sort
+          in: query
+          required: false
+          schema: { type: string, enum: [createdAt, -createdAt], default: -createdAt }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/InvitationPageOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createInvitation
+      tags: [invitations]
+      description: Admin only. Inviting an address on the platform operator list needs a platform operator, else 403 PLATFORM_OPERATOR_REQUIRED.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateInvitationRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/InvitationCreatedOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/invitations/{id}:
+    delete:
+      operationId: revokeInvitation
+      tags: [invitations]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/InvitationViewOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/invitations/accept:
+    post:
+      operationId: acceptInvitation
+      tags: [invitations]
+      description: Signed-in account accepts; the account email must match the invitation email, case-insensitive.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcceptInvitationRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AcceptOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/invitations/accept-new:
+    post:
+      operationId: acceptInvitationAsNewAccount
+      tags: [invitations]
+      description: >
+        Unauthenticated. Creates the identity with the invited email and the given password,
+        then the account and the membership. The caller then signs in.
+      security: [{}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcceptNewInvitationRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/AcceptNewOk' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
     sessionCookie:
@@ -106,6 +227,22 @@ components:
       required: false
       description: Tenant the client rendered. Differs from the session tenant -> 409 ACTIVE_TENANT_CHANGED, nothing executed. Ignored for API keys.
       schema: { type: string, format: uuid }
+    Id:
+      name: id
+      in: path
+      required: true
+      description: UUID. A malformed, unknown or other tenant's id answers the same 404 RESOURCE_NOT_FOUND.
+      schema: { type: string }
+    Page:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 1 }
+    Size:
+      name: size
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
   headers:
     XTraceId:
       description: The trace id of the request; equals meta.traceId of the body.
@@ -143,6 +280,42 @@ components:
       content:
         application/json:
           schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/LogoutResult' } } } ] }
+    TenantCreatedOk:
+      description: Tenant and its admin invitation; invitationUrl is shown once.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/TenantCreated' } } } ] }
+    InvitationViewOk:
+      description: Invitation.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/InvitationView' } } } ] }
+    InvitationPageOk:
+      description: Page of invitations; never a token or URL.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { allOf: [ { $ref: '#/components/schemas/PageInfo' }, { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/InvitationView' } } } } ] } } } ] }
+    InvitationCreatedOk:
+      description: invitationUrl is shown once and never stored.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/InvitationCreated' } } } ] }
+    AcceptOk:
+      description: Membership active.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AcceptResult' } } } ] }
+    AcceptNewOk:
+      description: Identity, account and membership created.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/AcceptNewResult' } } } ] }
   schemas:
     ApiMeta:
       type: object
@@ -211,6 +384,16 @@ components:
         - INTERNAL_ERROR
         - SERVICE_UNAVAILABLE
         - IDENTITY_PROVIDER_UNAVAILABLE
+        - PLATFORM_OPERATOR_REQUIRED
+        - ACTIVE_TENANT_REQUIRED
+        - INSUFFICIENT_ROLE
+        - RESOURCE_NOT_FOUND
+        - INVITATION_INVALID
+        - INVITATION_EMAIL_MISMATCH
+        - MEMBERSHIP_ALREADY_ACTIVE
+        - INVITATION_NOT_PENDING
+        - TENANT_SLUG_TAKEN
+        - IDENTITY_ALREADY_EXISTS
     ApiIssueCode:
       type: string
       description: error.issues[].code, always under a 422 VALIDATION_FAILED. The set grows (x-extensible-enum), so a client treats an unknown code as a generic problem.
@@ -225,6 +408,7 @@ components:
         - FIELD_NOT_ALLOWED
         - FIELD_DUPLICATE
         - FIELD_MIN_ITEMS
+        - PASSWORD_REJECTED
     SuccessEnvelope:
       type: object
       required: [data, meta, error]
@@ -277,3 +461,82 @@ components:
       type: object
       properties:
         tenantId: { type: string, format: uuid }
+    PageInfo:
+      type: object
+      required: [page, size, totalItems]
+      properties:
+        page: { type: integer, minimum: 1 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalItems: { type: integer, minimum: 0 }
+    InvitationStatus: { type: string, enum: [pending, accepted, revoked, expired] }
+    TenantView:
+      allOf:
+        - { $ref: '#/components/schemas/TenantSummary' }
+        - type: object
+          required: [createdAt]
+          properties:
+            createdAt: { type: string, format: date-time }
+    MemberAccount:
+      type: object
+      required: [id, email, fullName]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        fullName: { type: [string, 'null'] }
+    InvitationView:
+      type: object
+      required: [id, email, role, status, expiresAt, createdAt, acceptedAt, revokedAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/Role' }
+        status: { $ref: '#/components/schemas/InvitationStatus' }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        acceptedAt: { type: [string, 'null'], format: date-time }
+        revokedAt: { type: [string, 'null'], format: date-time }
+    InvitationCreated:
+      type: object
+      required: [invitation, invitationUrl]
+      properties:
+        invitation: { $ref: '#/components/schemas/InvitationView' }
+        invitationUrl: { type: string, format: uri, description: '<public base URL>/invitations/accept#token=<43 base64url chars>' }
+    TenantCreated:
+      type: object
+      required: [tenant, invitation, invitationUrl]
+      properties:
+        tenant: { $ref: '#/components/schemas/TenantView' }
+        invitation: { $ref: '#/components/schemas/InvitationView' }
+        invitationUrl: { type: string, format: uri }
+    AcceptResult:
+      type: object
+      required: [membership]
+      properties:
+        membership: { $ref: '#/components/schemas/MembershipView' }
+    AcceptNewResult:
+      type: object
+      required: [membership, account]
+      properties:
+        membership: { $ref: '#/components/schemas/MembershipView' }
+        account: { $ref: '#/components/schemas/MemberAccount' }
+    CreateTenantRequest:
+      type: object
+      properties:
+        slug: { type: string, description: '3-40 chars, ^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$, not UUID-shaped, immutable' }
+        name: { type: string, description: 1-100 chars after trimming }
+        adminEmail: { type: string, format: email }
+    CreateInvitationRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/Role' }
+    AcceptInvitationRequest:
+      type: object
+      properties:
+        token: { type: string, description: 43 base64url characters from the URL fragment }
+    AcceptNewInvitationRequest:
+      type: object
+      properties:
+        token: { type: string }
+        password: { type: string, description: 12-64 characters }
+        fullName: { type: string, description: 1-100 characters after trimming }

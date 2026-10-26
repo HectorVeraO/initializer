@@ -106,6 +106,7 @@ func Registry() []CodeInfo {
 		{CodeFieldNotAllowed, http.StatusUnprocessableEntity, true, raisedByCore},
 		{CodeFieldDuplicate, http.StatusUnprocessableEntity, true, raisedByCore},
 		{CodeFieldMinItems, http.StatusUnprocessableEntity, true, raisedByCore},
+		{"PASSWORD_REJECTED", http.StatusUnprocessableEntity, true, raisedByCoreAuth},
 		{"PARAMETER_KEY_INVALID", http.StatusUnprocessableEntity, true, raisedByParameters},
 		{"PARAMETER_TYPE_MISMATCH", http.StatusUnprocessableEntity, true, raisedByParameters},
 		{"PARAMETER_OUT_OF_RANGE", http.StatusUnprocessableEntity, true, raisedByParameters},

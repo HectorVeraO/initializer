@@ -22,6 +22,9 @@ var (
 	ErrUnavailable = errors.New("kratos: unavailable")
 	// ErrIdentityExists means an identity with the same identifier exists.
 	ErrIdentityExists = errors.New("kratos: identity exists")
+	// ErrPasswordRejected means Kratos answered 400 to an identity create: its
+	// password policy refused the password, for example one too similar to the email.
+	ErrPasswordRejected = errors.New("kratos: password rejected")
 )
 
 // maxBodyBytes bounds every Kratos response body read.

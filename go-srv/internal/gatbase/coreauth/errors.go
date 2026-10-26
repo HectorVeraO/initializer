@@ -36,3 +36,7 @@ const (
 	CodeLastTenantAdmin         api.Code = "LAST_TENANT_ADMIN"
 	CodeIdentityAlreadyExists   api.Code = "IDENTITY_ALREADY_EXISTS"
 )
+
+// CodePasswordRejected is the issue code under a 422 when the identity
+// provider's password policy refuses the password of an accept-new.
+const CodePasswordRejected api.Code = "PASSWORD_REJECTED"

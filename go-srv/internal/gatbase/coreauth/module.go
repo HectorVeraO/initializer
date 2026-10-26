@@ -112,5 +112,6 @@ func (s *service) provideKratos(b *core.Builder) {
 // mount registers the session routes and the /kratos/ proxy.
 func (s *service) mount(_ context.Context, h *core.Host) error {
 	s.mountSession(h)
+	s.mountTenancy(h)
 	return nil
 }
