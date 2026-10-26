@@ -24,7 +24,7 @@ type service struct {
 	// public is nil only when GATBASE_KRATOS_PUBLIC_URL is invalid, which fails Build.
 	public *kratos.Public
 	access *access
-	// tenancy is built for the invitation and membership routes of later tracks.
+	// tenancy backs the tenant, membership and invitation routes.
 	tenancy *tenancy
 }
 
@@ -79,13 +79,17 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 	s.provideSession(b)
 	s.provideKratos(b)
 	s.tenancy = newTenancy(b.Pool(), b.Clock(), s.admin, s.cfg)
+	err := b.ProvideTenantDirectory(&tenantDirectory{pool: b.Pool()})
+	if err != nil {
+		return fmt.Errorf("provide tenant directory: %w", err)
+	}
 
 	scopes := []struct{ name, description string }{
 		{"tenant:read", "Read the key's own tenant"},
 		{"api-keys:read", "List the tenant's API key metadata"},
 	}
 	for _, scope := range scopes {
-		err := b.Scopes().Register(scope.name, scope.description)
+		err = b.Scopes().Register(scope.name, scope.description)
 		if err != nil {
 			return fmt.Errorf("register scope: %w", err)
 		}

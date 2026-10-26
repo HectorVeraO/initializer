@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Gatbase core-auth
-  version: 1.1.0
+  version: 1.2.0
   description: >
     Identity (Ory Kratos behind a stateless BFF session), flat tenancy, invitations,
     memberships and M2M API keys. Every /api/v1 body is ApiEnvelope<T>. Session cookie
@@ -13,6 +13,7 @@ security: []
 tags:
   - name: session
   - name: tenants
+  - name: memberships
   - name: invitations
 x-gatbase-tck:
   pinned:
@@ -83,7 +84,45 @@ paths:
         '200': { $ref: '#/components/responses/LogoutOk' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+  /api/v1/tenant:
+    get:
+      operationId: getCurrentTenant
+      tags: [tenants]
+      security: [{ sessionCookie: [] }, { apiKey: [] }]
+      x-gatbase-scope: tenant:read
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          description: Tenant UUID or slug, case-insensitive; must name the caller's tenant.
+          schema: { type: string, maxLength: 64 }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/TenantSummaryOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
   /api/v1/tenants:
+    get:
+      operationId: listTenants
+      tags: [tenants]
+      description: Platform operator only. Cross-tenant by design.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, required: false, schema: { $ref: '#/components/schemas/TenantStatus' } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Size' }
+        - name: sort
+          in: query
+          required: false
+          schema: { type: string, enum: [createdAt, -createdAt, slug, -slug], default: slug }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/TenantPageOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
     post:
       operationId: createTenant
       tags: [tenants]
@@ -101,6 +140,71 @@ paths:
         '201': { $ref: '#/components/responses/TenantCreatedOk' }
         '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/tenants/{id}/status:
+    patch:
+      operationId: setTenantStatus
+      tags: [tenants]
+      description: Platform operator only. Suspension blocks the tenant's API keys on their next request.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetTenantStatusRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/TenantViewOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/memberships:
+    get:
+      operationId: listMemberships
+      tags: [memberships]
+      description: Members of the active tenant. Without status, returns active and suspended.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: status, in: query, required: false, schema: { $ref: '#/components/schemas/MembershipStatus' } }
+        - { name: role, in: query, required: false, schema: { $ref: '#/components/schemas/Role' } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Size' }
+        - name: sort
+          in: query
+          required: false
+          schema: { type: string, enum: [createdAt, -createdAt, email, -email], default: email }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/MemberPageOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/memberships/{id}:
+    patch:
+      operationId: updateMembership
+      tags: [memberships]
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateMembershipRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MemberViewOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
   /api/v1/invitations:
@@ -280,12 +384,42 @@ components:
       content:
         application/json:
           schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/LogoutResult' } } } ] }
+    TenantSummaryOk:
+      description: Caller's tenant.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/TenantSummary' } } } ] }
+    TenantViewOk:
+      description: Tenant.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/TenantView' } } } ] }
+    TenantPageOk:
+      description: Page of tenants.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { allOf: [ { $ref: '#/components/schemas/PageInfo' }, { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/TenantView' } } } } ] } } } ] }
     TenantCreatedOk:
       description: Tenant and its admin invitation; invitationUrl is shown once.
       headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
       content:
         application/json:
           schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/TenantCreated' } } } ] }
+    MemberViewOk:
+      description: Member.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/MemberView' } } } ] }
+    MemberPageOk:
+      description: Page of members.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { allOf: [ { $ref: '#/components/schemas/PageInfo' }, { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/MemberView' } } } } ] } } } ] }
     InvitationViewOk:
       description: Invitation.
       headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
@@ -394,6 +528,9 @@ components:
         - INVITATION_NOT_PENDING
         - TENANT_SLUG_TAKEN
         - IDENTITY_ALREADY_EXISTS
+        - TENANT_MISMATCH
+        - LAST_TENANT_ADMIN
+        - INVITATION_REQUIRED
     ApiIssueCode:
       type: string
       description: error.issues[].code, always under a 422 VALIDATION_FAILED. The set grows (x-extensible-enum), so a client treats an unknown code as a generic problem.
@@ -483,6 +620,14 @@ components:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
         fullName: { type: [string, 'null'] }
+    MemberView:
+      allOf:
+        - { $ref: '#/components/schemas/MembershipView' }
+        - type: object
+          required: [account, createdAt]
+          properties:
+            account: { $ref: '#/components/schemas/MemberAccount' }
+            createdAt: { type: string, format: date-time }
     InvitationView:
       type: object
       required: [id, email, role, status, expiresAt, createdAt, acceptedAt, revokedAt]
@@ -525,6 +670,16 @@ components:
         slug: { type: string, description: '3-40 chars, ^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$, not UUID-shaped, immutable' }
         name: { type: string, description: 1-100 chars after trimming }
         adminEmail: { type: string, format: email }
+    SetTenantStatusRequest:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/TenantStatus' }
+    UpdateMembershipRequest:
+      type: object
+      description: At least one of role, status.
+      properties:
+        role: { $ref: '#/components/schemas/Role' }
+        status: { $ref: '#/components/schemas/MembershipStatus' }
     CreateInvitationRequest:
       type: object
       properties:

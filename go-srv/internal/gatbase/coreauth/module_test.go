@@ -152,15 +152,15 @@ func TestProvideRegistersTheCoreScopes(t *testing.T) {
 	}
 }
 
-func TestUnmountedTenantRouteAnswersTheFallback(t *testing.T) {
+func TestTenantRouteIsMountedAndNeedsACredential(t *testing.T) {
 	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
 		Database: true,
 		Config:   map[string]string{"GATBASE_SESSION_KEYS": randomSessionKeys(t)},
 	})
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/tenant", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("GET /api/v1/tenant answered %d, want 404", rec.Code)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /api/v1/tenant answered %d, want 401", rec.Code)
 	}
 }
 

@@ -193,3 +193,46 @@ export async function seedTenant(playwright: Playwright, operator: Actor, option
   }
   return { id: tenantId, slug, admin, members };
 }
+
+interface MemberItem {
+  id: string;
+  role: Role;
+  status: string;
+  account: { id: string; email: string };
+}
+
+/** Lists the admin's tenant members (every status) and returns the membership id of accountId. */
+export async function membershipIdOf(admin: Actor, accountId: string): Promise<string> {
+  for (const status of ['active', 'suspended', 'revoked']) {
+    const page = await expectData<{ items: MemberItem[] }>(await admin.request.get(`/api/v1/memberships?status=${status}&size=100`), 200);
+    const found = page.items.find((item) => item.account.id === accountId);
+    if (found) {
+      return found.id;
+    }
+  }
+  assert.fail(`no membership of account ${accountId} in the admin tenant`);
+}
+
+let tenantlessCounter = 0;
+
+/**
+ * A signed-in actor with no membership: seeds a tenant with an admin and one member, the admin
+ * revokes the member, the member's POST /auth/refresh answers 403 (cookie cleared), then
+ * GET /auth/session re-issues it tenantless (the CA-04 steps).
+ */
+export async function tenantlessActor(playwright: Playwright, operator: Actor): Promise<Actor> {
+  tenantlessCounter += 1;
+  const label = `tenantless${tenantlessCounter}`;
+  const tenant = await seedTenant(playwright, operator, { slugBase: `${label}-t`, members: [{ label, role: 'member' }] });
+  const actor = tenant.members[label];
+  assert.ok(actor, 'tenantlessActor: the member was not seeded');
+
+  const membershipId = await membershipIdOf(tenant.admin, actor.accountId);
+  await expectData<unknown>(await mutate(tenant.admin, 'PATCH', `/api/v1/memberships/${membershipId}`, { status: 'revoked' }), 200);
+  await expectError(await mutate(actor, 'POST', '/api/v1/auth/refresh'), 403, 'MEMBERSHIP_REVOKED');
+  const session = await expectData<{ activeTenant: unknown; account: { role: unknown } }>(await actor.request.get('/api/v1/auth/session'), 200);
+  assert.equal(session.activeTenant, null, 'tenantlessActor: the re-issued session still has a tenant');
+  assert.equal(session.account.role, null, 'tenantlessActor: the re-issued session still has a role');
+  await tenant.admin.request.dispose();
+  return actor;
+}
