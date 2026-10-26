@@ -234,7 +234,9 @@ func TestApplyReleasesLockAfterFailure(t *testing.T) {
 	d := testpg.New(t, "migrate")
 	pool := d.Pool(t, 4)
 	_ = migrate.Apply(context.Background(), pool, logger(&bytes.Buffer{}), []migrate.Set{fixture("broken")})
-	if err := migrate.Apply(context.Background(), pool, logger(&bytes.Buffer{}), []migrate.Set{fixture("alpha")}); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := migrate.Apply(ctx, pool, logger(&bytes.Buffer{}), []migrate.Set{fixture("alpha")}); err != nil {
 		t.Fatalf("Apply after a failed run: %v", err)
 	}
 }

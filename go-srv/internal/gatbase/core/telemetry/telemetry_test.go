@@ -127,6 +127,18 @@ func TestMiddlewareSkipsHealthPaths(t *testing.T) {
 	}
 }
 
+func TestMiddlewareTracesPathsOutsideHealthPrefix(t *testing.T) {
+	tel := newTelemetry(t)
+	for _, path := range []string{"/healthz", "/health", "/api/v1/health/live"} {
+		t.Run(path, func(t *testing.T) {
+			rec := serve(tel, path, validParent)
+			if got := rec.Header().Get("X-Trace-Id"); got != validTraceID {
+				t.Fatalf("X-Trace-Id = %q on %s, want %q", got, path, validTraceID)
+			}
+		})
+	}
+}
+
 func TestMiddlewareNamesSpanAfterMuxPattern(t *testing.T) {
 	tel := newTelemetry(t)
 	var span trace.Span
