@@ -1,0 +1,91 @@
+# Playwright suite for ng-web (Angular 22) (initializer-e2e).
+# Manual run: gh workflow run e2e.yml --ref <branch> -f scope=smoke
+# Target-env URLs and credentials come from repository secrets (gh secret set <NAME>),
+# written into initializer-e2e/.env for the run and deleted afterwards.
+name: e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "smoke = @smoke only; e2e = @e2e only; all = everything"
+        type: choice
+        options: [smoke, e2e, all]
+        default: smoke
+      workers:
+        description: "Parallel Playwright workers"
+        type: string
+        default: "2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    name: playwright (${{ inputs.scope }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: initializer-e2e
+    env:
+      CI: "true"
+      PLAYWRIGHT_WORKERS: ${{ inputs.workers }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: initializer-e2e/package.json
+          cache: npm
+          cache-dependency-path: initializer-e2e/package-lock.json
+      - name: Install
+        run: |
+          npm ci
+          npm run install:browsers
+      # Add one line per secret your real tests need, and register it with gh secret set.
+      - name: Write .env from repository secrets
+        env:
+          WEB_BASE_URL: ${{ secrets.INIT_WEB_BASE_URL }}
+          USER_EMAIL: ${{ secrets.INIT_USER_EMAIL }}
+          USER_PASSWORD: ${{ secrets.INIT_USER_PASSWORD }}
+        run: |
+          umask 077
+          {
+            echo "INIT_WEB_BASE_URL=${WEB_BASE_URL}"
+            echo "INIT_USER_EMAIL=${USER_EMAIL}"
+            echo "INIT_USER_PASSWORD=${USER_PASSWORD}"
+            echo "PLAYWRIGHT_WORKERS=${PLAYWRIGHT_WORKERS}"
+          } > .env
+      - name: Type check
+        run: npm run typecheck
+      - name: Lint
+        # Lint warnings do not block the run; the stack CI job owns the lint gate.
+        run: npm run lint || true
+      - name: Run tests
+        env:
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          case "${SCOPE}" in
+            smoke) npx playwright test --grep @smoke ;;
+            e2e) npx playwright test --grep @e2e ;;
+            *) npx playwright test ;;
+          esac
+      - name: Upload report and results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-${{ inputs.scope }}-${{ github.run_id }}
+          path: |
+            initializer-e2e/playwright-report/
+            initializer-e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Remove .env
+        if: always()
+        run: rm -f .env

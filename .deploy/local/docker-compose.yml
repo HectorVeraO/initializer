@@ -1,0 +1,21 @@
+name: initializer
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: initializer
+      POSTGRES_USER: initializer
+      POSTGRES_PASSWORD: ${INITIALIZER_PG_PASSWORD:?set INITIALIZER_PG_PASSWORD in .deploy/local/.env}
+    ports:
+      - "10132:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U initializer -d initializer"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
