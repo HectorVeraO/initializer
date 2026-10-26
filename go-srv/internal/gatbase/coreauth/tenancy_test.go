@@ -380,33 +380,56 @@ func TestInvitationExpiryFollowsTheInjectedClock(t *testing.T) {
 	requireAPIError(t, err, 404, CodeInvitationInvalid)
 }
 
-func TestRevokeInvitation(t *testing.T) {
+func TestRevokeInvitationForeignUnknownOrMalformedIsNotFound(t *testing.T) {
 	e := newTenEnv(t)
 	tenantA := e.tenant("tenant-a")
 	tenantB := e.tenant("tenant-b")
 	admin := e.account("admin@example.com")
-	created, token := e.invite(tenantA.ID, admin.ID, janeEmail, reqctx.RoleMember)
+	created, _ := e.invite(tenantA.ID, admin.ID, janeEmail, reqctx.RoleMember)
 	ctx := context.Background()
 
 	_, foreign := e.svc.RevokeInvitation(ctx, tenantB.ID, created.Invitation.ID)
-	requireAPIError(t, foreign, 404, api.CodeResourceNotFound)
 	_, unknown := e.svc.RevokeInvitation(ctx, tenantA.ID, randomUUID(t))
-	requireAPIError(t, unknown, 404, api.CodeResourceNotFound)
 	_, malformed := e.svc.RevokeInvitation(ctx, tenantA.ID, "not-a-uuid")
+
+	requireAPIError(t, foreign, 404, api.CodeResourceNotFound)
+	requireAPIError(t, unknown, 404, api.CodeResourceNotFound)
 	requireAPIError(t, malformed, 404, api.CodeResourceNotFound)
 	if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
 		t.Fatalf("failed revokes changed the status to %s", got)
 	}
+}
 
-	view, err := e.svc.RevokeInvitation(ctx, tenantA.ID, created.Invitation.ID)
+func TestRevokeInvitationMarksItRevokedAndBlocksAccept(t *testing.T) {
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+	admin := e.account("admin@example.com")
+	jane := e.account(janeEmail)
+	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
+	ctx := context.Background()
+
+	view, err := e.svc.RevokeInvitation(ctx, tenant.ID, created.Invitation.ID)
+
 	if err != nil || view.Status != "revoked" || view.RevokedAt == nil || !view.RevokedAt.Equal(tenStart) {
 		t.Fatalf("revoke: %+v err=%v", view, err)
 	}
-	_, again := e.svc.RevokeInvitation(ctx, tenantA.ID, created.Invitation.ID)
-	requireAPIError(t, again, 409, CodeInvitationNotPending)
-	jane := e.account(janeEmail)
 	_, err = e.svc.AcceptInvitation(ctx, jane.ID, token)
 	requireAPIError(t, err, 404, CodeInvitationInvalid)
+}
+
+func TestRevokeInvitationTwiceIsNotPending(t *testing.T) {
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+	admin := e.account("admin@example.com")
+	created, _ := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
+	_, err := e.svc.RevokeInvitation(context.Background(), tenant.ID, created.Invitation.ID)
+	if err != nil {
+		t.Fatalf("first revoke: %v", err)
+	}
+
+	_, again := e.svc.RevokeInvitation(context.Background(), tenant.ID, created.Invitation.ID)
+
+	requireAPIError(t, again, 409, CodeInvitationNotPending)
 }
 
 func TestRevokeExpiredInvitationIsNotPending(t *testing.T) {
@@ -553,6 +576,7 @@ func TestAcceptInvitationReactivatesTheSameMembership(t *testing.T) {
 			jane := e.account(janeEmail)
 			old := e.member(tenant.ID, jane.ID, "viewer", status)
 			_, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleAdmin)
+			e.clock.advance(time.Hour)
 
 			view, err := e.svc.AcceptInvitation(context.Background(), jane.ID, token)
 
@@ -563,7 +587,7 @@ func TestAcceptInvitationReactivatesTheSameMembership(t *testing.T) {
 				t.Fatalf("view = %+v, want id %s admin active", view, old.ID)
 			}
 			row := e.membershipRow(tenant.ID, jane.ID)
-			if row.ID != old.ID || row.Role != "admin" || row.Status != "active" || !row.UpdatedAt.Equal(tenStart) {
+			if row.ID != old.ID || row.Role != "admin" || row.Status != "active" || !row.UpdatedAt.Equal(e.clock.Now()) {
 				t.Fatalf("row = %+v", row)
 			}
 			if n := e.count("SELECT count(*) FROM ten_memberships WHERE tenant_id = $1::uuid", tenant.ID); n != 1 {
