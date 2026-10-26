@@ -183,8 +183,11 @@ func TestCheckAccessMembershipStates(t *testing.T) {
 	_, err = env.access.CheckAccess(ctx, suspended.ID, &tenantID)
 	suspendedErr := requireDenied(t, err, coreauth.CodeMembershipRevoked)
 
-	if revokedErr.Message == suspendedErr.Message {
-		t.Fatalf("a suspended membership must have its own message, both say %q", revokedErr.Message)
+	if suspendedErr.Message != "The membership is suspended." {
+		t.Fatalf("suspended message = %q", suspendedErr.Message)
+	}
+	if revokedErr.Message != "The membership was revoked." {
+		t.Fatalf("revoked message = %q", revokedErr.Message)
 	}
 }
 
@@ -358,6 +361,39 @@ func TestLinkIdentityIsStableAndRefreshesChangedEmail(t *testing.T) {
 	}
 }
 
+func TestLinkIdentityMovesUpdatedAtOnlyWhenTheEmailChanges(t *testing.T) {
+	env := newAccessEnv(t)
+	ctx := context.Background()
+	later := coreauth.NewAccess(env.pool, clock.Fixed(accessNow.Add(time.Hour)), nil)
+	latest := coreauth.NewAccess(env.pool, clock.Fixed(accessNow.Add(2*time.Hour)), nil)
+	identity := env.scanString("SELECT gen_random_uuid()::text")
+	email := "jane-" + uniqueSuffix(t) + "@example.com"
+	created, err := env.access.LinkIdentity(ctx, identity, email)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if !created.UpdatedAt.Equal(accessNow) {
+		t.Fatalf("created updated_at = %v, want %v", created.UpdatedAt, accessNow)
+	}
+	unchanged, err := later.LinkIdentity(ctx, identity, email)
+	if err != nil {
+		t.Fatalf("unchanged: %v", err)
+	}
+	if !unchanged.UpdatedAt.Equal(accessNow) {
+		t.Fatalf("an upsert without a change moved updated_at to %v", unchanged.UpdatedAt)
+	}
+	changed, err := latest.LinkIdentity(ctx, identity, "renamed-"+email)
+	if err != nil {
+		t.Fatalf("changed: %v", err)
+	}
+	if !changed.UpdatedAt.Equal(accessNow.Add(2 * time.Hour)) {
+		t.Fatalf("an email change left updated_at at %v", changed.UpdatedAt)
+	}
+	if !changed.CreatedAt.Equal(accessNow) {
+		t.Fatalf("created_at moved to %v", changed.CreatedAt)
+	}
+}
+
 func TestLinkIdentityOperatorFlagAtCreationOnly(t *testing.T) {
 	env := newAccessEnv(t, "admin@example.com")
 	ctx := context.Background()
@@ -422,13 +458,19 @@ func TestSetLastActiveTenantPersistsAndRejectsBadIDs(t *testing.T) {
 	ctx := context.Background()
 	account := env.account()
 	tenantID := env.tenant("acme", "active")
-	err := env.access.SetLastActiveTenant(ctx, account.ID, tenantID)
+	later := coreauth.NewAccess(env.pool, clock.Fixed(accessNow.Add(time.Hour)), nil)
+	err := later.SetLastActiveTenant(ctx, account.ID, tenantID)
 	if err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	stored := env.scanString("SELECT last_active_tenant_id::text FROM iam_accounts WHERE id = $1::uuid", account.ID)
 	if stored != tenantID {
 		t.Fatalf("stored %s, want %s", stored, tenantID)
+	}
+	updatedAt := env.scanString("SELECT updated_at::text FROM iam_accounts WHERE id = $1::uuid", account.ID)
+	want := env.scanString("SELECT $1::timestamptz::text", accessNow.Add(time.Hour))
+	if updatedAt != want {
+		t.Fatalf("updated_at = %s, want %s", updatedAt, want)
 	}
 	for _, bad := range [][2]string{{"x", tenantID}, {account.ID, "x"}, {"", ""}} {
 		err = env.access.SetLastActiveTenant(ctx, bad[0], bad[1])
