@@ -15,12 +15,11 @@ The registry the lint reads is each module's `go-srv/internal/gatbase/<module>/m
 
 | Prefix | Module | Tables |
 |---|---|---|
-| `cor_` | Core: goose version tables | `cor_migrations_<module>` |
+| `cor_` | Core migration runner: goose version tables | `cor_migrations_<module>` (one goose version table per module) |
 | `ten_` | Tenancy and memberships (core) | `ten_tenants`, `ten_memberships`, `ten_invitations` |
 | `iam_` | Identity and API keys (core) | `iam_accounts`, `iam_api_keys` |
 | `sys_` | Parameters | `sys_parameters`, `sys_parameter_overrides` |
 | `flg_` | Feature flags | `flg_overrides`, `flg_tenant_overrides` |
-| `cor_` | Core migration runner | `cor_migrations_<module>` (one goose version table per module) |
 
 Reserved for planned catalog modules; `gates migrations` rejects a manifest that claims one (list: `tooling/gates/internal/migrationlint/reserved-prefixes.json`): `aud_` (audit log), `pln_` (plans and entitlements), `mtr_` (metering), `bil_` (billing), `mkc_` (maker-checker), `jbr_` (support ticket bridge), `stg_` (file storage).
 
