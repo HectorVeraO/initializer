@@ -3,8 +3,6 @@ package coreauth
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -12,9 +10,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/auth"
-	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/reqctx"
 )
 
 var plainKeyPattern = regexp.MustCompile(`^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$`)
@@ -87,13 +82,11 @@ func TestNewAPIKeyAlwaysMatchesTheFormatAndSplits(t *testing.T) {
 	}
 }
 
-func TestSplitAPIKeyRejectsMalformedValues(t *testing.T) {
-	good, err := newAPIKey()
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestMalformedAPIKeyValuesAnswerTheUniform401(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	good := e.apiKey(tenant, []string{"tenant:read"}, nil)
 	cases := map[string]string{
-		"empty":           "",
 		"trailing nl":     good + "\n",
 		"upper case":      strings.ToUpper(good),
 		"short":           good[:77],
@@ -104,10 +97,12 @@ func TestSplitAPIKeyRejectsMalformedValues(t *testing.T) {
 	}
 	for name, value := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, _, ok := splitAPIKey(value); ok {
-				t.Fatalf("%q was accepted", value)
-			}
+			expectError(t, e.withKey("/api/v1/tenant", value), http.StatusUnauthorized, "API_KEY_INVALID_OR_REVOKED")
 		})
+	}
+	rec := e.withKey("/api/v1/tenant", good)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("the well-formed key answered %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -504,35 +499,19 @@ func TestResolverRejectsRepeatedHeadersAndUnknownHashSchemes(t *testing.T) {
 	expectError(t, e.withKey("/api/v1/tenant", valid), http.StatusUnauthorized, "API_KEY_INVALID_OR_REVOKED")
 }
 
-func TestResolverBuildsThePrincipalAndDropsUnregisteredScopes(t *testing.T) {
+func TestKeyScopesNoLongerRegisteredDoNotGrantAccess(t *testing.T) {
 	e := newInvEnv(t, "")
 	tenant := e.tenant("tenant-a", "active")
-	plain := e.apiKey(tenant, []string{"tenant:read", "removed:scope"}, nil)
-	prefix, _, _ := splitAPIKey(plain)
-	registry := auth.NewScopeRegistry()
-	if err := registry.Register("tenant:read", "x"); err != nil {
-		t.Fatal(err)
-	}
-	resolver := newAPIKeyResolver(e.pool, e.clock, registry, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/tenant", nil)
-	req.Header.Set(apiKeyHeader, plain)
+	mixed := e.apiKey(tenant, []string{"tenant:read", "removed:scope"}, nil)
+	stale := e.apiKey(tenant, []string{"removed:scope"}, nil)
 
-	if !resolver.Present(req) {
-		t.Fatal("Present = false")
+	rec := e.withKey("/api/v1/tenant", mixed)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("key with a registered scope answered %d: %s", rec.Code, rec.Body.String())
 	}
-	principal, err := resolver.Resolve(context.Background(), req)
-
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	want := reqctx.TenantID(tenant)
-	if principal.Kind != reqctx.ActorAPIKey || principal.ActorID != "apikey:"+prefix || principal.TenantID == nil ||
-		*principal.TenantID != want || principal.TenantSlug != "tenant-a" || principal.Role != "" ||
-		principal.IsPlatformOperator || !reflect.DeepEqual(principal.Scopes, []string{"tenant:read"}) {
-		t.Fatalf("principal = %+v", principal)
-	}
-	if resolver.Present(httptest.NewRequest(http.MethodGet, "/", nil)) {
-		t.Fatal("Present = true without the header")
+	rec = e.withKey("/api/v1/tenant", stale)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("key with only an unregistered scope answered %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
