@@ -92,3 +92,100 @@ func ShowFile(dir, rev, path string) ([]byte, bool, error) {
 	}
 	return content, true, nil
 }
+
+// ChangeKind is the git status letter of a path between two revisions.
+type ChangeKind string
+
+const (
+	// ChangeAdded is a path that exists only in the later revision.
+	ChangeAdded ChangeKind = "A"
+	// ChangeModified is a path whose content or mode changed.
+	ChangeModified ChangeKind = "M"
+	// ChangeDeleted is a path that exists only in the earlier revision.
+	ChangeDeleted ChangeKind = "D"
+	// ChangeRenamed is a path moved from OldPath to Path (similarity-detected).
+	ChangeRenamed ChangeKind = "R"
+)
+
+// Change is one entry of a name-status diff. Paths use forward slashes.
+type Change struct {
+	Kind ChangeKind
+	// Path is the path in the later revision (the earlier one for deletions).
+	Path string
+	// OldPath is set only for ChangeRenamed.
+	OldPath string
+}
+
+// DiffNameStatus lists the changes under pathspec between from and to, with
+// rename detection. Type changes are reported as modifications and copies as
+// additions.
+func DiffNameStatus(dir, from, to, pathspec string) ([]Change, error) {
+	for _, rev := range []string{from, to} {
+		err := validateRev(rev)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if pathspec == "" || strings.HasPrefix(pathspec, "-") {
+		return nil, fmt.Errorf("invalid path %q", pathspec)
+	}
+	out, _, err := git(dir, "diff", "--name-status", "-M", "-z", from, to, "--", pathspec)
+	if err != nil {
+		return nil, err
+	}
+	fields := strings.Split(string(out), "\x00")
+	var changes []Change
+	for i := 0; i < len(fields); i++ {
+		status := fields[i]
+		if status == "" {
+			continue
+		}
+		switch status[0] {
+		case 'R', 'C':
+			if i+2 >= len(fields) {
+				return nil, fmt.Errorf("parse git diff output: truncated %q entry", status)
+			}
+			kind := ChangeRenamed
+			if status[0] == 'C' {
+				kind = ChangeAdded
+			}
+			changes = append(changes, Change{Kind: kind, OldPath: fields[i+1], Path: fields[i+2]})
+			i += 2
+		case 'A', 'M', 'D', 'T':
+			if i+1 >= len(fields) {
+				return nil, fmt.Errorf("parse git diff output: truncated %q entry", status)
+			}
+			kind := ChangeKind(status[:1])
+			if status[0] == 'T' {
+				kind = ChangeModified
+			}
+			changes = append(changes, Change{Kind: kind, Path: fields[i+1]})
+			i++
+		default:
+			return nil, fmt.Errorf("parse git diff output: unknown status %q", status)
+		}
+	}
+	return changes, nil
+}
+
+// ListFiles returns the files under pathspec at rev, sorted, with forward slashes.
+func ListFiles(dir, rev, pathspec string) ([]string, error) {
+	err := validateRev(rev)
+	if err != nil {
+		return nil, err
+	}
+	if pathspec == "" || strings.HasPrefix(pathspec, "-") {
+		return nil, fmt.Errorf("invalid path %q", pathspec)
+	}
+	out, _, err := git(dir, "ls-tree", "-r", "--name-only", "-z", rev, "--", pathspec)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, name := range strings.Split(string(out), "\x00") {
+		if name != "" {
+			files = append(files, name)
+		}
+	}
+	return files, nil
+}

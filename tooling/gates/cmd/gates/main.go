@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/flagscheck"
+	"github.com/HectorVeraO/initializer/tooling/gates/internal/migrationlint"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/repo"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/report"
 )
@@ -23,7 +24,7 @@ const (
 	defaultBaseRev  = "origin/main"
 	defaultWarnDays = 7
 	flagsFileName   = "flags.yaml"
-	usage           = "usage: gates flags --root <dir> [--base-rev <rev>] [--today YYYY-MM-DD] [--warn-days N]"
+	usage           = "usage: gates flags --root <dir> [--base-rev <rev>] [--today YYYY-MM-DD] [--warn-days N]\n       gates migrations --root <dir> [--base-rev <rev>]"
 )
 
 func main() {
@@ -44,6 +45,8 @@ func runWith(args []string, stdout, stderr io.Writer, now func() time.Time, gete
 	switch args[0] {
 	case "flags":
 		return runFlags(args[1:], stdout, stderr, now, getenv)
+	case "migrations":
+		return runMigrations(args[1:], stdout, stderr, getenv)
 	default:
 		fmt.Fprintf(stderr, "unknown subcommand %q\n%s\n", args[0], usage)
 		return exitUsage
@@ -104,11 +107,59 @@ func runFlags(args []string, stdout, stderr io.Writer, now func() time.Time, get
 		return exitUsage
 	}
 
+	return finish(violations, stdout, stderr, getenv)
+}
+
+func runMigrations(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
+	fs := flag.NewFlagSet("gates migrations", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	root := fs.String("root", ".", "repository root")
+	baseRev := fs.String("base-rev", "", "base revision (default origin/main)")
+	err := fs.Parse(args)
+	if errors.Is(err, flag.ErrHelp) {
+		return exitOK
+	}
+	if err != nil {
+		return exitUsage
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(stderr, "unexpected argument %q\n%s\n", fs.Arg(0), usage)
+		return exitUsage
+	}
+	rootDir, err := filepath.Abs(*root)
+	if err != nil {
+		fmt.Fprintf(stderr, "resolve root: %v\n", err)
+		return exitUsage
+	}
+	rev := *baseRev
+	if rev == "" {
+		rev = defaultBaseRev
+	}
+	sha, err := resolveBase(rootDir, rev)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	violations, checked, err := migrationlint.Lint(migrationlint.Options{Root: rootDir, BaseRev: sha})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	code := finish(violations, stdout, stderr, getenv)
+	if code == exitUsage {
+		return code
+	}
+	fmt.Fprintf(stdout, "%d migration files checked\n", checked)
+	return code
+}
+
+// finish prints the violations and returns the exit code for them.
+func finish(violations []report.Violation, stdout, stderr io.Writer, getenv func(string) string) int {
 	printer := report.NewPlainPrinter(stdout)
 	if getenv("GITHUB_ACTIONS") == "true" {
 		printer = report.NewGitHubPrinter(stdout)
 	}
-	err = printer.Print(violations)
+	err := printer.Print(violations)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
@@ -141,12 +192,9 @@ func resolveToday(text string, now func() time.Time) (time.Time, error) {
 // loadBase returns flags.yaml at the merge base of rev and HEAD, or nil when
 // the file did not exist there.
 func loadBase(root, rev string) ([]byte, error) {
-	sha, err := repo.ResolveRev(root, rev)
-	if errors.Is(err, repo.ErrRevNotFound) {
-		return nil, fmt.Errorf("base revision %s not found; fetch with fetch-depth: 0", rev)
-	}
+	sha, err := resolveBase(root, rev)
 	if err != nil {
-		return nil, fmt.Errorf("resolve base revision %s: %w", rev, err)
+		return nil, err
 	}
 	mergeBase, err := repo.MergeBase(root, sha, "HEAD")
 	if err != nil {
@@ -164,4 +212,16 @@ func loadBase(root, rev string) ([]byte, error) {
 		content = []byte{}
 	}
 	return content, nil
+}
+
+// resolveBase returns the commit id of rev, with the error text the CLI prints.
+func resolveBase(root, rev string) (string, error) {
+	sha, err := repo.ResolveRev(root, rev)
+	if errors.Is(err, repo.ErrRevNotFound) {
+		return "", fmt.Errorf("base revision %s not found; fetch with fetch-depth: 0", rev)
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve base revision %s: %w", rev, err)
+	}
+	return sha, nil
 }

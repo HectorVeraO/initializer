@@ -88,7 +88,7 @@ jobs:
         run: go -C tooling/gates vet ./...
       - name: Test
         run: go -C tooling/gates test ./...
-      - name: Check flags.yaml
+      - name: Check flags.yaml and migrations
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
@@ -101,6 +101,7 @@ jobs:
             base="${PUSH_BEFORE_SHA}"
           fi
           go -C tooling/gates run ./cmd/gates flags --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
+          go -C tooling/gates run ./cmd/gates migrations --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
 
   node-ng-web:
     name: node (ng-web)
