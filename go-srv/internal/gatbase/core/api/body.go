@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"math/big"
 	"mime"
 	"net/http"
 	"strconv"
@@ -257,12 +258,15 @@ func parseIntegral(raw json.RawMessage) (int64, bool) {
 	if !hasExponent {
 		return 0, false
 	}
-	f, err := strconv.ParseFloat(s, 64)
-	mantissa, _, _ := strings.Cut(strings.ToLower(s), "e")
-	underflowed := f == 0 && strings.Trim(mantissa, "-0.") != ""
-	isExactInteger := err == nil && !underflowed && f == math.Trunc(f) && math.Abs(f) <= maxExactFloatInt
+	// Exact rational arithmetic: float64 rounding would alter an integer above 2^53.
+	rat, parsed := new(big.Rat).SetString(s)
+	if !parsed || !rat.IsInt() {
+		return 0, false
+	}
+	integer := rat.Num()
+	isExactInteger := integer.IsInt64() && integer.Int64() >= -maxExactFloatInt && integer.Int64() <= maxExactFloatInt
 	if !isExactInteger {
 		return 0, false
 	}
-	return int64(f), true
+	return integer.Int64(), true
 }

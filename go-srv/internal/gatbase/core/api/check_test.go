@@ -70,10 +70,13 @@ func TestCheckIntRangeBoundaries(t *testing.T) {
 			t.Fatalf("%d rejected", v)
 		}
 	}
-	api.CheckIntRange(&p, "n", 0, 1, 10)
-	api.CheckIntRange(&p, "n", 11, 1, 10)
-	if p.Len() != 2 {
-		t.Fatalf("len = %d", p.Len())
+	if api.CheckIntRange(&p, "low", 0, 1, 10) || api.CheckIntRange(&p, "high", 11, 1, 10) {
+		t.Fatal("out-of-range value accepted")
+	}
+	got := issuesOf(&p)
+	want := []issueView{{"low", api.CodeFieldOutOfRange}, {"high", api.CodeFieldOutOfRange}}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("issues = %v, want %v", got, want)
 	}
 }
 

@@ -130,9 +130,13 @@ func TestMalformedTraceIDIsTreatedAsMissing(t *testing.T) {
 		rec := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
 		r = r.WithContext(ctxkey.WithTraceID(r.Context(), bad))
-		newTestWriter(&bytes.Buffer{}).Data(rec, r, http.StatusOK, nil)
+		var logs bytes.Buffer
+		newTestWriter(&logs).Data(rec, r, http.StatusOK, nil)
 		if !strings.Contains(rec.Body.String(), strings.Repeat("0", 32)) {
 			t.Errorf("trace %q not replaced: %s", bad, rec.Body)
+		}
+		if !strings.Contains(logs.String(), `"msg":"trace_context_missing"`) {
+			t.Errorf("trace %q: no WARN logged: %s", bad, logs.String())
 		}
 	}
 }
@@ -156,7 +160,7 @@ func TestFailPlainErrorNeverLeaksText(t *testing.T) {
 	if env.Error.Code != api.CodeInternalError || env.Error.Message != "Internal error" || env.Error.Issues == nil || len(env.Error.Issues) != 0 {
 		t.Fatalf("error = %+v", env.Error)
 	}
-	if !strings.Contains(logs.String(), "usr_accounts") || !strings.Contains(logs.String(), `"msg":"request_failed"`) {
+	if !strings.Contains(logs.String(), "usr_accounts") || !strings.Contains(logs.String(), `"msg":"request_failed"`) || !strings.Contains(logs.String(), `"err":`) {
 		t.Fatalf("cause not logged: %s", logs.String())
 	}
 }

@@ -51,20 +51,20 @@ func (w *Writer) Data(rw http.ResponseWriter, r *http.Request, status int, data 
 
 // Fail writes err. An *Error (found with errors.As) is written as is, and a
 // 5xx *Error logs its cause at ERROR ("request_failed"). Any other error is
-// logged with ErrorContext ("request_failed", attribute "error") and answered
+// logged with ErrorContext ("request_failed", attribute "err") and answered
 // 500 INTERNAL_ERROR "Internal error". Never an internal message, SQL text or
 // stack.
 func (w *Writer) Fail(rw http.ResponseWriter, r *http.Request, err error) {
 	var apiErr *Error
 	isWireError := errors.As(err, &apiErr) && apiErr != nil && apiErr.Status >= 400 && apiErr.Status <= 599
 	if !isWireError {
-		w.logger.ErrorContext(r.Context(), "request_failed", slog.Any("error", err))
+		w.logger.ErrorContext(r.Context(), "request_failed", slog.Any("err", err))
 		apiErr = NewError(http.StatusInternalServerError, CodeInternalError, "Internal error")
 	} else if apiErr.Status >= 500 {
 		w.logger.ErrorContext(r.Context(), "request_failed",
 			slog.Int("status", apiErr.Status),
 			slog.String("code", string(apiErr.Code)),
-			slog.Any("error", apiErr.Unwrap()))
+			slog.Any("err", apiErr.Unwrap()))
 	}
 	meta := w.meta(r)
 	body, marshalErr := json.Marshal(Envelope[any]{Meta: meta, Error: apiErr})
