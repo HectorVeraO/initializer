@@ -148,12 +148,16 @@ func CheckFile(filePath string, src []byte, module string) []Finding {
 }
 
 func checkGoMod(src []byte, module string) []Finding {
+	firstLine := src
+	if end := bytes.IndexByte(src, '\n'); end >= 0 {
+		firstLine = src[:end]
+	}
+	if string(firstLine) != "module "+module {
+		return []Finding{{Rule: RuleModulePathLeak, Line: 1, Detail: "go.mod line 1 must be exactly \"module " + module + "\""}}
+	}
 	offsets := occurrences(src, module)
 	if len(offsets) == 1 {
 		return nil
-	}
-	if len(offsets) == 0 {
-		return []Finding{{Rule: RuleModulePathLeak, Line: 1, Detail: "module path " + module + " is missing"}}
 	}
 	return []Finding{{
 		Rule:   RuleModulePathLeak,

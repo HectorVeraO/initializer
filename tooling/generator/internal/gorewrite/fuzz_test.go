@@ -42,6 +42,12 @@ func FuzzRewriteModuleLine(f *testing.F) {
 		if err != nil {
 			return
 		}
+		wantPrefix := "module " + target
+		hasTargetLine := bytes.HasPrefix(out, []byte(wantPrefix))
+		hasSameRest := hasTargetLine && bytes.Equal(out[len(wantPrefix):], gomod[len("module "+source):])
+		if !hasSameRest {
+			t.Fatalf("output is not the target module line plus the unchanged rest:\n%s", out)
+		}
 		if bytes.Contains(out, []byte(source)) {
 			t.Fatalf("output still holds the source module path:\n%s", out)
 		}

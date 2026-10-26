@@ -322,6 +322,7 @@ func TestCheckFile(t *testing.T) {
 		{"go.mod once", GoModPath, "module example.com/fixture/srv\n", "", 0},
 		{"go.mod replace", GoModPath, "module example.com/fixture/srv\nreplace a => example.com/fixture/srv/x\n", "R1", 2},
 		{"go.mod without module", GoModPath, "module example.com/other\n", "R1", 1},
+		{"go.mod module line only prefixed", GoModPath, "module example.com/fixture/srv/v2\n", "R1", 1},
 		{"other file leak", "docs/readme.md", "line one\nsee example.com/fixture/srv\n", "R1", 2},
 		{"other file clean", "docs/readme.md", "nothing here\n", "", 0},
 		{"windows separators", "go-srv\\go.mod", "module example.com/fixture/srv\n", "", 0},
