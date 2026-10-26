@@ -391,7 +391,7 @@ func TestBreakingChangeWithoutMarkerOrMajorFailsBoth(t *testing.T) {
 	vs := check(t, dir)
 	wantRules(t, vs, contractgate.RuleBreakingUnmarked, contractgate.RuleBreakingNotMajor)
 	for _, v := range vs {
-		if !strings.Contains(v.Message, "name") {
+		if !strings.Contains(v.Message, "removed the required property") {
 			t.Errorf("message lacks oasdiff output: %q", v.Message)
 		}
 	}
@@ -577,6 +577,10 @@ func FuzzCheckStructure(f *testing.F) {
 	f.Fuzz(func(t *testing.T, content string) {
 		writeSpec(t, dir, "alpha", content, manifest)
 		vs, err := contractgate.Check(context.Background(), contractgate.Options{Root: dir, BaseRev: "main"})
+		// Unparseable YAML is a designed error; any other error is a defect.
+		if err != nil && strings.HasPrefix(err.Error(), "parse ") {
+			return
+		}
 		if err != nil {
 			t.Fatalf("Check failed on spec %q: %v", content, err)
 		}
