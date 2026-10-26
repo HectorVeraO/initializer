@@ -8,6 +8,7 @@ import (
 func FuzzBuildComponent(f *testing.F) {
 	f.Add(`{"module":"core","version":"0.1.0","files":["go-srv/",{"path":"a","target":"b"}],"exclude":["x/"]}`)
 	f.Add(`{"files":[5,null,"..", "a\\b"]}`)
+	f.Add(`{"module":"core","version":"0.1.0","files":["a\\b","./c","d/./e","","ok.go"],"exclude":["x\\y/"]}`)
 	f.Add(`[]`)
 	f.Fuzz(func(t *testing.T, raw string) {
 		for _, loc := range locations {

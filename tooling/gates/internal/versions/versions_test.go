@@ -415,3 +415,99 @@ func TestCancelledContextStopsWork(t *testing.T) {
 		t.Fatal("want an error")
 	}
 }
+
+func TestDuplicateComponentNameKeepsFirstAndReportsSecond(t *testing.T) {
+	requireGit(t)
+	dir := t.TempDir()
+	writeAt(t, dir, "go-srv/internal/gatbase/a/module.manifest.json",
+		moduleManifest("dup", "0.1.0", `["a.go"]`, `[]`))
+	writeAt(t, dir, "go-srv/internal/gatbase/b/module.manifest.json",
+		moduleManifest("dup", "0.1.0", `["b.go"]`, `[]`))
+	components, violations, err := versions.Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover error: %v", err)
+	}
+	if len(components) != 1 || !slices.Equal(components[0].Paths, []string{"a.go"}) {
+		t.Fatalf("components = %+v", components)
+	}
+	if len(violations) != 1 || violations[0].Rule != versions.RuleVersionInvalid ||
+		violations[0].Path != "go-srv/internal/gatbase/b/module.manifest.json" {
+		t.Fatalf("violations = %v", violations)
+	}
+}
+
+func TestManifestEntriesAreNormalizedOrRejected(t *testing.T) {
+	requireGit(t)
+	dir := t.TempDir()
+	writeAt(t, dir, "go-srv/internal/gatbase/y/module.manifest.json",
+		moduleManifest("y", "0.1.0", `["dir\\file.go", "", ".", "a/./b", "ok.go"]`, `["x\\y/", ""]`))
+	components, violations, err := versions.Discover(dir)
+	if err != nil {
+		t.Fatalf("Discover error: %v", err)
+	}
+	if len(violations) != 4 {
+		t.Fatalf("violations = %v", violations)
+	}
+	if len(components) != 1 ||
+		!slices.Equal(components[0].Paths, []string{"dir/file.go", "ok.go"}) ||
+		!slices.Equal(components[0].Exclude, []string{"x/y/"}) {
+		t.Fatalf("components = %+v", components)
+	}
+}
+
+func TestRootLevelFolderEntryWithoutSlashIsInvalid(t *testing.T) {
+	dir := baseRepo(t)
+	writeAt(t, dir, "go-srv/internal/gatbase/other/module.manifest.json",
+		moduleManifest("other", "0.1.0", `["go-srv"]`, `[]`))
+	commitAll(t, dir, "root folder entry")
+	found, _ := check(t, dir)
+	if !slices.Contains(found, versions.RuleVersionInvalid) {
+		t.Fatalf("got %v", found)
+	}
+	_, violations, err := versions.Discover(dir)
+	if err != nil || len(violations) != 1 || violations[0].Rule != versions.RuleVersionInvalid {
+		t.Fatalf("violations = %v, err = %v", violations, err)
+	}
+}
+
+func TestNgWebModulesAreDiscoveredAndBumpChecked(t *testing.T) {
+	dir := baseRepo(t)
+	writeAt(t, dir, "ng-web/src/app/gatbase/widget/module.manifest.json",
+		`{"schema":1,"stack":"ng-web","module":"widget","version":"0.1.0","files":["ng-web/src/app/gatbase/widget/"],"exclude":[]}`)
+	writeAt(t, dir, "ng-web/src/app/gatbase/widget/widget.ts", "export {}\n")
+	commitAll(t, dir, "ng-web module")
+	components, violations, err := versions.Discover(dir)
+	if err != nil || len(violations) != 0 {
+		t.Fatalf("err = %v, violations = %v", err, violations)
+	}
+	var names []string
+	for _, c := range components {
+		names = append(names, c.Name)
+	}
+	if !slices.Contains(names, "ng-web-widget") {
+		t.Fatalf("names = %v", names)
+	}
+	runGit(t, dir, "branch", "-f", "main", "topic")
+	writeAt(t, dir, "ng-web/src/app/gatbase/widget/widget.ts", "export const a = 1\n")
+	commitAll(t, dir, "change")
+	found, paths := check(t, dir)
+	if rules(found) != versions.RuleVersionNotBumped || !strings.Contains(paths[0], "/widget/") {
+		t.Fatalf("got %v %v", found, paths)
+	}
+}
+
+func TestCheckBumpsComparesAgainstTheMergeBaseNotTheMainTip(t *testing.T) {
+	dir := baseRepo(t)
+	writeAt(t, dir, "specs/alpha/openapi.yaml", "openapi: 3.0.3\ninfo: {}\n")
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("0.2.0"))
+	commitAll(t, dir, "topic bump")
+	runGit(t, dir, "switch", "main")
+	writeAt(t, dir, "specs/alpha/openapi.yaml", "openapi: 3.0.3\ninfo: {title: x}\n")
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("0.3.0"))
+	commitAll(t, dir, "main advanced")
+	runGit(t, dir, "switch", "topic")
+	found, _ := check(t, dir)
+	if len(found) != 0 {
+		t.Fatalf("got %v", found)
+	}
+}

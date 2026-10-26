@@ -110,7 +110,11 @@ func (s gitSource) subdirs(dir string) ([]string, error) {
 	seen := map[string]bool{}
 	var names []string
 	for _, file := range files {
-		rest, ok := strings.CutPrefix(file, dir+"/")
+		prefix := dir + "/"
+		if dir == "." {
+			prefix = ""
+		}
+		rest, ok := strings.CutPrefix(file, prefix)
 		name, _, nested := strings.Cut(rest, "/")
 		if ok && nested && !seen[name] {
 			seen[name] = true
@@ -242,7 +246,7 @@ func folderEntriesWithoutSlash(src source, c Component) ([]report.Violation, err
 	entries := append(append([]string{}, c.Paths...), c.Exclude...)
 	for _, entry := range entries {
 		parent := path.Dir(entry)
-		if strings.HasSuffix(entry, "/") || parent == "." {
+		if strings.HasSuffix(entry, "/") {
 			continue
 		}
 		siblings, err := src.subdirs(parent)
