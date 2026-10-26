@@ -20,3 +20,7 @@ var (
 	// ErrAlreadyExists is returned when an insert violates a unique constraint.
 	ErrAlreadyExists = errors.New("coreauth: already exists")
 )
+
+// CodeIdentityProviderUnavailable is the 503 answered when Kratos cannot
+// answer during a session issue.
+const CodeIdentityProviderUnavailable api.Code = "IDENTITY_PROVIDER_UNAVAILABLE"

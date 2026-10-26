@@ -152,7 +152,7 @@ func TestProvideRegistersTheCoreScopes(t *testing.T) {
 	}
 }
 
-func TestModuleMountsNoRoutes(t *testing.T) {
+func TestUnmountedTenantRouteAnswersTheFallback(t *testing.T) {
 	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
 		Database: true,
 		Config:   map[string]string{"GATBASE_SESSION_KEYS": randomSessionKeys(t)},
