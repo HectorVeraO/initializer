@@ -195,8 +195,8 @@ components:
           $ref: '#/components/schemas/ApiError'
     ApiErrorCode:
       type: string
-      description: Top-level error.code; a code is contract and renaming one is a breaking change.
-      enum:
+      description: Top-level error.code. The set grows (x-extensible-enum), so a client treats an unknown code as a generic error; renaming or removing a code is a breaking change.
+      x-extensible-enum:
         - SESSION_INVALID
         - CSRF_TOKEN_INVALID
         - ACCOUNT_LOCKED_OR_DISABLED
@@ -213,8 +213,8 @@ components:
         - IDENTITY_PROVIDER_UNAVAILABLE
     ApiIssueCode:
       type: string
-      description: error.issues[].code, always under a 422 VALIDATION_FAILED.
-      enum:
+      description: error.issues[].code, always under a 422 VALIDATION_FAILED. The set grows (x-extensible-enum), so a client treats an unknown code as a generic problem.
+      x-extensible-enum:
         - BODY_MALFORMED
         - FIELD_REQUIRED
         - FIELD_TYPE_INVALID
