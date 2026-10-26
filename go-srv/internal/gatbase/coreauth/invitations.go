@@ -470,10 +470,61 @@ func (s *tenancy) createIdentity(ctx context.Context, email, password string) (k
 	if errors.Is(err, kratos.ErrIdentityExists) {
 		return kratos.Identity{}, exists
 	}
+	if errors.Is(err, kratos.ErrPasswordRejected) {
+		var problems api.Problems
+		problems.Add("password", CodePasswordRejected, "The password was rejected by the password policy.")
+		return kratos.Identity{}, problems.Err()
+	}
 	if err != nil {
 		return kratos.Identity{}, identityError(err)
 	}
 	return identity, nil
+}
+
+// ListInvitations pages the tenant's invitations whose derived status at now
+// is status (pending, accepted, revoked or expired), and the total count.
+func (s *tenancy) ListInvitations(ctx context.Context, tenantID, status string, q api.PageQuery) ([]InvitationView, int64, error) {
+	tenant, tenantOK := api.ParseUUID(tenantID)
+	filter, filterOK := statusFilters[status]
+	if !tenantOK || !filterOK || q.Page < 1 || q.Size < 1 {
+		return nil, 0, errors.New("coreauth: list invitations: tenant id, status and page are required")
+	}
+	now := s.clock.Now()
+	var total int64
+	err := s.pool.QueryRow(ctx, "SELECT count(*) FROM ten_invitations WHERE tenant_id = $1::uuid AND "+filter, tenant, now).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: count invitations: %w", err)
+	}
+	direction := "ASC"
+	if q.SortDesc {
+		direction = "DESC"
+	}
+	rows, err := s.pool.Query(ctx,
+		"SELECT "+invitationColumns+" FROM ten_invitations WHERE tenant_id = $1::uuid AND "+filter+
+			" ORDER BY created_at "+direction+", id "+direction+" LIMIT $3 OFFSET $4",
+		tenant, now, q.Size, q.Offset())
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: list invitations: %w", err)
+	}
+	found, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (invitationRow, error) {
+		return scanInvitation(row)
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("coreauth: list invitations: %w", err)
+	}
+	views := make([]InvitationView, 0, len(found))
+	for _, item := range found {
+		views = append(views, item.view(now))
+	}
+	return views, total, nil
+}
+
+// statusFilters are the SQL forms of invitationRow.status; $2 is now.
+var statusFilters = map[string]string{
+	invitationPending:  "accepted_at IS NULL AND revoked_at IS NULL AND expires_at > $2",
+	invitationAccepted: "accepted_at IS NOT NULL AND $2::timestamptz IS NOT NULL",
+	invitationRevoked:  "revoked_at IS NOT NULL AND $2::timestamptz IS NOT NULL",
+	invitationExpired:  "accepted_at IS NULL AND revoked_at IS NULL AND expires_at <= $2",
 }
 
 // identityError maps an unreachable Kratos to 503. The cause is kept for the

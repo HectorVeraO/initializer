@@ -98,6 +98,8 @@ func (a *Admin) CreatePasswordIdentity(ctx context.Context, email, password stri
 	switch {
 	case status == http.StatusConflict:
 		return Identity{}, ErrIdentityExists
+	case status == http.StatusBadRequest:
+		return Identity{}, ErrPasswordRejected
 	case status >= http.StatusInternalServerError:
 		return Identity{}, fmt.Errorf("%w: create answered %d", ErrUnavailable, status)
 	case status != http.StatusCreated:

@@ -35,8 +35,7 @@ type TenantCreated struct {
 	InvitationURL string         `json:"invitationUrl"`
 }
 
-// tenancy holds the tenant, invitation and membership services. It is
-// package-internal and reachable from no route yet: the route tracks call it.
+// tenancy holds the tenant, invitation and membership services behind the routes.
 // Every timestamp it writes or compares comes from clock, never SQL now().
 type tenancy struct {
 	pool           *pgxpool.Pool
@@ -103,4 +102,50 @@ func (s *tenancy) CreateTenant(ctx context.Context, operatorID, slug, name, admi
 
 func tenantView(t Tenant) TenantView {
 	return TenantView{ID: t.ID, Slug: t.Slug, Name: t.Name, Status: t.Status, CreatedAt: t.CreatedAt.UTC()}
+}
+
+func (rt *tenancyRoutes) createTenant(w http.ResponseWriter, r *http.Request) {
+	principal, ok := callerOf(r)
+	if !ok {
+		rt.writer.Fail(w, r, sessionInvalid())
+		return
+	}
+	body, err := api.DecodeBody(r)
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	var p api.Problems
+	slug, slugOK := readSlug(body, &p)
+	name, nameOK := readTrimmedName(body, &p, "name", maxTenantNameLength)
+	adminEmail, emailOK := readEmail(body, &p, "adminEmail")
+	err = p.Err()
+	if err != nil || !slugOK || !nameOK || !emailOK {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	created, err := rt.tenancy.CreateTenant(r.Context(), principal.ActorID, slug, name, adminEmail)
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	rt.writer.Data(w, r, http.StatusCreated, created)
+}
+
+// readSlug validates the slug field: required string matching the slug
+// pattern and not UUID-shaped.
+func readSlug(body *api.Body, p *api.Problems) (string, bool) {
+	value, ok := body.String(p, "slug", api.Required)
+	if !ok {
+		return "", false
+	}
+	if value == "" {
+		p.Add("slug", api.CodeFieldRequired, "Field is required")
+		return "", false
+	}
+	if !isValidSlug(value) {
+		p.Add("slug", api.CodeFieldInvalidFmt, "Must be 3 to 40 characters of a-z, 0-9 and -, not start or end with -, and not a UUID")
+		return "", false
+	}
+	return value, true
 }

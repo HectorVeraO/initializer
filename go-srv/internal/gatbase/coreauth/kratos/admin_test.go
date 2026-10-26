@@ -136,8 +136,8 @@ func TestCreatePasswordIdentityRejectionIsNeitherExistsNorUnavailable(t *testing
 
 	_, err := admin.CreatePasswordIdentity(context.Background(), "a@example.com", "pw-for-test")
 
-	if err == nil || errors.Is(err, kratos.ErrIdentityExists) || errors.Is(err, kratos.ErrUnavailable) {
-		t.Fatalf("want a distinct error, got %v", err)
+	if !errors.Is(err, kratos.ErrPasswordRejected) || errors.Is(err, kratos.ErrIdentityExists) || errors.Is(err, kratos.ErrUnavailable) {
+		t.Fatalf("want ErrPasswordRejected alone, got %v", err)
 	}
 	if strings.Contains(err.Error(), "pw-for-test") {
 		t.Fatal("error carries the password")

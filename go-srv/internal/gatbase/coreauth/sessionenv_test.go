@@ -187,6 +187,10 @@ func (m mapFlags) Snapshot(_ context.Context, _ *reqctx.TenantID) map[featurefla
 
 type sessEnvOptions struct {
 	flags featureflag.Evaluator
+	// adminURL is the Kratos admin fake; empty keeps the default.
+	adminURL string
+	// operatorEmails is GATBASE_PLATFORM_OPERATOR_EMAILS.
+	operatorEmails string
 }
 
 // sessEnv is core.Build with the module, a probe route and fakes at the boundary.
@@ -225,13 +229,20 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 			return nil
 		},
 	}
+	settings := map[string]string{
+		"GATBASE_PUBLIC_BASE_URL":   sessTestPublicURL,
+		"GATBASE_SESSION_KEYS":      keys,
+		"GATBASE_KRATOS_PUBLIC_URL": fake.server.URL,
+	}
+	if opts.adminURL != "" {
+		settings["GATBASE_KRATOS_ADMIN_URL"] = opts.adminURL
+	}
+	if opts.operatorEmails != "" {
+		settings["GATBASE_PLATFORM_OPERATOR_EMAILS"] = opts.operatorEmails
+	}
 	app, err := core.Build(context.Background(), core.Options{
-		Logger: slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Config: config.MapSource(map[string]string{
-			"GATBASE_PUBLIC_BASE_URL":   sessTestPublicURL,
-			"GATBASE_SESSION_KEYS":      keys,
-			"GATBASE_KRATOS_PUBLIC_URL": fake.server.URL,
-		}),
+		Logger:        slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Config:        config.MapSource(settings),
 		Clock:         clk,
 		Pool:          pool,
 		FlagEvaluator: opts.flags,
