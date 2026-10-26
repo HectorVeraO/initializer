@@ -321,6 +321,22 @@ func (e *bootstrapEnv) count(table string) int {
 	return total
 }
 
+// advisoryLockHolders counts the granted bootstrap locks in this database,
+// read from pg_locks so a re-entrant lock on the same session cannot hide a leak.
+func (e *bootstrapEnv) advisoryLockHolders() int {
+	e.t.Helper()
+	var holders int
+	err := e.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM pg_locks
+ WHERE locktype = 'advisory' AND granted
+ AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+ AND ((classid::bigint << 32) | objid::bigint) = $1`, bootstrapLockKey).Scan(&holders)
+	if err != nil {
+		e.t.Fatalf("read pg_locks: %v", err)
+	}
+	return holders
+}
+
 func (e *bootstrapEnv) assertNoSecretInLogs() {
 	e.t.Helper()
 	text := strings.ToLower(e.logs.String())
@@ -590,13 +606,42 @@ func TestKratosDownPastTheTimeoutFailsBuildAndReleasesTheLock(t *testing.T) {
 	if env.count("ten_tenants") != 0 || env.count("iam_accounts") != 0 {
 		t.Error("a failed bootstrap left rows behind")
 	}
-	// The failed run must have released its lock and its connection.
-	var isFree bool
-	err = env.pool.QueryRow(context.Background(), "SELECT pg_try_advisory_lock($1)", bootstrapLockKey).Scan(&isFree)
-	if err != nil || !isFree {
-		t.Errorf("the bootstrap lock is still held (err %v)", err)
+	// The failed run must have released its lock: no session holds it.
+	if env.advisoryLockHolders() != 0 {
+		t.Error("the bootstrap lock is still held after a failed run")
 	}
 	env.assertNoSecretInLogs()
+}
+
+func TestALockHeldByAnotherSessionFailsBuildAtTheTimeout(t *testing.T) {
+	env := newBootstrapEnv(t)
+	holder, err := env.pool.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	_, err = holder.Exec(context.Background(), "SELECT pg_advisory_lock($1)", bootstrapLockKey)
+	if err != nil {
+		holder.Release()
+		t.Fatalf("hold lock: %v", err)
+	}
+	defer func() {
+		_, _ = holder.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", bootstrapLockKey)
+		holder.Release()
+	}()
+
+	started := time.Now()
+	_, err = env.build(map[string]string{"GATBASE_BOOTSTRAP_TIMEOUT": "5s"})
+	elapsed := time.Since(started)
+
+	if err == nil {
+		t.Fatal("Build succeeded while another session held the bootstrap lock")
+	}
+	if elapsed < 4*time.Second || elapsed > 15*time.Second {
+		t.Errorf("Build gave up after %s, want about the 5s timeout", elapsed)
+	}
+	if env.count("ten_tenants") != 0 || len(env.fake.received()) != 0 {
+		t.Error("bootstrap ran without holding the lock")
+	}
 }
 
 func TestKratosRecoveringWithinTheTimeoutLetsBootstrapFinish(t *testing.T) {
