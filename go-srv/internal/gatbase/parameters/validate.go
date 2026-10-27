@@ -92,8 +92,8 @@ func checkValue(c constraints, raw json.RawMessage) *valueFailure {
 		if !isParsed {
 			return &valueFailure{CodeTypeMismatch, "Must be a number value"}
 		}
-		isBelow := c.min != nil && number.Cmp(new(big.Rat).SetFloat64(*c.min)) < 0
-		isAbove := c.max != nil && number.Cmp(new(big.Rat).SetFloat64(*c.max)) > 0
+		isBelow := c.min != nil && number.Cmp(boundRat(*c.min)) < 0
+		isAbove := c.max != nil && number.Cmp(boundRat(*c.max)) > 0
 		if isBelow || isAbove {
 			return &valueFailure{CodeOutOfRange, "Outside the allowed range"}
 		}
@@ -439,4 +439,17 @@ func parseSystemRequired(b *api.Body, p *api.Problems, stored *definition) bool 
 		p.Add("isSystemRequired", CodeFieldImmutable, "Cannot be changed")
 	}
 	return stored.IsSystemRequired
+}
+
+// boundRat returns the decimal a bound was written as. The bound is held as a
+// float64, so its shortest round-trip text (0.1 for the float nearest 0.1) is
+// parsed exactly, the same way as a value; the binary expansion of the float64
+// would put 0.1 slightly above and 0.3 slightly below their decimals.
+func boundRat(bound float64) *big.Rat {
+	text := strconv.FormatFloat(bound, 'g', -1, 64)
+	rat, isParsed := new(big.Rat).SetString(text)
+	if !isParsed {
+		return new(big.Rat).SetFloat64(bound)
+	}
+	return rat
 }

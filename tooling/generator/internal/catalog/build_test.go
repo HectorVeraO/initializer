@@ -398,3 +398,103 @@ func TestGoFindingsAreAllReportedTogether(t *testing.T) {
 	_, issues := buildRepo(t, repo)
 	assertCodes(t, issues, "GO_MODULE_PATH_LEAK", "GO_IMPORT_GROUP", "GO_PARSE_FAILED")
 }
+
+func TestModuleFolderWithoutManifestIsUnowned(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"go-srv folder", "go-srv/internal/gatbase/billing/billing.go"},
+		{"go-srv nested file", "go-srv/internal/gatbase/billing/internal/store.go"},
+		{"ng-web folder", ngRoot + "billing/billing.ts"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := cleanRepo(t)
+			addNgCore(repo)
+			put(repo, tc.path, "// Package billing is a module folder whose manifest was forgotten.\npackage billing\n")
+
+			built, issues := buildRepo(t, repo)
+			assertCodes(t, issues, "FILE_UNOWNED")
+			for _, stack := range []string{"go-srv", "ng-web"} {
+				for _, entry := range built.Stacks {
+					if entry.Stack != stack {
+						continue
+					}
+					for _, module := range entry.Modules {
+						if hasFile(module.Files, tc.path) {
+							t.Fatalf("%s/%s delivers %s", stack, module.Module, tc.path)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestModulesRootCompositionRootIsNotAModuleFolder(t *testing.T) {
+	repo := cleanRepo(t)
+	addNgCore(repo)
+	put(repo, ngRoot+"modules.ts", "export const modules = [];\n")
+
+	_, issues := buildRepo(t, repo)
+	assertCodes(t, issues)
+}
+
+func TestExplicitClaimIntoFolderWithoutManifestIsDelivered(t *testing.T) {
+	repo := cleanRepo(t)
+	addNgCore(repo)
+	addNgModule(repo, "parameters", false, `{"parameters": "0.1.0"}`)
+	claimed := ngRoot + "billing/billing.ts"
+	put(repo, claimed, "export const billing = true;\n")
+	edit(t, repo, ngRoot+"parameters/module.manifest.json", `"files": ["`+ngRoot+`parameters/"]`, `"files": ["`+claimed+`", "`+ngRoot+`parameters/"]`)
+
+	built, issues := buildRepo(t, repo)
+	assertCodes(t, issues)
+	for _, entry := range built.Stacks {
+		for _, module := range entry.Modules {
+			if entry.Stack == "ng-web" && module.Module == "parameters" && hasFile(module.Files, claimed) {
+				return
+			}
+		}
+	}
+	t.Fatalf("ng-web/parameters does not deliver %s", claimed)
+}
+
+func TestExplicitClaimOfTheWholeFolderWithoutManifestIsDelivered(t *testing.T) {
+	repo := cleanRepo(t)
+	addNgCore(repo)
+	addNgModule(repo, "parameters", false, `{"parameters": "0.1.0"}`)
+	claimed := ngRoot + "billing/billing.ts"
+	put(repo, claimed, "export const billing = true;\n")
+	edit(t, repo, ngRoot+"parameters/module.manifest.json", `"files": ["`+ngRoot+`parameters/"]`, `"files": ["`+ngRoot+`billing/", "`+ngRoot+`parameters/"]`)
+
+	built, issues := buildRepo(t, repo)
+	assertCodes(t, issues)
+	for _, entry := range built.Stacks {
+		for _, module := range entry.Modules {
+			if entry.Stack == "ng-web" && module.Module == "parameters" && hasFile(module.Files, claimed) {
+				return
+			}
+		}
+	}
+	t.Fatalf("ng-web/parameters does not deliver %s", claimed)
+}
+
+func TestConflictInsideFolderWithoutManifestIsOnlyAConflict(t *testing.T) {
+	repo := cleanRepo(t)
+	put(repo, "go-srv/internal/gatbase/billing/billing.go", "// Package billing is a module folder whose manifest was forgotten.\npackage billing\n")
+	edit(t, repo, paramsManifest, `["go-srv/internal/gatbase/parameters/"]`, `["go-srv/internal/gatbase/billing/", "go-srv/internal/gatbase/parameters/"]`)
+	edit(t, repo, flagsManifest, "\"go-srv/internal/gatbase/featureflags/\"\n  ],", "\"go-srv/internal/gatbase/billing/\",\n    \"go-srv/internal/gatbase/featureflags/\"\n  ],")
+
+	_, issues := buildRepo(t, repo)
+	assertCodes(t, issues, "FILE_OWNERSHIP_CONFLICT")
+}
+
+func TestUnlistedFileInFolderWithManifestIsNotUnowned(t *testing.T) {
+	repo := cleanRepo(t)
+	put(repo, "go-srv/internal/gatbase/parameters/unlisted.go", "package parameters\n")
+
+	_, issues := buildRepo(t, repo)
+	assertCodes(t, issues)
+}
