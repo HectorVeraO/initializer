@@ -520,6 +520,22 @@ func TestSwitchMovesTheSessionToTheTargetTenant(t *testing.T) {
 	if c.cookies["XSRF-TOKEN"] != csrfBefore {
 		t.Error("the XSRF-TOKEN value must not change")
 	}
+	csrfSets, csrfMaxAge, sessionMaxAge := 0, -1, -2
+	for _, set := range rec.Result().Cookies() {
+		if set.Name == "XSRF-TOKEN" {
+			csrfSets++
+			csrfMaxAge = set.MaxAge
+			if set.Value != csrfBefore {
+				t.Error("the switch rewrote XSRF-TOKEN with a new value")
+			}
+		}
+		if set.Name == c.sessionCookieName() {
+			sessionMaxAge = set.MaxAge
+		}
+	}
+	if csrfSets != 1 || csrfMaxAge <= 0 || csrfMaxAge != sessionMaxAge {
+		t.Errorf("XSRF-TOKEN sets = %d, Max-Age = %d, want one set with the session Max-Age %d", csrfSets, csrfMaxAge, sessionMaxAge)
+	}
 	last := e.scan("SELECT last_active_tenant_id::text FROM iam_accounts WHERE id = $1::uuid", p.accountID)
 	if last != target {
 		t.Errorf("last_active_tenant_id = %s, want %s", last, target)
@@ -920,5 +936,48 @@ func TestLogoutStillWorksAfterTheOriginalCSRFCookieMaxAge(t *testing.T) {
 	if logout.Code != http.StatusOK {
 		t.Errorf("logout of a verifying session after the original XSRF-TOKEN cookie expired: status %d, want 200: %s",
 			logout.Code, logout.Body.String())
+	}
+}
+
+// A switch rewrites the session cookie with a fresh Max-Age, so it must
+// renew XSRF-TOKEN too, or the browser drops the CSRF cookie while it still
+// holds the session cookie. The test emulates the browser: each Set-Cookie
+// fixes the cookie's expiry at now + Max-Age.
+func TestXSRFCookieOutlivesTheSessionCookieAfterASwitch(t *testing.T) {
+	e := newSessEnv(t, sessEnvOptions{})
+	p := e.person()
+	home := e.tenant("tenant-a", "active")
+	e.member(home, p.accountID, "admin", "active", e.clock.Now().Add(-time.Hour))
+	target := e.tenant("tenant-b", "active")
+	e.member(target, p.accountID, "viewer", "active", e.clock.Now())
+	c := e.client()
+	c.cookies[kratosCookieName] = p.kratosCookie
+	signIn := c.do(http.MethodGet, "/api/v1/auth/session", nil)
+	if signIn.Code != http.StatusOK {
+		t.Fatalf("sign in answered %d: %s", signIn.Code, signIn.Body.String())
+	}
+	expiry := map[string]time.Time{}
+	record := func(rec *httptest.ResponseRecorder) {
+		for _, set := range rec.Result().Cookies() {
+			expiry[set.Name] = e.clock.Now().Add(time.Duration(set.MaxAge) * time.Second)
+		}
+	}
+	record(signIn)
+
+	e.clock.advance(9 * time.Minute)
+	switched := c.switchTo(target)
+	if switched.Code != http.StatusOK {
+		t.Fatalf("switch: status %d: %s", switched.Code, switched.Body.String())
+	}
+	record(switched)
+
+	sessionExpiry, hasSession := expiry[c.sessionCookieName()]
+	csrfExpiry, hasCSRF := expiry["XSRF-TOKEN"]
+	if !hasSession || !hasCSRF {
+		t.Fatalf("expiries = %v, want both cookies set", expiry)
+	}
+	if csrfExpiry.Before(sessionExpiry) {
+		t.Errorf("the browser drops XSRF-TOKEN at %s, %s before the session cookie at %s",
+			csrfExpiry, sessionExpiry.Sub(csrfExpiry), sessionExpiry)
 	}
 }
