@@ -86,9 +86,9 @@ describe('ApiKeysPage', () => {
   }
 
   function scopeBox(fixture: ComponentFixture<ApiKeysPage>, name: string): HTMLInputElement {
-    const box = allByTestId(root(fixture), 'api-key-scope').find((element) => element.getAttribute('data-key') === name);
+    const host = allByTestId(root(fixture), 'api-key-scope').find((element) => element.getAttribute('data-key') === name);
 
-    return box as HTMLInputElement;
+    return host?.querySelector('input') as HTMLInputElement;
   }
 
   async function fill(fixture: ComponentFixture<ApiKeysPage>, name: string, scopes: string[]): Promise<void> {
@@ -160,6 +160,27 @@ describe('ApiKeysPage', () => {
 
     expect(byTestId(root(fixture), 'api-key-scopes-empty')).not.toBeNull();
     expect((byTestId(root(fixture), 'api-key-submit') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows a scopes load error with retry that offers the scopes again', async () => {
+    await loadSession(sessionView());
+
+    const fixture = TestBed.createComponent(ApiKeysPage);
+
+    fixture.detectChanges();
+    (await nextCall('GET', SCOPES_URL)).flush(errorEnvelope('INTERNAL_ERROR'), { status: 500, statusText: 'Error' });
+    (await nextCall('GET', LIST_URL)).flush(pageOf([]));
+    await settle(fixture);
+    expect(byTestId(root(fixture), 'api-key-scopes-load-error')).not.toBeNull();
+    expect(byTestId(root(fixture), 'api-key-scopes-empty')).toBeNull();
+    expect((byTestId(root(fixture), 'api-key-submit') as HTMLButtonElement).disabled).toBe(true);
+
+    (byTestId(root(fixture), 'api-key-scopes-retry') as HTMLButtonElement).click();
+    (await nextCall('GET', SCOPES_URL)).flush(okEnvelope(SCOPES));
+    await settle(fixture);
+    expect(byTestId(root(fixture), 'api-key-scopes-load-error')).toBeNull();
+    expect(allByTestId(root(fixture), 'api-key-scope').length).toBeGreaterThan(0);
+    expect((byTestId(root(fixture), 'api-key-submit') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows a load error with retry that loads again', async () => {

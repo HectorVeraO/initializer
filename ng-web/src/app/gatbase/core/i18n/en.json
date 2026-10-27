@@ -150,6 +150,8 @@
     "expiresAt": "Expires on (optional)",
     "scopes": "Scopes",
     "noScopes": "No scopes are available to grant.",
+    "scopesLoadFailed": "The scopes could not be loaded.",
+    "scopesRetry": "Retry",
     "submit": "Create API key",
     "section": "API keys",
     "empty": "There are no API keys.",

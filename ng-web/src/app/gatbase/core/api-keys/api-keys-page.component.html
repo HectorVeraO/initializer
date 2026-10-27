@@ -22,12 +22,26 @@
 
     <fieldset class="flex flex-col gap-2 border-0 p-0 m-0">
       <legend class="mb-2">{{ 'gatbaseCore.apiKeys.scopes' | transloco }}</legend>
-      @if (hasNoScopes()) {
+      @if (scopesFailed()) {
+        <div class="flex items-center gap-2" role="alert" data-testid="api-key-scopes-load-error">
+          <span>{{ 'gatbaseCore.apiKeys.scopesLoadFailed' | transloco }}</span>
+          <button pButton type="button" severity="secondary" data-testid="api-key-scopes-retry" (click)="reloadScopes()">{{ 'gatbaseCore.apiKeys.scopesRetry' | transloco }}</button>
+        </div>
+      }
+      @if (isScopesEmpty()) {
         <p class="m-0" data-testid="api-key-scopes-empty">{{ 'gatbaseCore.apiKeys.noScopes' | transloco }}</p>
       }
       @for (scope of availableScopes(); track scope.name) {
-        <label class="flex items-center gap-2">
-          <input type="checkbox" data-testid="api-key-scope" [attr.data-key]="scope.name" [checked]="isScopeSelected(scope.name)" (change)="toggleScope(scope.name, $any($event.target).checked)" />
+        <label class="flex items-center gap-2" [for]="'api-key-scope-' + scope.name">
+          <p-checkbox
+            [binary]="true"
+            [inputId]="'api-key-scope-' + scope.name"
+            [ngModel]="isScopeSelected(scope.name)"
+            [ngModelOptions]="{ standalone: true }"
+            data-testid="api-key-scope"
+            [attr.data-key]="scope.name"
+            (onChange)="toggleScope(scope.name, $event.checked)"
+          />
           <span>{{ scope.name }}</span>
           <span class="text-sm">{{ scope.description }}</span>
         </label>

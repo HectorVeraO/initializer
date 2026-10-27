@@ -17,7 +17,8 @@ export class ApiKeysPage {
     await this.name.fill(name);
     const box = this.page
       .getByTestId('api-key-scope')
-      .and(this.page.locator(`[data-key="${scope}"]`));
+      .and(this.page.locator(`[data-key="${scope}"]`))
+      .locator('input');
     await box.check();
     await this.submit.click();
   }

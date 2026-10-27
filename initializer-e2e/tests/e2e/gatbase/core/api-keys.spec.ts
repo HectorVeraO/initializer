@@ -35,10 +35,7 @@ test.describe('Gatbase core: API keys', () => {
       expect(await page.content()).not.toContain(plainKey);
 
       await apiKeysPage.revoke(name);
-      await expect(apiKeysPage.status(name)).toHaveAttribute(
-        'data-value',
-        'revoked',
-      );
+      await expect(apiKeysPage.status(name)).toHaveText('Revocada');
     },
   );
 });

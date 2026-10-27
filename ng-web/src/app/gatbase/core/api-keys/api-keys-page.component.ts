@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { TranslocoModule, TranslocoService, provideTranslocoScope } from '@jsverse/transloco';
 import { MessageService } from '@openng/optimus-ui/api';
 import { ButtonModule } from '@openng/optimus-ui/button';
+import { CheckboxModule } from '@openng/optimus-ui/checkbox';
 import { DatePickerModule } from '@openng/optimus-ui/datepicker';
 import { InputTextModule } from '@openng/optimus-ui/inputtext';
 import { MessageModule } from '@openng/optimus-ui/message';
@@ -44,7 +45,9 @@ export function endOfDayUtc(day: Date): string {
   selector: 'app-api-keys-page',
   imports: [
     ReactiveFormsModule,
+    FormsModule,
     ButtonModule,
+    CheckboxModule,
     DatePickerModule,
     InputTextModule,
     MessageModule,
@@ -77,6 +80,7 @@ export class ApiKeysPage {
 
   protected readonly availableScopes = signal<readonly ApiKeyScope[]>([]);
   protected readonly selectedScopes = signal<readonly string[]>([]);
+  protected readonly scopesFailed = signal(false);
 
   protected readonly rows = signal<ApiKeyView[]>([]);
   protected readonly totalItems = signal(0);
@@ -92,6 +96,7 @@ export class ApiKeysPage {
   protected readonly isEmpty = computed(() => !this.isLoading() && !this.loadFailed() && this.rows().length === 0);
   protected readonly isTruncated = computed(() => this.totalItems() > this.rows().length);
   protected readonly hasNoScopes = computed(() => this.availableScopes().length === 0);
+  protected readonly isScopesEmpty = computed(() => this.hasNoScopes() && !this.scopesFailed());
 
   protected readonly nameMessages = computed(() => fieldIssueMessages(this.transloco, SCOPE_ALIAS, this.submitErrors.issues(), 'name'));
   protected readonly scopesMessages = computed(() => fieldIssueMessages(this.transloco, SCOPE_ALIAS, this.submitErrors.issues(), 'scopes'));
@@ -121,6 +126,10 @@ export class ApiKeysPage {
         void this.load();
       });
     });
+  }
+
+  protected reloadScopes(): void {
+    void this.loadScopes();
   }
 
   protected reload(): void {
@@ -201,14 +210,17 @@ export class ApiKeysPage {
     this.messages.add({ severity: 'warn', summary });
   }
 
-  /** The scope list comes from the server; a failed load leaves it empty, which disables the form. */
+  /** The scope list comes from the server; a failed load leaves it empty, which disables the form and offers a retry. */
   private async loadScopes(): Promise<void> {
+    this.scopesFailed.set(false);
+
     try {
       const scopes = await firstValueFrom(this.api.scopes());
 
       this.availableScopes.set(scopes);
       this.selectedScopes.set(this.selectedScopes().filter((name) => scopes.some((scope) => scope.name === name)));
     } catch {
+      this.scopesFailed.set(true);
       this.availableScopes.set([]);
       this.selectedScopes.set([]);
     }

@@ -150,6 +150,8 @@
     "expiresAt": "Vence el (opcional)",
     "scopes": "Permisos",
     "noScopes": "No hay permisos disponibles para otorgar.",
+    "scopesLoadFailed": "No se pudieron cargar los permisos.",
+    "scopesRetry": "Reintentar",
     "submit": "Crear clave de API",
     "section": "las claves de API",
     "empty": "No hay claves de API.",
