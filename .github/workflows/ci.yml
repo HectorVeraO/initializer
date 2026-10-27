@@ -532,6 +532,8 @@ jobs:
         run: npm run lint
       - name: Type check
         run: npm run typecheck
+      - name: CI artifact capture guard
+        run: npx playwright test tests/smoke/ci-artifact-capture.spec.ts
 
   e2e-gatbase:
     name: e2e-gatbase
@@ -565,7 +567,7 @@ jobs:
         run: |
           set -euo pipefail
           cp .deploy/local/.example.env .deploy/local/.env
-          cp initializer-e2e/.example.env initializer-e2e/.env
+          grep -Ev '^PW_(VIDEO|SCREENSHOT|TRACE)=' initializer-e2e/.example.env > initializer-e2e/.env
       - name: Start the local stack
         run: |
           set -euo pipefail
