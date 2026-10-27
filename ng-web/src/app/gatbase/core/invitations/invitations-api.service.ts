@@ -66,9 +66,9 @@ export class InvitationsApi {
     return created;
   }
 
-  /** DELETE /api/v1/invitations/{id} -> 200. */
+  /** DELETE /api/v1/invitations/{id} -> 200. The view shows its own failure toast. */
   revoke(id: string): Observable<InvitationView> {
-    const revoked = this.http.delete<ApiEnvelope<InvitationView>>(this.runtimeConfig.apiPath(`/api/v1/invitations/${pathSegment(id)}`)).pipe(unwrapData<InvitationView>());
+    const revoked = this.http.delete<ApiEnvelope<InvitationView>>(this.runtimeConfig.apiPath(`/api/v1/invitations/${pathSegment(id)}`), { context: skipErrorToast() }).pipe(unwrapData<InvitationView>());
 
     return revoked;
   }

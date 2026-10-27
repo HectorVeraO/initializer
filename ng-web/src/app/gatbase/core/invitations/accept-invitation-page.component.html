@@ -40,10 +40,10 @@
             <label for="accept-new-fullname">{{ 'gatbaseCore.accept.fullName' | transloco }}</label>
             <input pInputText id="accept-new-fullname" formControlName="fullName" type="text" autocomplete="name" data-testid="accept-new-fullname" />
             @if (form.controls.fullName.touched && form.controls.fullName.invalid) {
-              <small class="text-red-500" role="alert">{{ issueText('FIELD_REQUIRED') }}</small>
+              <p-message severity="error" variant="simple" size="small" role="alert">{{ issueText('FIELD_REQUIRED') }}</p-message>
             }
             @for (message of fullNameMessages(); track $index) {
-              <small class="text-red-500" role="alert" data-testid="accept-new-fullname-error">{{ message }}</small>
+              <p-message severity="error" variant="simple" size="small" role="alert" data-testid="accept-new-fullname-error">{{ message }}</p-message>
             }
           </div>
 
@@ -51,10 +51,10 @@
             <label for="accept-new-password">{{ 'gatbaseCore.accept.password' | transloco }}</label>
             <input pInputText id="accept-new-password" formControlName="password" type="password" autocomplete="new-password" data-testid="accept-new-password" />
             @if (form.controls.password.touched && form.controls.password.invalid) {
-              <small class="text-red-500" role="alert">{{ issueText('FIELD_REQUIRED') }}</small>
+              <p-message severity="error" variant="simple" size="small" role="alert">{{ issueText('FIELD_REQUIRED') }}</p-message>
             }
             @for (message of passwordMessages(); track $index) {
-              <small class="text-red-500" role="alert" data-testid="accept-new-password-error">{{ message }}</small>
+              <p-message severity="error" variant="simple" size="small" role="alert" data-testid="accept-new-password-error">{{ message }}</p-message>
             }
           </div>
 
@@ -62,10 +62,10 @@
             <label for="accept-new-password-confirm">{{ 'gatbaseCore.accept.passwordConfirm' | transloco }}</label>
             <input pInputText id="accept-new-password-confirm" formControlName="confirm" type="password" autocomplete="new-password" data-testid="accept-new-password-confirm" />
             @if (form.controls.confirm.touched && form.controls.confirm.invalid) {
-              <small class="text-red-500" role="alert">{{ issueText('FIELD_REQUIRED') }}</small>
+              <p-message severity="error" variant="simple" size="small" role="alert">{{ issueText('FIELD_REQUIRED') }}</p-message>
             }
             @if (showMismatch()) {
-              <small class="text-red-500" role="alert" data-testid="accept-new-mismatch">{{ 'gatbaseCore.accept.passwordMismatch' | transloco }}</small>
+              <p-message severity="error" variant="simple" size="small" role="alert" data-testid="accept-new-mismatch">{{ 'gatbaseCore.accept.passwordMismatch' | transloco }}</p-message>
             }
           </div>
 

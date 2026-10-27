@@ -9,7 +9,7 @@
         <label for="invite-email">{{ 'gatbaseCore.invitations.email' | transloco }}</label>
         <input pInputText id="invite-email" formControlName="email" type="email" autocomplete="off" data-testid="invite-email" />
         @for (message of emailMessages(); track $index) {
-          <small class="text-red-500" role="alert" data-testid="invite-email-error">{{ message }}</small>
+          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="invite-email-error">{{ message }}</p-message>
         }
       </div>
 
@@ -22,7 +22,7 @@
           </ng-template>
         </p-select>
         @for (message of roleMessages(); track $index) {
-          <small class="text-red-500" role="alert" data-testid="invite-role-error">{{ message }}</small>
+          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="invite-role-error">{{ message }}</p-message>
         }
       </div>
     </div>

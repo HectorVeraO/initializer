@@ -20,6 +20,10 @@ describe('OneTimeSecretDialogComponent', () => {
     configureFeatureTest();
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   async function open() {
     const fixture = TestBed.createComponent(HostComponent);
 
@@ -60,7 +64,6 @@ describe('OneTimeSecretDialogComponent', () => {
     (byTestId(document.body, 'one-time-secret-copy') as HTMLButtonElement).click();
 
     expect(writeText).toHaveBeenCalledWith(SECRET);
-    vi.unstubAllGlobals();
   });
 
   it('emits closed and, once the host clears the value, the secret leaves the DOM', async () => {

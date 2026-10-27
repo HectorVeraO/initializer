@@ -131,7 +131,7 @@ describe('InvitationsPage', () => {
     await settle(fixture);
     expect(byTestId(root(fixture), 'invitations-load-error')).not.toBeNull();
 
-    (byTestId(root(fixture), 'invitations-load-error')?.querySelector('button') as HTMLButtonElement).click();
+    (byTestId(root(fixture), 'invitations-retry') as HTMLButtonElement).click();
     (await nextCall('GET', LIST_URL)).flush(pageOf([invitation('jane@example.com')]));
     await settle(fixture);
     expect(allByTestId(root(fixture), 'invitations-row')).toHaveLength(1);

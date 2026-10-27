@@ -135,6 +135,23 @@ describe('AcceptInvitationPage', () => {
     expect(textOf(root(fixture))).not.toContain(es.errors.codes.INVITATION_INVALID);
   });
 
+  it('retries only the tenant switch after a failed switch, without sending the accepted token again', async () => {
+    const fixture = await open(`#token=${TOKEN}`);
+
+    (byTestId(root(fixture), 'accept-submit') as HTMLButtonElement).click();
+    (await nextCall('POST', ACCEPT_URL)).flush(okEnvelope({ membership: MEMBERSHIP }));
+    (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(errorEnvelope('SERVICE_UNAVAILABLE'), { status: 500, statusText: 'Internal Server Error' });
+    await vi.waitFor(async () => {
+      await settle(fixture);
+      expect(byTestId(root(fixture), 'accept-error')).not.toBeNull();
+    });
+
+    (byTestId(root(fixture), 'accept-submit') as HTMLButtonElement).click();
+    (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(okEnvelope(sessionView({ activeTenant: TENANT })));
+    await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/home'));
+    expect(http.match((request) => request.url === ACCEPT_URL)).toHaveLength(0);
+  });
+
   it.each([404, 422])('shows the invalid, expired or used message after a %s on accept', async (status) => {
     const fixture = await open(`#token=${TOKEN}`);
 
@@ -202,18 +219,25 @@ describe('AcceptInvitationPage', () => {
     expect(router.url).not.toContain('jane');
   });
 
-  it('does not send a form with a missing field or a different confirmation', async () => {
+  it('does not send a form with a different confirmation', async () => {
     const fixture = await open(`#token=${TOKEN}`, null);
 
     await fillNew(fixture, 'synthetic-password', 'another-password');
     await settle(fixture);
     expect(byTestId(root(fixture), 'accept-new-mismatch')).not.toBeNull();
+    expect(http.match((request) => request.url === ACCEPT_NEW_URL)).toHaveLength(0);
+  });
 
-    typeInto(byTestId(root(fixture), 'accept-new-fullname') as HTMLInputElement, '');
+  it('does not send a form with an empty name', async () => {
+    const fixture = await open(`#token=${TOKEN}`, null);
+
+    typeInto(byTestId(root(fixture), 'accept-new-password') as HTMLInputElement, 'synthetic-password');
+    typeInto(byTestId(root(fixture), 'accept-new-password-confirm') as HTMLInputElement, 'synthetic-password');
     await settle(fixture);
     (byTestId(root(fixture), 'accept-new-submit') as HTMLButtonElement).click();
     await settle(fixture);
     expect(http.match((request) => request.url === ACCEPT_NEW_URL)).toHaveLength(0);
+    expect(byTestId(root(fixture), 'accept-new-mismatch')).toBeNull();
   });
 
   it('keeps the typed values and shows 422 issues under their fields', async () => {

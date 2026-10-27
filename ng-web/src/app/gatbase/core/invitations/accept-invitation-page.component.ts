@@ -48,6 +48,7 @@ export class AcceptInvitationPage {
   private readonly location = inject(Location);
 
   private readonly token = signal<string | null>(null);
+  private acceptedTenantId: string | null = null;
 
   protected readonly isLoaded = signal(false);
   protected readonly isSubmitting = signal(false);
@@ -102,9 +103,14 @@ export class AcceptInvitationPage {
     this.isAlreadyMember.set(false);
 
     try {
-      const result = await firstValueFrom(this.api.accept(token));
+      // A retry after a failed switch must not resend the accepted token: the server answers 404 for it.
+      if (this.acceptedTenantId === null) {
+        const result = await firstValueFrom(this.api.accept(token));
 
-      await this.switchToInvitedTenant(result.membership.tenant.id);
+        this.acceptedTenantId = result.membership.tenant.id;
+      }
+
+      await this.switchToInvitedTenant(this.acceptedTenantId);
     } catch (error) {
       this.showAcceptError(error);
     } finally {

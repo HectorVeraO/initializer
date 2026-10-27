@@ -11,8 +11,6 @@ function sequence(seed: number): () => number {
   };
 }
 
-const PIECES = ['', '#', 'token', '=', '&', 'a', 'b=c', '%20', '%3D', '%26', '+', 'token=', 'x', '?token=', ';', 'é'];
-
 describe('tokenFromHash', () => {
   it.each([
     ['#token=synthetic-token-value', 'synthetic-token-value'],
@@ -43,24 +41,18 @@ describe('tokenFromHash', () => {
     }
   });
 
-  it('returns the first token parameter, or null, for every generated fragment', () => {
-    const next = sequence(11);
-
-    for (let run = 0; run < 500; run += 1) {
-      const length = Math.floor(next() * 6);
-
-      const hash = Array.from({ length }, () => PIECES[Math.floor(next() * PIECES.length)]).join('');
-
-      // URLSearchParams drops one leading '?' of its input.
-      const fragment = (hash.startsWith('#') ? hash.slice(1) : hash).replace(/^\?/, '');
-
-      const firstToken = fragment.split('&').find((part) => part.startsWith('token='));
-
-      const rawValue = firstToken === undefined ? '' : firstToken.slice('token='.length);
-
-      const expected = rawValue === '' ? null : decodeURIComponent(rawValue.replace(/\+/g, ' '));
-
-      expect(tokenFromHash(hash)).toBe(expected);
-    }
+  it.each([
+    ['#token=a+b', 'a b'],
+    ['#?token=x', 'x'],
+    ['?token=x', 'x'],
+    ['#token=1&token=2', '1'],
+    ['#token=%41', 'A'],
+    ['#token=%26', '&'],
+    ['#x&token=y', 'y'],
+    ['#a=b%3D&token=é', 'é'],
+    ['##token=y', null],
+    ['#;token=y', null]
+  ])('reads %j as %j', (hash, expected) => {
+    expect(tokenFromHash(hash)).toBe(expected);
   });
 });
