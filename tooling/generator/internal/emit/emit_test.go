@@ -325,8 +325,8 @@ func TestCatalogPathsThatEscapeAreRefused(t *testing.T) {
 			}
 		}
 		_, err := build(t, os.DirFS(repo.Root), crafted, repo.CatalogBytes, selection(targetModule, "parameters"))
-		if err == nil {
-			t.Errorf("%q: want an error", bad)
+		if err == nil || !strings.Contains(err.Error(), "is not a repo-relative path") {
+			t.Errorf("%q: want a repo-relative path error, got %v", bad, err)
 		}
 	}
 }

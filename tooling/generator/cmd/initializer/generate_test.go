@@ -259,9 +259,12 @@ func TestCatalogPathOutsideTheRepositoryExitsThreeBeforeAnyWrite(t *testing.T) {
 	if err := os.WriteFile(e.catalog, []byte(changed), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, _, _ := execute(t, e.args("--selection", writeSelection(t, validSelection))...)
+	code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...)
 	if code != exitInternal {
 		t.Fatalf("exit %d", code)
+	}
+	if !strings.Contains(stderr, "catalog_undecodable") || !strings.Contains(stderr, "must be a repo-relative path") {
+		t.Fatalf("want the path-validation error on stderr, got %s", stderr)
 	}
 	if _, err := os.Stat(e.out); err == nil {
 		t.Fatal("the output directory was created")
