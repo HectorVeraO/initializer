@@ -2,6 +2,17 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import angular from 'angular-eslint';
 import prettier from 'eslint-config-prettier';
+import { readdirSync } from 'node:fs';
+
+// Module folders of the Gatbase tree, read once at load time: every directory under src/app/gatbase except core.
+const moduleFolders = readdirSync(new URL('./src/app/gatbase/', import.meta.url), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name !== 'core')
+  .map((entry) => entry.name);
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// The composition root (modules.ts) is a file, so it joins the folder names by hand.
+const optionalNames = [...moduleFolders, 'modules'].map(escapeRegex).join('|');
+const RELATIVE_TO_OPTIONAL = `^(\\.\\./)+(gatbase/)?(${optionalNames})(/|$)`;
+const RELATIVE_TO_ANY_SIBLING = `^(\\.\\./)+(gatbase/)?(core|${optionalNames})(/|$)`;
 
 // Import rules of the Gatbase tree (cookbooks/new-feature.md). Each row of the table in the design is one block below.
 // Alias or relative specifiers into a module folder of the Gatbase tree (everything but core and the composition root).
@@ -42,7 +53,7 @@ export default tseslint.config(
         {
           patterns: [
             { regex: '^@/gatbase/(?!core(/|$))', message: 'The core module never imports another Gatbase module or the composition root.' },
-            { regex: '^(\\.\\./)+(gatbase/)?(parameters|feature-flags|modules)(/|$)', message: 'The core module never imports another Gatbase module or the composition root.' },
+            { regex: RELATIVE_TO_OPTIONAL, message: 'The core module never imports another Gatbase module or the composition root.' },
             { regex: SHELL_AND_DEMOS, message: 'The core module never imports the shell, the demo pages or the dev guide.' }
           ]
         }
@@ -59,7 +70,7 @@ export default tseslint.config(
             { regex: '^@/gatbase/core/', message: 'Import the core module through its barrel, @/gatbase/core.' },
             { regex: NOT_ANY_MODULE_OR_ROOT, message: 'A module never imports another Gatbase module or the composition root.' },
             { regex: SHELL_AND_DEMOS, message: 'A module never imports the shell, the demo pages or the dev guide.' },
-            { regex: '^(\\.\\./)+(gatbase/)?(core|parameters|feature-flags|modules)(/|$)', message: 'A module never imports a sibling module folder of the Gatbase tree.' }
+            { regex: RELATIVE_TO_ANY_SIBLING, message: 'A module never imports a sibling module folder of the Gatbase tree.' }
           ]
         }
       ]

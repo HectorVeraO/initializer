@@ -3,6 +3,7 @@
 // does not ship the module folders and would stop compiling.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
@@ -20,20 +21,38 @@ async function restrictedImports(relativePath, code) {
 
 const moduleImport = (specifier, name) => `import { ${name} } from '${specifier}';\nexport const x = ${name};\n`;
 
+// Module folders found in the tree: none in a core-only generated project, so no module case is generated there.
+const moduleFolders = readdirSync(path.join(cwd, 'src/app/gatbase'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name !== 'core')
+  .map((entry) => entry.name);
+
+// Not a real folder: the module rule matches any folder under gatbase/ except core.
+const importerModule = 'probe-importer';
+
 const rejected = [
-  ['the home page (core-owned) imports a module by alias', 'src/app/home/repro.ts', moduleImport('@/gatbase/parameters/module', 'parametersModule'), 'Core-owned code imports a module only'],
-  ['generic core code imports a module by alias', 'src/app/core/repro.ts', moduleImport('@/gatbase/feature-flags/module', 'featureFlagsModule'), 'Core-owned code imports a module only'],
-  ['the bootstrap file imports a module by alias', 'src/main.repro.ts', moduleImport('@/gatbase/parameters/module', 'parametersModule'), 'Core-owned code imports a module only'],
-  ['the core module imports a module by relative path', 'src/app/gatbase/core/login/repro.ts', moduleImport('../../parameters/module', 'parametersModule'), 'The core module never imports another'],
-  ['the core module imports a module by a deep relative path', 'src/app/gatbase/core/login/repro.ts', moduleImport('../../../gatbase/parameters/module', 'parametersModule'), 'The core module never imports another'],
   ['the shell imports a core file deeply by alias', 'src/app/layout/repro.ts', moduleImport('@/gatbase/core/login', 'login'), 'The skeleton imports Gatbase only'],
-  ['the shell imports a module by relative path', 'src/app/layout/component/repro.ts', moduleImport('../../gatbase/parameters/module', 'parametersModule'), 'The skeleton imports Gatbase only'],
-  ['a module imports the composition root by relative path', 'src/app/gatbase/parameters/repro.ts', moduleImport('../modules', 'gatbaseModules'), 'A module never imports a sibling module folder'],
-  ['a module imports a sibling by a deep relative path', 'src/app/gatbase/parameters/repro.ts', moduleImport('../../gatbase/feature-flags/module', 'featureFlagsModule'), 'A module never imports a sibling module folder']
+  ['a module imports the composition root by relative path', `src/app/gatbase/${importerModule}/repro.ts`, moduleImport('../modules', 'gatbaseModules'), 'A module never imports a sibling module folder'],
+  ['the core module imports the composition root by relative path', 'src/app/gatbase/core/login/repro.ts', moduleImport('../../modules', 'gatbaseModules'), 'The core module never imports another']
 ];
 
+for (const name of moduleFolders) {
+  const specifier = `@/gatbase/${name}/module`;
+
+  rejected.push(
+    [`the home page (core-owned) imports ${name} by alias`, 'src/app/home/repro.ts', moduleImport(specifier, 'moduleUnderTest'), 'Core-owned code imports a module only'],
+    [`generic core code imports ${name} by alias`, 'src/app/core/repro.ts', moduleImport(specifier, 'moduleUnderTest'), 'Core-owned code imports a module only'],
+    [`the bootstrap file imports ${name} by alias`, 'src/main.repro.ts', moduleImport(specifier, 'moduleUnderTest'), 'Core-owned code imports a module only'],
+    [`the core module imports ${name} by alias`, 'src/app/gatbase/core/login/repro.ts', moduleImport(specifier, 'moduleUnderTest'), 'The core module never imports another'],
+    [`the core module imports ${name} by relative path`, 'src/app/gatbase/core/login/repro.ts', moduleImport(`../../${name}/module`, 'moduleUnderTest'), 'The core module never imports another'],
+    [`the core module imports ${name} by a deep relative path`, 'src/app/gatbase/core/login/repro.ts', moduleImport(`../../../gatbase/${name}/module`, 'moduleUnderTest'), 'The core module never imports another'],
+    [`the shell imports ${name} by relative path`, 'src/app/layout/component/repro.ts', moduleImport(`../../gatbase/${name}/module`, 'moduleUnderTest'), 'The skeleton imports Gatbase only'],
+    [`another module imports ${name} by relative path`, `src/app/gatbase/${importerModule}/repro.ts`, moduleImport(`../${name}/module`, 'moduleUnderTest'), 'A module never imports a sibling module folder'],
+    [`another module imports ${name} by a deep relative path`, `src/app/gatbase/${importerModule}/repro.ts`, moduleImport(`../../gatbase/${name}/module`, 'moduleUnderTest'), 'A module never imports a sibling module folder']
+  );
+}
+
 const allowed = [
-  ['a module imports core through its barrel', 'src/app/gatbase/parameters/repro.ts', moduleImport('@/gatbase/core', 'coreModule')],
+  ['a module imports core through its barrel', `src/app/gatbase/${importerModule}/repro.ts`, moduleImport('@/gatbase/core', 'coreModule')],
   ['the shell imports the composition root by alias', 'src/app/layout/repro.ts', moduleImport('@/gatbase/modules', 'gatbaseModules')],
   ['the shell imports the core barrel by alias', 'src/app/layout/repro.ts', moduleImport('@/gatbase/core', 'coreModule')],
   ['the home page imports the composition root by alias', 'src/app/home/repro.ts', moduleImport('@/gatbase/modules', 'gatbaseModules')],
