@@ -71,6 +71,7 @@ func TestNewSweepsOnlyIdleStaleTestDatabases(t *testing.T) {
 		{"stale database with a connection is kept", syntheticName(t, "it_sweeptest", time.Now().Add(-2*time.Hour)), true, true},
 		{"fresh database is kept", syntheticName(t, "it_sweeptest", time.Now()), false, true},
 		{"database near the threshold is kept", syntheticName(t, "it_sweeptest", time.Now().Add(-59*time.Minute)), false, true},
+		{"database just past the threshold is dropped", syntheticName(t, "it_sweeptest", time.Now().Add(-61*time.Minute)), false, false},
 		{"name of another shape is kept", "it_sweeptest_" + suffix[len(suffix)-8:], false, true},
 	}
 	for _, tc := range cases {
