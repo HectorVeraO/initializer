@@ -11,8 +11,11 @@
         @switch (kind()) {
           @case ('select') {
             <p-select inputId="parameter-override-input" [options]="current.allowedValues ?? []" [formControl]="value" appendTo="body" data-testid="parameter-override-value" [ariaLabel]="'gatbaseParameters.override.value' | transloco">
+              <ng-template #selectedItem let-option>
+                <span>{{ displayValue(option) }}</span>
+              </ng-template>
               <ng-template #item let-option>
-                <span data-testid="parameter-override-option">{{ option }}</span>
+                <span data-testid="parameter-override-option">{{ displayValue(option) }}</span>
               </ng-template>
             </p-select>
           }

@@ -13,7 +13,7 @@ import { firstValueFrom } from 'rxjs';
 import { errorMessage } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { fieldIssueMessages, unmatchedIssueMessages } from '@/gatbase/core';
-import { jsonText, parseJsonText } from '../json-value';
+import { displayValue, jsonText, parseJsonText } from '../json-value';
 import { GATBASE_PARAMETERS_I18N } from '../module';
 import { ParametersApi } from '../parameters-api.service';
 import type { ParameterView } from '../parameters.types';
@@ -44,6 +44,7 @@ export class ParameterOverrideDialog {
 
   /** The editor value: a choice, a number, a boolean or the text, by `kind`. */
   protected readonly value = new FormControl<unknown>(null);
+  protected readonly displayValue = displayValue;
   protected readonly hasJsonError = signal(false);
   protected readonly isSubmitting = signal(false);
   protected readonly submitErrors = new SubmitErrors();

@@ -97,6 +97,22 @@ describe('ParameterOverrideDialog', () => {
     request.flush(okEnvelope(parameterView(KEY, { effectiveValue: expected, source: 'tenant' })));
   });
 
+  it('sends a cleared number editor as null and shows the refusal of the server', async () => {
+    const fixture = await open({ effectiveValue: 4 });
+
+    typeInto(numberInput(), '');
+    numberInput().dispatchEvent(new Event('blur'));
+    await save(fixture);
+
+    const request = sent();
+
+    expect(request.body).toEqual({ value: null });
+    request.flush(errorEnvelope('VALIDATION_FAILED', [{ field: 'value', code: 'PARAMETER_TYPE_MISMATCH', message: 'x' }]), 422);
+    await settle(fixture);
+
+    expect(textOf(byTestId(document.body, 'parameter-override-value-error'))).toBe('El valor no corresponde al tipo del parámetro.');
+  });
+
   it('shows the out-of-range refusal of the server under the input', async () => {
     const fixture = await open();
 
@@ -143,6 +159,22 @@ describe('ParameterOverrideDialog', () => {
     await save(fixture);
 
     expect(sent().body).toEqual({ value: 'b' });
+  });
+
+  it('shows object options as JSON and sends the chosen object', async () => {
+    const fixture = await open({ valueType: 'json', effectiveValue: { mode: 'a' }, defaultValue: { mode: 'a' }, minValue: null, maxValue: null, allowedValues: [{ mode: 'a' }, { mode: 'b' }] });
+
+    editor().click();
+    await settle(fixture);
+
+    const options = allByTestId(document.body, 'parameter-override-option');
+
+    expect(options.map((option) => textOf(option))).toEqual(['{"mode":"a"}', '{"mode":"b"}']);
+    options[1].click();
+    await settle(fixture);
+    await save(fixture);
+
+    expect(sent().body).toEqual({ value: { mode: 'b' } });
   });
 
   it('toggles a boolean parameter', async () => {
