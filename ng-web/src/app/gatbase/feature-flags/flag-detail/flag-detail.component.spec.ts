@@ -143,6 +143,25 @@ describe('FlagDetailPage', () => {
     expect(byTestId(root(fixture), 'flag-tenant-form')).toBeNull();
   });
 
+  it('shows the load error with a retry that asks again', async () => {
+    const fixture = TestBed.createComponent(FlagDetailPage);
+
+    fixture.detectChanges();
+    (await nextCall('GET', LIST_URL)).flush(errorEnvelope('INTERNAL_ERROR'), { status: 500, statusText: 'x' });
+    (await nextCall('GET', TENANTS_URL)).flush(pageOf([]));
+    await settle(fixture);
+
+    expect(byTestId(root(fixture), 'flag-detail-load-error')).not.toBeNull();
+    expect(byTestId(root(fixture), 'flag-detail-not-found')).toBeNull();
+
+    (byTestId(root(fixture), 'flag-detail-retry') as HTMLElement).click();
+    await answerLoad([flagView(KEY)]);
+    await settle(fixture);
+
+    expect(byTestId(root(fixture), 'flag-detail-load-error')).toBeNull();
+    expect(byTestId(root(fixture), 'flag-detail-summary')).not.toBeNull();
+  });
+
   it('warns that a missing key may lie beyond the first page of flags', async () => {
     const fixture = await open([flagView('other_flag')], TENANTS, 150);
 
@@ -193,6 +212,23 @@ describe('FlagDetailPage', () => {
 
       expect(byTestId(rowOf(fixture, 'tenant-b'), 'flag-tenant-cell-enabled')?.getAttribute('data-value')).toBe('true');
       expect((byTestId(root(fixture), 'flag-tenant-save') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('updates the row of a tenant that already has an override instead of adding another', async () => {
+      const fixture = await open([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, true)] })]);
+
+      await pickTenant(fixture, 'tenant-a');
+      await click(fixture, byTestId(root(fixture), 'flag-tenant-enabled')?.querySelector('input') ?? null);
+      await click(fixture, byTestId(root(fixture), 'flag-tenant-save'));
+
+      const put = await nextCall('PUT', `${LIST_URL}/${KEY}/tenants/${TENANT_A}`);
+
+      expect(put.request.body).toEqual({ enabled: false });
+      put.flush(okEnvelope(flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, false)] })));
+      await settle(fixture);
+
+      expect(allByTestId(root(fixture), 'flag-tenant-row')).toHaveLength(1);
+      expect(byTestId(rowOf(fixture, 'tenant-a'), 'flag-tenant-cell-enabled')?.getAttribute('data-value')).toBe('false');
     });
 
     it('sends enabled false when the toggle is switched off', async () => {
