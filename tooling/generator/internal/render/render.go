@@ -85,9 +85,31 @@ type ReadmeModule struct {
 	Stack, Module, Version string
 }
 
-// EnvPair is one TCK environment variable.
+// EnvPair is one TCK environment variable. A relative path value is relative
+// to the project root, where the TCK runs.
 type EnvPair struct {
 	Key, Value string
+}
+
+// goSrvValue returns the value as go-srv reads it when started from go-srv/,
+// the working directory .deploy/local/README.md documents: a project-root
+// relative path gets the "../" prefix; any other value stays as is.
+func (p EnvPair) goSrvValue() string {
+	isPath := strings.Contains(p.Value, "/") && !strings.Contains(p.Value, "://")
+	isRelative := !strings.HasPrefix(p.Value, "/")
+	if isPath && isRelative {
+		return "../" + p.Value
+	}
+	return p.Value
+}
+
+// goSrvEnv returns the pairs with their values as go-srv reads them.
+func goSrvEnv(pairs []EnvPair) []EnvPair {
+	out := make([]EnvPair, 0, len(pairs))
+	for _, pair := range pairs {
+		out = append(out, EnvPair{Key: pair.Key, Value: pair.goSrvValue()})
+	}
+	return out
 }
 
 // ReadmeInput is the data of the project README. The caller sorts every list;
@@ -121,6 +143,7 @@ func Readme(in ReadmeInput) ([]byte, error) {
 			return nil, errors.New("TCK env pairs must not contain a backtick")
 		}
 	}
+	in.TCKEnv = goSrvEnv(in.TCKEnv)
 	return execute("README.md.tmpl", in)
 }
 
