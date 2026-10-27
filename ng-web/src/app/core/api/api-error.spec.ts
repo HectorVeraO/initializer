@@ -117,6 +117,18 @@ describe('apiTraceId', () => {
     expect(apiTraceId(error)).toBe(traceId);
   });
 
+  it('falls back to the header when meta.traceId is empty or not a string', () => {
+    const headers = new HttpHeaders({ 'X-Trace-Id': traceId });
+
+    for (const badTraceId of ['', 42, null]) {
+      const error = new HttpErrorResponse({ status: 500, error: { data: null, meta: { traceId: badTraceId, timestamp: 't' }, error: null }, headers });
+
+      expect(apiTraceId(error)).toBe(traceId);
+    }
+
+    expect(apiTraceId(failure(500, { meta: { traceId: '' } }))).toBeNull();
+  });
+
   it('answers null without an envelope meta or header, and for non-HTTP errors', () => {
     expect(apiTraceId(failure(502, '<html></html>'))).toBeNull();
     expect(apiTraceId(failure(500, null))).toBeNull();
