@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BehaviorSubject } from 'rxjs';
-import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf } from '@/core/testing/ui-testing';
+import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, stubScrollIntoView, textOf } from '@/core/testing/ui-testing';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { flagView, tenantOverride, tenantView } from '../../../../testing/fixtures/flag-view';
 import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
@@ -38,6 +38,7 @@ describe('FlagDetailPage', () => {
   beforeEach(() => {
     stubBroadcastChannel();
     stubMatchMedia();
+    stubScrollIntoView();
     messages = { add: vi.fn() };
     params = new BehaviorSubject(convertToParamMap({ key: KEY }));
     configureFeatureTest(

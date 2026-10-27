@@ -1,7 +1,7 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MessageService } from '@openng/optimus-ui/api';
-import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf } from '@/core/testing/ui-testing';
+import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, stubScrollIntoView, textOf } from '@/core/testing/ui-testing';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { flagView, tenantOverride } from '../../../../testing/fixtures/flag-view';
 import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
@@ -26,6 +26,7 @@ describe('FlagListPage', () => {
   beforeEach(() => {
     stubBroadcastChannel();
     stubMatchMedia();
+    stubScrollIntoView();
     messages = { add: vi.fn() };
     configureFeatureTest([], [{ provide: MessageService, useValue: messages }]);
     http = TestBed.inject(HttpTestingController);
