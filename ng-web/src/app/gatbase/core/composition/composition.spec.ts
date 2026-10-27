@@ -11,7 +11,7 @@ function moduleWith(id: string, shell: Route[] = [], publicRoutes: Route[] = [])
 describe('Gatbase composition', () => {
   const coreWithRoutes = moduleWith('core', [{ path: 'core-shell', component: BlankComponent }], [{ path: 'login', component: BlankComponent }]);
 
-  const featureFlags = moduleWith('feature-flags', [{ path: 'flags', component: BlankComponent }]);
+  const flagsModule = moduleWith('feature-flags', [{ path: 'flags', component: BlankComponent }]);
 
   const parameters = moduleWith('parameters', [{ path: 'parameters', component: BlankComponent }]);
 
@@ -24,7 +24,7 @@ describe('Gatbase composition', () => {
     });
 
     it('keeps the core routes and puts the others after them, in list order', () => {
-      const routes = gatbaseRoutes([coreWithRoutes, featureFlags, parameters]);
+      const routes = gatbaseRoutes([coreWithRoutes, flagsModule, parameters]);
 
       expect(routes.shell.map((route) => route.path)).toEqual(['core-shell', 'flags', 'parameters']);
       expect(routes.public.map((route) => route.path)).toEqual(['login']);

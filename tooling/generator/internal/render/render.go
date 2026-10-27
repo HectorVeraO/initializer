@@ -123,3 +123,56 @@ func Readme(in ReadmeInput) ([]byte, error) {
 	}
 	return execute("README.md.tmpl", in)
 }
+
+// moduleIDPattern is the module id grammar shared by both stacks.
+var moduleIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+
+// WebSymbol returns the wiring symbol of an Angular module: the camelCase id
+// plus "Module" (feature-flags -> featureFlagsModule).
+func WebSymbol(id string) (string, error) {
+	if !moduleIDPattern.MatchString(id) {
+		return "", fmt.Errorf("module id %q is not a valid id", id)
+	}
+	parts := strings.Split(id, "-")
+	var symbol strings.Builder
+	symbol.WriteString(parts[0])
+	for _, part := range parts[1:] {
+		symbol.WriteString(strings.ToUpper(part[:1]))
+		symbol.WriteString(part[1:])
+	}
+	symbol.WriteString("Module")
+	return symbol.String(), nil
+}
+
+// ModulesTS renders ng-web/src/app/gatbase/modules.ts. ids are the ids of
+// every installed Angular module, core first, in catalog order.
+func ModulesTS(ids []string) ([]byte, error) {
+	if len(ids) == 0 || ids[0] != "core" {
+		return nil, errors.New("the first module must be core")
+	}
+	type entry struct{ ID, Symbol string }
+	var entries []entry
+	var symbols []string
+	seen := map[string]bool{}
+	symbolOwner := map[string]string{}
+	for _, id := range ids {
+		symbol, err := WebSymbol(id)
+		if err != nil {
+			return nil, err
+		}
+		if seen[id] {
+			return nil, fmt.Errorf("module %q is listed twice", id)
+		}
+		seen[id] = true
+		if owner, taken := symbolOwner[symbol]; taken {
+			return nil, fmt.Errorf("modules %q and %q map to the same symbol %q", owner, id, symbol)
+		}
+		symbolOwner[symbol] = id
+		entries = append(entries, entry{id, symbol})
+		symbols = append(symbols, symbol)
+	}
+	return execute("modules.ts.tmpl", struct {
+		Modules []entry
+		Symbols []string
+	}{entries, symbols})
+}

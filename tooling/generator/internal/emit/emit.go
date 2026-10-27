@@ -31,6 +31,9 @@ const readmeName = "README.md"
 // goCompositionRoot is the rendered composition root of the go-srv stack.
 const goCompositionRoot = "go-srv/cmd/server/modules.go"
 
+// webCompositionRoot is the rendered composition root of the ng-web stack.
+const webCompositionRoot = "ng-web/src/app/gatbase/modules.ts"
+
 // BuildOptions are the inputs of one project build.
 type BuildOptions struct {
 	// Root is the repository checkout the catalog describes.
@@ -57,7 +60,7 @@ type Project struct {
 // reserved reports whether p is a file the generator renders; no copy may land on it.
 func reserved(p string) bool {
 	switch p {
-	case readmeName, lockfile.SelectionName, lockfile.Name, goCompositionRoot, "ng-web/src/app/gatbase/modules.ts":
+	case readmeName, lockfile.SelectionName, lockfile.Name, goCompositionRoot, webCompositionRoot:
 		return true
 	}
 	return false
@@ -291,29 +294,53 @@ func (b *builder) render() ([]lockfile.File, error) {
 	}
 
 	for _, stack := range p.Stacks {
-		if stack.Stack != manifest.StackGoSrv {
-			return nil, fmt.Errorf("stack %q has no composition root template", stack.Stack)
-		}
-		var folders []string
-		for _, module := range stack.Modules {
-			if module.Module != manifest.CoreModule {
-				folders = append(folders, lockfile.ModuleFolder(stack.Stack, module.Module))
+		switch stack.Stack {
+		case manifest.StackGoSrv:
+			if err := b.renderGoRoot(stack, record); err != nil {
+				return nil, err
 			}
-		}
-		raw, err := render.ModulesGo(b.source, folders)
-		if err != nil {
-			return nil, err
-		}
-		rewritten, _, err := gorewrite.RewriteImports(goCompositionRoot, raw, b.source, b.target)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", goCompositionRoot, err)
-		}
-		if err := record(goCompositionRoot, rewritten); err != nil {
-			return nil, err
+		case manifest.StackNgWeb:
+			if err := b.renderWebRoot(stack, record); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("stack %q has no composition root template", stack.Stack)
 		}
 	}
 	sort.Slice(generated, func(i, j int) bool { return generated[i].Path < generated[j].Path })
 	return generated, nil
+}
+
+// renderGoRoot renders the go-srv composition root.
+func (b *builder) renderGoRoot(stack plan.StackPlan, record func(string, []byte) error) error {
+	var folders []string
+	for _, module := range stack.Modules {
+		if module.Module != manifest.CoreModule {
+			folders = append(folders, lockfile.ModuleFolder(stack.Stack, module.Module))
+		}
+	}
+	raw, err := render.ModulesGo(b.source, folders)
+	if err != nil {
+		return err
+	}
+	rewritten, _, err := gorewrite.RewriteImports(goCompositionRoot, raw, b.source, b.target)
+	if err != nil {
+		return fmt.Errorf("%s: %w", goCompositionRoot, err)
+	}
+	return record(goCompositionRoot, rewritten)
+}
+
+// renderWebRoot renders the ng-web composition root; no path is rewritten.
+func (b *builder) renderWebRoot(stack plan.StackPlan, record func(string, []byte) error) error {
+	ids := make([]string, 0, len(stack.Modules))
+	for _, module := range stack.Modules {
+		ids = append(ids, module.Module)
+	}
+	raw, err := render.ModulesTS(ids)
+	if err != nil {
+		return err
+	}
+	return record(webCompositionRoot, raw)
 }
 
 // assemble orders the files, appends the lock and scans every file for a
