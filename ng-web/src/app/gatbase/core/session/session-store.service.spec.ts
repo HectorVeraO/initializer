@@ -12,6 +12,8 @@ import { SessionStore } from './session-store.service';
 
 const SECOND_TENANT = { id: '44444444-4444-4444-8444-444444444444', slug: 'tenant-b', name: 'Tenant B', status: 'active' };
 
+const FIRST_TENANT_ID = '11111111-1111-4111-8111-111111111111';
+
 describe('SessionStore', () => {
   let messages: { add: ReturnType<typeof vi.fn> };
 
@@ -221,6 +223,207 @@ describe('SessionStore', () => {
     });
   });
 
+  describe('ordering', () => {
+    it('keeps the tenant a switch confirmed when an older load answers after it', async () => {
+      await loadSession();
+
+      const reload = store().reload();
+
+      const staleLoad = await nextCall('GET', SESSION_URL);
+
+      const switched = store().switchTenant(SECOND_TENANT.id);
+
+      (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      await switched;
+
+      // The server answered the GET before the switch, so it still names tenant A; it arrives last.
+      staleLoad.flush(okEnvelope(sessionView()));
+      await reload;
+
+      expect(store().activeTenantId()).toBe(SECOND_TENANT.id);
+    });
+
+    it('does not announce the stale tenant to the other tabs', async () => {
+      await loadSession();
+
+      const reload = store().reload();
+
+      const staleLoad = await nextCall('GET', SESSION_URL);
+
+      const switched = store().switchTenant(SECOND_TENANT.id);
+
+      (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      await switched;
+      staleLoad.flush(okEnvelope(sessionView()));
+      await reload;
+
+      expect(FakeBroadcastChannel.instances[0].posted).toEqual([{ type: 'session-changed', tenantId: SECOND_TENANT.id, state: 'authenticated' }]);
+    });
+
+    it('keeps the confirmed tenant when a load started after the switch answers first with the old one', async () => {
+      await loadSession();
+
+      const switched = store().switchTenant(SECOND_TENANT.id);
+
+      const switchCall = await nextCall('POST', '/api/v1/auth/switch-tenant');
+
+      const reload = store().reload();
+
+      const laterLoad = await nextCall('GET', SESSION_URL);
+
+      laterLoad.flush(okEnvelope(sessionView()));
+      await reload;
+      switchCall.flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      await switched;
+
+      expect(store().activeTenantId()).toBe(SECOND_TENANT.id);
+    });
+
+    it('does not re-authenticate when a pending load answers after logout', async () => {
+      await loadSession();
+
+      const reload = store().reload();
+
+      const pendingLoad = await nextCall('GET', SESSION_URL);
+
+      const done = store().logout();
+
+      (await nextCall('POST', '/api/v1/auth/logout')).flush(okEnvelope({ logoutUrl: '/kratos/self-service/logout?token=synthetic-logout' }));
+      await done;
+      pendingLoad.flush(okEnvelope(sessionView()));
+      await reload;
+
+      expect(store().state()).toBe('anonymous');
+    });
+
+    it('does not re-authenticate when a pending load answers after a refresh lost the session', async () => {
+      await loadSession();
+
+      const reload = store().reload();
+
+      const pendingLoad = await nextCall('GET', SESSION_URL);
+
+      const refreshed = store().refresh();
+
+      (await nextCall('POST', '/api/v1/auth/refresh')).flush(errorEnvelope('UNAUTHENTICATED'), { status: 401, statusText: 'Unauthorized' });
+      await refreshed;
+      pendingLoad.flush(okEnvelope(sessionView()));
+      await reload;
+
+      expect(store().state()).toBe('anonymous');
+    });
+
+    it('drops an older 401 that answers after a newer load', async () => {
+      await loadSession();
+
+      const first = store().reload();
+
+      const olderLoad = await nextCall('GET', SESSION_URL);
+
+      const second = store().reload();
+
+      (await nextCall('GET', SESSION_URL)).flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      await second;
+      olderLoad.flush(errorEnvelope('UNAUTHENTICATED'), { status: 401, statusText: 'Unauthorized' });
+      await first;
+
+      expect(store().state()).toBe('authenticated');
+      expect(store().activeTenantId()).toBe(SECOND_TENANT.id);
+    });
+
+    it('does not re-authenticate when a pending switch answers after logout', async () => {
+      await loadSession();
+
+      const switched = store().switchTenant(SECOND_TENANT.id);
+
+      const switchCall = await nextCall('POST', '/api/v1/auth/switch-tenant');
+
+      const done = store().logout();
+
+      (await nextCall('POST', '/api/v1/auth/logout')).flush(okEnvelope({ logoutUrl: '/kratos/self-service/logout?token=synthetic-logout' }));
+      await done;
+      switchCall.flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      await switched;
+
+      expect(store().state()).toBe('anonymous');
+    });
+
+    it('keeps the newer switch when an older switch answers after it', async () => {
+      await loadSession();
+
+      const first = store().switchTenant(SECOND_TENANT.id);
+
+      const olderCall = await nextCall('POST', '/api/v1/auth/switch-tenant');
+
+      const second = store().switchTenant(FIRST_TENANT_ID);
+
+      (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(okEnvelope(sessionView()));
+      await second;
+      olderCall.flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      await first;
+
+      expect(store().activeTenantId()).toBe(FIRST_TENANT_ID);
+    });
+
+    it('does not let a switch started before a logout overwrite a session signed in again', async () => {
+      await loadSession();
+
+      const switched = store().switchTenant(SECOND_TENANT.id);
+
+      const switchCall = await nextCall('POST', '/api/v1/auth/switch-tenant');
+
+      const done = store().logout();
+
+      (await nextCall('POST', '/api/v1/auth/logout')).flush(okEnvelope({ logoutUrl: '/kratos/self-service/logout?token=synthetic-logout' }));
+      await done;
+
+      const reload = store().reload();
+
+      (await nextCall('GET', SESSION_URL)).flush(okEnvelope(sessionView()));
+      await reload;
+      switchCall.flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      await switched;
+
+      expect(store().activeTenantId()).toBe(FIRST_TENANT_ID);
+    });
+
+    it('still adopts a load that started after the switch', async () => {
+      await loadSession();
+
+      const switched = store().switchTenant(SECOND_TENANT.id);
+
+      const switchCall = await nextCall('POST', '/api/v1/auth/switch-tenant');
+
+      const reload = store().reload();
+
+      const laterLoad = await nextCall('GET', SESSION_URL);
+
+      switchCall.flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      await switched;
+      laterLoad.flush(okEnvelope(sessionView()));
+      await reload;
+
+      expect(store().activeTenantId()).toBe(FIRST_TENANT_ID);
+    });
+
+    it('ends anonymous when a load started after the logout answers before the logout', async () => {
+      await loadSession();
+
+      const done = store().logout();
+
+      const logoutCall = await nextCall('POST', '/api/v1/auth/logout');
+
+      const reload = store().reload();
+
+      (await nextCall('GET', SESSION_URL)).flush(okEnvelope(sessionView()));
+      await reload;
+      logoutCall.flush(okEnvelope({ logoutUrl: '/kratos/self-service/logout?token=synthetic-logout' }));
+      await done;
+
+      expect(store().state()).toBe('anonymous');
+    });
+  });
+
   describe('refresh', () => {
     it('adopts the refreshed session', async () => {
       await loadSession();
@@ -239,6 +442,40 @@ describe('SessionStore', () => {
       const outcome = store().refresh();
 
       (await nextCall('POST', '/api/v1/auth/refresh')).flush(errorEnvelope('SESSION_INVALID'), { status: 401, statusText: 'Unauthorized' });
+
+      expect(await outcome).toBe('anonymous');
+      expect(store().state()).toBe('anonymous');
+    });
+
+    it('drops a refresh answer that arrives after a newer load', async () => {
+      await loadSession();
+
+      const refreshed = store().refresh();
+
+      const refreshCall = await nextCall('POST', '/api/v1/auth/refresh');
+
+      const reload = store().reload();
+
+      (await nextCall('GET', SESSION_URL)).flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      await reload;
+      refreshCall.flush(okEnvelope(sessionView()));
+      await refreshed;
+
+      expect(store().activeTenantId()).toBe(SECOND_TENANT.id);
+    });
+
+    it('goes anonymous on a 401 even when a newer load answered first', async () => {
+      await loadSession();
+
+      const outcome = store().refresh();
+
+      const refreshCall = await nextCall('POST', '/api/v1/auth/refresh');
+
+      const reload = store().reload();
+
+      (await nextCall('GET', SESSION_URL)).flush(okEnvelope(sessionView()));
+      await reload;
+      refreshCall.flush(errorEnvelope('SESSION_INVALID'), { status: 401, statusText: 'Unauthorized' });
 
       expect(await outcome).toBe('anonymous');
       expect(store().state()).toBe('anonymous');
