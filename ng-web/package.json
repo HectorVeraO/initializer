@@ -9,7 +9,7 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "lint": "eslint . --max-warnings=0 && node --test eslint-import-rules.test.mjs",
-    "format:check": "prettier --check \"src/**/*.{ts,html,scss,json}\""
+    "format:check": "prettier --check \"src/**/*.{ts,html,scss,json}\" eslint.config.js eslint-import-rules.test.mjs"
   },
   "private": true,
   "packageManager": "npm@11.19.1",
