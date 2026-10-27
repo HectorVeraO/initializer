@@ -10,7 +10,7 @@ import es from '../../../../assets/i18n/es.json';
 import { provideApiHttpClient } from '@/core/interceptors/api-http.providers';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
-import { SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../testing/session-testing';
+import { SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
 import { BROWSER_LOCATION } from './browser-location';
 import { gatbaseSessionInterceptor } from './session.interceptor';
 import { SessionStore } from './session-store.service';
@@ -163,6 +163,31 @@ describe('gatbaseSessionInterceptor', () => {
       retry.flush(okEnvelope(['row']));
 
       expect(await outcome).toEqual({ ok: true, body: okEnvelope(['row']) });
+    });
+
+    it('retries with the tenant the call started with and refuses it with 409 when the tenant changed during the refresh', async () => {
+      await loadSession();
+
+      const tenantB = { id: 'b', slug: 'tenant-b', name: 'Tenant B', status: 'active' };
+
+      const outcome = call('GET', '/api/v1/parameters');
+
+      const first = await nextCall('GET', '/api/v1/parameters');
+
+      expect(first.request.headers.get('X-Active-Tenant-Id')).toBe(TENANT_ID);
+      first.flush(errorEnvelope('SESSION_INVALID'), UNAUTHORIZED);
+      (await nextCall('POST', REFRESH_URL)).flush(okEnvelope(sessionView({ activeTenant: tenantB })));
+
+      const retry = await nextCall('GET', '/api/v1/parameters');
+
+      expect(retry.request.headers.get('X-Active-Tenant-Id')).toBe(TENANT_ID);
+      retry.flush(errorEnvelope('ACTIVE_TENANT_CHANGED'), { status: 409, statusText: 'Conflict' });
+      (await nextCall('GET', SESSION_URL)).flush(okEnvelope(sessionView({ activeTenant: tenantB })));
+
+      const result = await outcome;
+
+      expect(result.ok === false && result.error.status).toBe(409);
+      http.expectNone(REFRESH_URL);
     });
 
     it('sends the retry through the trace interceptor again, with a fresh traceparent', async () => {

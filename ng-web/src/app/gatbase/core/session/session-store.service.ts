@@ -271,6 +271,8 @@ export class SessionStore {
       return;
     }
 
+    const wasAuthenticated = this._state() === 'authenticated';
+
     let changed: boolean;
 
     try {
@@ -286,7 +288,13 @@ export class SessionStore {
     const target = this._state() === 'anonymous' ? LOGIN_PATH : '/home';
 
     await this.router.navigateByUrl(target).catch(() => false);
-    await notifyTenantChanged(this.messages, this.transloco);
+
+    // Only a move between tenants gets the notice; a logout or a login elsewhere just navigates.
+    const isTenantChange = wasAuthenticated && this._state() === 'authenticated';
+
+    if (isTenantChange) {
+      await notifyTenantChanged(this.messages, this.transloco);
+    }
   }
 
   private async reloadWhenStale(): Promise<void> {

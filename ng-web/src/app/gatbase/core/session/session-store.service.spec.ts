@@ -7,7 +7,7 @@ import { MessageService } from '@openng/optimus-ui/api';
 import { configureFeatureTest } from '@/core/testing/ui-testing';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
-import { CONFIG_URL, FakeBroadcastChannel, SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../testing/session-testing';
+import { CONFIG_URL, FakeBroadcastChannel, SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
 import { BROWSER_LOCATION } from './browser-location';
 import { SessionStore } from './session-store.service';
 
@@ -360,6 +360,8 @@ describe('SessionStore', () => {
 
       await vi.waitFor(() => expect(store().state()).toBe('anonymous'));
       await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/login'));
+
+      expect(messages.add).not.toHaveBeenCalled();
     });
 
     it('does not navigate or notify when the reload changed nothing', async () => {
@@ -440,6 +442,14 @@ describe('SessionStore', () => {
       becomeVisible();
 
       (await nextCall('GET', SESSION_URL)).flush(okEnvelope(sessionView()));
+    });
+
+    it('leaves a session exactly 30 seconds old alone', async () => {
+      await loadSession();
+      now += 30_000;
+      becomeVisible();
+
+      http.expectNone(SESSION_URL);
     });
 
     it('leaves a fresher session alone', async () => {

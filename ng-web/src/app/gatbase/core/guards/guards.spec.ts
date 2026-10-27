@@ -6,7 +6,7 @@ import { MessageService } from '@openng/optimus-ui/api';
 import { configureFeatureTest } from '@/core/testing/ui-testing';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
-import { CONFIG_URL, SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../testing/session-testing';
+import { CONFIG_URL, SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
 import { BROWSER_LOCATION } from '../session/browser-location';
 import { anonymousGuard, authGuard, flagGuard, requireSession } from './guards';
 

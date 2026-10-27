@@ -1,8 +1,8 @@
 import { HttpTestingController, TestRequest } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
-import { SessionStore } from '../session/session-store.service';
+import { errorEnvelope } from './api-envelope';
+import { okEnvelope, sessionView } from './session-view';
+import { SessionStore } from '@/gatbase/core/session/session-store.service';
 
 export const CONFIG_URL = '/assets/config/runtime-config.json';
 

@@ -1,7 +1,7 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { configureFeatureTest } from '@/core/testing/ui-testing';
-import { CONFIG_URL, fakeLocation, nextCall } from '../testing/session-testing';
+import { CONFIG_URL, fakeLocation, nextCall } from '../../../../testing/fixtures/session-testing';
 import { BROWSER_LOCATION } from '../session/browser-location';
 import { KratosLoginClient } from './kratos-login.service';
 import type { KratosLoginResult } from './kratos.types';
