@@ -149,6 +149,19 @@ describe('LoginPage', () => {
     expect((byTestId(root, 'login-email') as HTMLInputElement).value).toBe('invited@example.com');
   });
 
+  it('shows no notice for an unknown notice key', async () => {
+    history.replaceState({ noticeKey: 'somethingUnknown' }, '');
+
+    const fixture = await openLogin();
+
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(byTestId(fixture.nativeElement, 'login-notice')).toBeNull();
+  });
+
   it('shows the mapped text for invalid credentials', async () => {
     const fixture = await openLogin();
 

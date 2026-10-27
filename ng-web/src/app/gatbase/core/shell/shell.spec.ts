@@ -129,16 +129,20 @@ describe('shell: tenant switcher and account menu', () => {
       expect(router.url).toBe('/work');
     });
 
-    it('keeps the old tenant and toasts the refusal when the switch is denied', async () => {
+    it.each([
+      ['TENANT_SUSPENDED', 'Ese tenant está suspendido.'],
+      ['TENANT_ACCESS_DENIED', 'No tienes acceso a ese tenant.'],
+      ['MEMBERSHIP_REVOKED', 'Tu membresía en ese tenant fue revocada.']
+    ])('keeps the old tenant and toasts the %s refusal when the switch is denied', async (code, text) => {
       const fixture = await renderSwitcher();
 
       const options = await openOptions(fixture);
 
       options.find((option) => option.getAttribute('data-key') === 'tenant-b')?.click();
-      (await nextCall('POST', SWITCH_URL)).flush(errorEnvelope('TENANT_SUSPENDED'), { status: 403, statusText: 'Forbidden' });
+      (await nextCall('POST', SWITCH_URL)).flush(errorEnvelope(code), { status: 403, statusText: 'Forbidden' });
       (await nextCall('GET', SESSION_URL)).flush(okEnvelope(multiTenantView()));
 
-      await vi.waitFor(() => expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ severity: 'error', summary: 'Ese tenant está suspendido.' })));
+      await vi.waitFor(() => expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ severity: 'error', summary: text })));
       await settle(fixture);
       expect(textOf(byTestId(fixture.nativeElement, 'active-tenant-slug'))).toBe('tenant-a');
       expect(textOf(byTestId(fixture.nativeElement, 'tenant-switcher'))).toContain('Tenant A (tenant-a)');
