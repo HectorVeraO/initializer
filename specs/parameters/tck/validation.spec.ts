@@ -102,3 +102,19 @@ test('P14 a method no route accepts is an unknown route', { tag: '@parameters' }
   const page = await expectData<{ items: unknown[] }>(await operator.request.get('/api/v1/parameters?size=1'), 200);
   expect(Array.isArray(page.items)).toBe(true);
 });
+
+test('P15 a value equal to a decimal bound is inside the range', { tag: '@parameters' }, async ({ playwright }) => {
+  const operator = await bootstrapOperator(playwright);
+  const tenantA = await seedTenant(playwright, operator, { slugBase: 'p15-a' });
+  const key = paramKey('retry.p15_backoff');
+  await defineParameter(operator, { key, valueType: 'number', defaultValue: 0.1, minValue: 0.1, maxValue: 0.3 });
+
+  for (const value of [0.1, 0.3]) {
+    const accepted = await expectView(await mutate(tenantA.admin, 'PUT', overridePath(key), { value }), 200, key);
+    expect(accepted.effectiveValue).toBe(value);
+  }
+  for (const value of [0.09, 0.31]) {
+    const error = await expectError(await mutate(tenantA.admin, 'PUT', overridePath(key), { value }), 422, 'VALIDATION_FAILED');
+    expect(issueSet(error)).toEqual(['value:PARAMETER_OUT_OF_RANGE']);
+  }
+});
