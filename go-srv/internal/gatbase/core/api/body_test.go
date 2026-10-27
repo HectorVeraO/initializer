@@ -1,14 +1,20 @@
 package api_test
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core/api"
 )
@@ -328,4 +334,110 @@ func FuzzDecodeBody(f *testing.F) {
 			t.Fatalf("unexpected status %d", apiErr.Status)
 		}
 	})
+}
+
+func TestDecodeBodyOverDrainCapStillAnswers413(t *testing.T) {
+	over := bytes.Repeat([]byte("a"), api.MaxDrainBytes+1024)
+	for _, declared := range []bool{true, false} {
+		r := jsonRequest("application/json", over)
+		if !declared {
+			r.ContentLength = -1
+		}
+		_, err := api.DecodeBody(r)
+		apiErr := asAPIError(t, err)
+		if apiErr.Status != http.StatusRequestEntityTooLarge || apiErr.Code != api.CodePayloadTooLarge {
+			t.Errorf("declared=%v -> %+v", declared, apiErr)
+		}
+	}
+}
+
+// slowReader hands out the body in small steps, like a client still streaming
+// when the server has already decided to answer.
+type slowReader struct {
+	data []byte
+}
+
+func (s *slowReader) Read(p []byte) (int, error) {
+	if len(s.data) == 0 {
+		return 0, io.EOF
+	}
+	n := min(len(p), 32<<10, len(s.data))
+	copy(p, s.data[:n])
+	s.data = s.data[n:]
+	time.Sleep(time.Millisecond)
+	return n, nil
+}
+
+// streamingProxy forwards each request over a fresh connection while it is
+// still being read and answers 502 when the upstream write fails, like the
+// Angular dev server proxy. httputil.ReverseProxy is too forgiving here: it
+// returns an upstream response that arrives before the body is fully sent.
+func streamingProxy(upstream string) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		conn, err := net.Dial("tcp", upstream)
+		if err != nil {
+			rw.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		defer conn.Close()
+		r.RequestURI = ""
+		r.Close = true
+		if err := r.Write(conn); err != nil {
+			rw.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		resp, err := http.ReadResponse(bufio.NewReader(conn), r)
+		if err != nil {
+			rw.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		for key, values := range resp.Header {
+			rw.Header()[key] = values
+		}
+		rw.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(rw, resp.Body)
+	})
+}
+
+func TestDecodeBodyOversizedAnswers413ThroughStreamingProxy(t *testing.T) {
+	writer := newTestWriter(&bytes.Buffer{})
+	backend := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if _, err := api.DecodeBody(r); err != nil {
+			writer.Fail(rw, r, err)
+			return
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	}))
+	defer backend.Close()
+	target, err := url.Parse(backend.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := httptest.NewServer(streamingProxy(target.Host))
+	defer proxy.Close()
+
+	payload := `{"k":"` + strings.Repeat("a", 2<<20) + `"}`
+	req, err := http.NewRequest(http.MethodPost, proxy.URL, &slowReader{data: []byte(payload)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.ContentLength = int64(len(payload))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		t.Fatalf("status %d, undecodable envelope: %v", resp.StatusCode, err)
+	}
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || envelope.Error.Code != string(api.CodePayloadTooLarge) {
+		t.Errorf("status %d code %q, want 413 %s", resp.StatusCode, envelope.Error.Code, api.CodePayloadTooLarge)
+	}
 }

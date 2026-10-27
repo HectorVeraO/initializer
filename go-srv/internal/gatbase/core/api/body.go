@@ -16,6 +16,10 @@ import (
 // MaxBodyBytes is the request body cap of DecodeBody.
 const MaxBodyBytes = 1 << 20
 
+// MaxDrainBytes caps the body bytes read and discarded before a 413, so a
+// streaming proxy still sending the body sees the 413 and not a reset.
+const MaxDrainBytes = 4 << 20
+
 // maxExactFloatInt is 2^53, the largest magnitude a float64 holds exactly.
 const maxExactFloatInt = 1 << 53
 
@@ -40,6 +44,15 @@ func malformedBody() *Error {
 	return failure
 }
 
+// drainBody discards the rest of body, never reading more than MaxDrainBytes
+// in total, where alreadyRead bytes were consumed before the call.
+func drainBody(body io.Reader, alreadyRead int64) {
+	if body == nil {
+		return
+	}
+	_, _ = io.CopyN(io.Discard, body, MaxDrainBytes-alreadyRead)
+}
+
 // DecodeBody checks the media type and size and parses one JSON object:
 //   - Content-Type missing or not application/json (parameters allowed): 415
 //     UNSUPPORTED_MEDIA_TYPE.
@@ -55,6 +68,7 @@ func DecodeBody(r *http.Request) (*Body, error) {
 	}
 	tooLarge := NewError(http.StatusRequestEntityTooLarge, CodePayloadTooLarge, "Request body is too large")
 	if r.ContentLength > MaxBodyBytes {
+		drainBody(r.Body, 0)
 		return nil, tooLarge
 	}
 	var data []byte
@@ -63,6 +77,7 @@ func DecodeBody(r *http.Request) (*Body, error) {
 	}
 	var maxErr *http.MaxBytesError
 	if errors.As(err, &maxErr) {
+		drainBody(r.Body, MaxBodyBytes+1)
 		return nil, tooLarge
 	}
 	if err != nil {
