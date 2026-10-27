@@ -284,7 +284,7 @@ describe('OperatorTenantsPage', () => {
 
     await failCreate(fixture, 500, errorEnvelope('INTERNAL_ERROR'));
 
-    expect(byTestId(root(fixture), 'tenant-issues')).not.toBeNull();
+    expect(textOf(byTestId(root(fixture), 'tenant-issues'))).toBe(es.errors.codes.INTERNAL_ERROR);
     expect((byTestId(root(fixture), 'tenant-name') as HTMLInputElement).value).toBe('Acme');
     expect(byTestId(document.body, 'one-time-secret-value')).toBeNull();
   });

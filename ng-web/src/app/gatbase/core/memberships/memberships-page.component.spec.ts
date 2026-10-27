@@ -302,6 +302,29 @@ describe('MembershipsPage', () => {
     expect(textOf(byTestId(root(fixture), 'memberships-truncated'))).toContain('1 de 250');
   });
 
+  it('ignores a write failure that arrives after the active tenant changed', async () => {
+    const fixture = await open([member('jane')]);
+
+    await confirm(fixture, 'jane', 'membership-suspend');
+
+    const pending = await nextCall('PATCH', `${LIST_URL}/id-jane`);
+
+    const other = { id: '44444444-4444-4444-8444-444444444444', slug: 'tenant-b', name: 'Tenant B', status: 'active' };
+
+    const switching = TestBed.inject(SessionStore).switchTenant(other.id);
+
+    (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(okEnvelope(sessionView({ activeTenant: other })));
+    await switching;
+    (await nextCall('GET', LIST_URL)).flush(pageOf([member('omar')]));
+    await settle(fixture);
+    messages.add.mockClear();
+    pending.flush(errorEnvelope('RESOURCE_NOT_FOUND'), { status: 404, statusText: 'Not Found' });
+    await settle(fixture);
+
+    expect(messages.add).not.toHaveBeenCalled();
+    expect(allByTestId(root(fixture), 'memberships-row').map((row) => row.getAttribute('data-key'))).toEqual(['omar@example.com']);
+  });
+
   it('toasts an error and keeps the row on a 500 when changing the status', async () => {
     const fixture = await open([member('jane')]);
 

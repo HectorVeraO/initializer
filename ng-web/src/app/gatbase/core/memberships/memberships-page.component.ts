@@ -119,6 +119,14 @@ export class MembershipsPage {
       }
     } catch (error) {
       this.clearPicked(row.id);
+
+      // A failure that answers after a tenant switch belongs to the previous tenant: report nothing in the new one.
+      const isStale = this.store.activeTenantId() !== tenantAtStart;
+
+      if (isStale) {
+        return;
+      }
+
       await this.handleFailure(row, error);
     }
   }

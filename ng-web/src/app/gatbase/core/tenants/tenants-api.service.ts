@@ -7,8 +7,7 @@ import { pathSegment } from '@/core/api/api-error';
 import { RuntimeConfigService } from '@/core/config/runtime-config.service';
 import { unwrapData } from '@/core/envelope';
 import type { ApiEnvelope, ApiPage } from '@/core/envelope';
-import type { InvitationView } from '../invitations/invitations-api.service';
-import type { TenantStatus, TenantSummary } from '../session/session.types';
+import type { InvitationView, TenantStatus, TenantSummary } from '../session/session.types';
 
 /** A tenant as the platform operator lists it (core-auth `TenantView`). */
 export interface TenantView extends TenantSummary {

@@ -7,19 +7,9 @@ import { pathSegment } from '@/core/api/api-error';
 import { RuntimeConfigService } from '@/core/config/runtime-config.service';
 import { unwrapData } from '@/core/envelope';
 import type { ApiEnvelope, ApiPage } from '@/core/envelope';
-import type { MembershipRole, SessionMembership } from '../session/session.types';
+import type { InvitationView, MembershipRole, SessionMembership } from '../session/session.types';
 
-/** One invitation as the API lists it (`InvitationView`). The token never appears here. */
-export interface InvitationView {
-  readonly id: string;
-  readonly email: string;
-  readonly role: MembershipRole;
-  readonly status: 'pending' | 'accepted' | 'revoked' | 'expired';
-  readonly expiresAt: string;
-  readonly createdAt: string;
-  readonly acceptedAt: string | null;
-  readonly revokedAt: string | null;
-}
+export type { InvitationView };
 
 /** `data` of POST /api/v1/invitations. `invitationUrl` is shown once and kept nowhere. */
 export interface CreatedInvitation {
