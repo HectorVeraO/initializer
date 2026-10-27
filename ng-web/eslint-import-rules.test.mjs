@@ -33,6 +33,7 @@ const importerModule = 'probe-importer';
 const rejected = [
   ['the shell imports a core file deeply by alias', 'src/app/layout/repro.ts', moduleImport('@/gatbase/core/login', 'login'), 'The skeleton imports Gatbase only'],
   ['a module imports the composition root by relative path', `src/app/gatbase/${importerModule}/repro.ts`, moduleImport('../modules', 'gatbaseModules'), 'A module never imports a sibling module folder'],
+  ['another module imports core by relative path', `src/app/gatbase/${importerModule}/repro.ts`, moduleImport('../core/login', 'login'), 'A module never imports a sibling module folder'],
   ['the core module imports the composition root by relative path', 'src/app/gatbase/core/login/repro.ts', moduleImport('../../modules', 'gatbaseModules'), 'The core module never imports another']
 ];
 
