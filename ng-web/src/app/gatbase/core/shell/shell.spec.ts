@@ -143,6 +143,19 @@ describe('shell: tenant switcher and account menu', () => {
       expect(textOf(byTestId(fixture.nativeElement, 'active-tenant-slug'))).toBe('tenant-a');
       expect(textOf(byTestId(fixture.nativeElement, 'tenant-switcher'))).toContain('Tenant A (tenant-a)');
     });
+
+    it('keeps the old tenant without a second toast when the switch hits a server failure', async () => {
+      const fixture = await renderSwitcher();
+
+      const options = await openOptions(fixture);
+
+      options.find((option) => option.getAttribute('data-key') === 'tenant-b')?.click();
+      (await nextCall('POST', SWITCH_URL)).flush(errorEnvelope('UNAVAILABLE'), { status: 503, statusText: 'Service Unavailable' });
+
+      await settle(fixture);
+      expect(messages.add).not.toHaveBeenCalled();
+      expect(textOf(byTestId(fixture.nativeElement, 'active-tenant-slug'))).toBe('tenant-a');
+    });
   });
 
   describe('account menu', () => {

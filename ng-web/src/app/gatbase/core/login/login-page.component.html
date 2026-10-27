@@ -17,10 +17,12 @@
     </div>
 
     @if (hasErrors()) {
-      <div class="text-red-500 text-sm" role="alert" data-testid="login-error">
-        @for (text of errors(); track $index) {
-          <div>{{ text }}</div>
-        }
+      <div role="alert" data-testid="login-error">
+        <p-message severity="error">
+          @for (text of errors(); track $index) {
+            <div>{{ text }}</div>
+          }
+        </p-message>
       </div>
     }
 

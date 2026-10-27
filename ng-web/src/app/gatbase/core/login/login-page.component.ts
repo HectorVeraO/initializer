@@ -5,6 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { TranslocoModule, TranslocoService, provideTranslocoScope } from '@jsverse/transloco';
 import { ButtonModule } from '@openng/optimus-ui/button';
 import { InputTextModule } from '@openng/optimus-ui/inputtext';
+import { MessageModule } from '@openng/optimus-ui/message';
 import { KratosLoginClient } from '../auth/kratos-login.service';
 import type { KratosMessage } from '../auth/kratos.types';
 import { scopedText } from '../i18n/scoped-text';
@@ -20,7 +21,7 @@ interface LoginHistoryState {
 /** Email and password sign in through the Kratos browser flow; outside the shell. */
 @Component({
   selector: 'app-login-page',
-  imports: [ReactiveFormsModule, ButtonModule, InputTextModule, TranslocoModule],
+  imports: [ReactiveFormsModule, ButtonModule, InputTextModule, MessageModule, TranslocoModule],
   providers: [provideTranslocoScope(GATBASE_CORE_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './login-page.component.html'
