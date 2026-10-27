@@ -154,6 +154,7 @@ func ModulesTS(ids []string) ([]byte, error) {
 	var entries []entry
 	var symbols []string
 	seen := map[string]bool{}
+	symbolOwner := map[string]string{}
 	for _, id := range ids {
 		symbol, err := WebSymbol(id)
 		if err != nil {
@@ -163,6 +164,10 @@ func ModulesTS(ids []string) ([]byte, error) {
 			return nil, fmt.Errorf("module %q is listed twice", id)
 		}
 		seen[id] = true
+		if owner, taken := symbolOwner[symbol]; taken {
+			return nil, fmt.Errorf("modules %q and %q map to the same symbol %q", owner, id, symbol)
+		}
+		symbolOwner[symbol] = id
 		entries = append(entries, entry{id, symbol})
 		symbols = append(symbols, symbol)
 	}

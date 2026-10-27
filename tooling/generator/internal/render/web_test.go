@@ -61,6 +61,7 @@ func TestModulesTSRefusesBadInput(t *testing.T) {
 		"double hyphen":    {"core", "a--b"},
 		"newline in id":    {"core", "a\nb"},
 		"leading digit id": {"core", "1a"},
+		"same symbol":      {"core", "a-1b", "a1b"},
 	}
 	for name, ids := range cases {
 		t.Run(name, func(t *testing.T) {
