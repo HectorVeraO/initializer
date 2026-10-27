@@ -169,6 +169,8 @@ func TestCreateTenantValidationAccumulatesInFieldOrder(t *testing.T) {
 			[]wantIssue{{"slug", "FIELD_TYPE_INVALID"}, {"name", "FIELD_TYPE_INVALID"}, {"adminEmail", "FIELD_TYPE_INVALID"}}},
 		{"blank name, uppercase slug", `{"slug":"Tenant-A","name":"   ","adminEmail":"a@example.com"}`,
 			[]wantIssue{{"slug", "FIELD_INVALID_FORMAT"}, {"name", "FIELD_REQUIRED"}}},
+		{"NUL in name", `{"slug":"tenant-a","name":"Tenant\u0000A","adminEmail":"a@example.com"}`,
+			[]wantIssue{{"name", "FIELD_INVALID_FORMAT"}}},
 		{"too long", `{"slug":"tenant-a","name":"` + long + `","adminEmail":"` + strings.Repeat("a", 250) + `@example.com"}`,
 			[]wantIssue{{"name", "FIELD_TOO_LONG"}, {"adminEmail", "FIELD_TOO_LONG"}}},
 		{"slug edge hyphen and short", `{"slug":"-ab","name":"A","adminEmail":"a@example.com"}`,
@@ -572,6 +574,8 @@ func TestAcceptNewValidationAccumulatesInFieldOrder(t *testing.T) {
 			[]wantIssue{{"token", "FIELD_TYPE_INVALID"}, {"password", "FIELD_TYPE_INVALID"}, {"fullName", "FIELD_TYPE_INVALID"}}},
 		{"too long", `{"token":"` + token + `","password":"` + strings.Repeat("p", 65) + `","fullName":"` + strings.Repeat("n", 101) + `"}`,
 			[]wantIssue{{"password", "FIELD_TOO_LONG"}, {"fullName", "FIELD_TOO_LONG"}}},
+		{"NUL in fullName", `{"token":"` + token + `","password":"` + strings.Repeat("p", 12) + `","fullName":"Jane\u0000Doe"}`,
+			[]wantIssue{{"fullName", "FIELD_INVALID_FORMAT"}}},
 		{"empty strings", `{"token":"` + token + `","password":"","fullName":""}`,
 			[]wantIssue{{"password", "FIELD_REQUIRED"}, {"fullName", "FIELD_REQUIRED"}}},
 		{"empty token", `{"token":"","password":"` + strings.Repeat("p", 12) + `","fullName":"Jane"}`,
@@ -763,5 +767,5 @@ func validAccepted(reader, raw, got string) bool {
 	case "password":
 		return got == raw
 	}
-	return got == strings.TrimSpace(got) && got != ""
+	return got == strings.TrimSpace(got) && got != "" && !strings.ContainsRune(got, 0)
 }
