@@ -13,6 +13,9 @@ const (
 var (
 	qualifiedPattern = regexp.MustCompile(qualified)
 	createTable      = regexp.MustCompile(`(?i)^CREATE (?:(?:GLOBAL |LOCAL )?(?:TEMPORARY |TEMP )|UNLOGGED )?TABLE (?:IF NOT EXISTS )?(` + qualified + `)`)
+	selectStart      = regexp.MustCompile(`(?i)^(?:SELECT|WITH)\b`)
+	intoTarget       = regexp.MustCompile(`(?i)\bINTO (?:(?:TEMPORARY |TEMP |UNLOGGED ))?(?:TABLE )?(` + qualified + `)`)
+	insertBefore     = regexp.MustCompile(`(?i)[()] ?(?:INSERT|MERGE) $`)
 	alterTable       = regexp.MustCompile(`(?i)^ALTER TABLE (?:IF EXISTS )?(?:ONLY )?(` + qualified + `)`)
 	createIndex      = regexp.MustCompile(`(?i)^CREATE (?:UNIQUE )?INDEX (?:CONCURRENTLY )?(?:IF NOT EXISTS )?(?:` + nameToken + ` )?ON (?:ONLY )?(` + qualified + `)`)
 	references       = regexp.MustCompile(`(?i)\bREFERENCES\b ?(` + qualified + `)`)
@@ -34,6 +37,17 @@ func (l *linter) checkStatement(file string, info *moduleInfo, statement Stateme
 
 	if m := createTable.FindStringSubmatch(text); m != nil {
 		tables = append(tables, m[1])
+	}
+	// Top-level SELECT ... INTO creates a table; PL/pgSQL variable targets sit
+	// in dollar-quoted bodies, which the scanner reduces to $$.
+	if selectStart.MatchString(text) {
+		for _, loc := range intoTarget.FindAllStringSubmatchIndex(text, -1) {
+			isInsertOrMerge := insertBefore.MatchString(text[:loc[0]])
+			if isInsertOrMerge {
+				continue
+			}
+			tables = append(tables, text[loc[2]:loc[3]])
+		}
 	}
 	if m := alterTable.FindStringSubmatch(text); m != nil {
 		isAlter = true
