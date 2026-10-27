@@ -197,6 +197,32 @@ export class GatbaseApi {
     await this.post<unknown>('/api/v1/auth/switch-tenant', { tenantId }, 200);
   }
 
+  /** POST /api/v1/parameters (operator) -> 201. */
+  async createParameter(input: {
+    readonly key: string;
+    readonly valueType: 'number';
+    readonly defaultValue: number;
+    readonly minValue: number;
+    readonly maxValue: number;
+    readonly description: string;
+  }): Promise<void> {
+    await this.post<unknown>('/api/v1/parameters', input, 201);
+  }
+
+  /** DELETE /api/v1/parameters/{key} (operator); 200 and 404 both resolve. */
+  async deleteParameter(key: string): Promise<void> {
+    const path = `/api/v1/parameters/${encodeURIComponent(key)}`;
+    const response = await this.request.delete(path, {
+      headers: { [XSRF_HEADER]: await this.xsrfToken(path) },
+    });
+    const isExpected = response.status() === 200 || response.status() === 404;
+    if (!isExpected) {
+      throw new Error(
+        `DELETE ${path}: ${response.status()} ${await response.text()}`,
+      );
+    }
+  }
+
   /** GET /api/v1/auth/session -> data. */
   async session(): Promise<SessionView> {
     const response = await this.request.get(SESSION_PATH);
@@ -211,14 +237,9 @@ export class GatbaseApi {
     body: unknown,
     expected: number,
   ): Promise<T> {
-    const state = await this.request.storageState();
-    const cookie = state.cookies.find((entry) => entry.name === XSRF_COOKIE);
-    if (cookie === undefined) {
-      throw new Error(`no ${XSRF_COOKIE} cookie for POST ${path}`);
-    }
     const response = await this.request.post(path, {
       data: body,
-      headers: { [XSRF_HEADER]: decodeURIComponent(cookie.value) },
+      headers: { [XSRF_HEADER]: await this.xsrfToken(path) },
     });
     if (response.status() !== expected) {
       throw new Error(
@@ -227,6 +248,16 @@ export class GatbaseApi {
     }
     const json = (await response.json()) as { data: T };
     return json.data;
+  }
+
+  /** The XSRF token of the context cookie, for the mutation on `path`. */
+  private async xsrfToken(path: string): Promise<string> {
+    const state = await this.request.storageState();
+    const cookie = state.cookies.find((entry) => entry.name === XSRF_COOKIE);
+    if (cookie === undefined) {
+      throw new Error(`no ${XSRF_COOKIE} cookie for ${path}`);
+    }
+    return decodeURIComponent(cookie.value);
   }
 
   async dispose(): Promise<void> {

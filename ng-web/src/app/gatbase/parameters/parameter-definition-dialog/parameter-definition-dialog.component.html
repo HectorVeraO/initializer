@@ -1,0 +1,100 @@
+<p-dialog
+  [visible]="visible()"
+  (visibleChange)="onVisibleChange($event)"
+  [modal]="true"
+  [header]="(isEdit() ? 'gatbaseParameters.definition.editTitle' : 'gatbaseParameters.definition.createTitle') | transloco"
+  [style]="{ width: '40rem', maxWidth: '95vw' }"
+  data-testid="parameter-definition-dialog"
+>
+  <div class="flex flex-col gap-4" [formGroup]="form">
+    <div class="flex flex-col gap-2">
+      <label for="parameter-def-key-input">{{ 'gatbaseParameters.definition.key' | transloco }}</label>
+      <input pInputText id="parameter-def-key-input" type="text" autocomplete="off" [readOnly]="isEdit()" formControlName="key" data-testid="parameter-def-key" />
+      @for (message of keyMessages(); track $index) {
+        <p-message severity="error" variant="simple" size="small" role="alert" data-testid="parameter-def-key-error">{{ message }}</p-message>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label for="parameter-def-type-input">{{ 'gatbaseParameters.definition.valueType' | transloco }}</label>
+      <p-select inputId="parameter-def-type-input" [options]="valueTypes" formControlName="valueType" appendTo="body" data-testid="parameter-def-type">
+        <ng-template #selectedItem let-option>{{ 'gatbaseParameters.types.' + option | transloco }}</ng-template>
+        <ng-template #item let-option>
+          <span data-testid="parameter-def-type-option" [attr.data-key]="option">{{ 'gatbaseParameters.types.' + option | transloco }}</span>
+        </ng-template>
+      </p-select>
+      @for (message of typeMessages(); track $index) {
+        <p-message severity="error" variant="simple" size="small" role="alert" data-testid="parameter-def-type-error">{{ message }}</p-message>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label for="parameter-def-default-input">{{ 'gatbaseParameters.definition.defaultValue' | transloco }}</label>
+      @if (valueType() === 'boolean') {
+        <p-toggleswitch inputId="parameter-def-default-input" formControlName="defaultBoolean" data-testid="parameter-def-default" />
+      } @else {
+        <input pInputText id="parameter-def-default-input" type="text" autocomplete="off" formControlName="defaultText" data-testid="parameter-def-default" />
+      }
+      @for (message of defaultMessages(); track $index) {
+        <p-message severity="error" variant="simple" size="small" role="alert" data-testid="parameter-def-default-error">{{ message }}</p-message>
+      }
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="flex flex-col gap-2">
+        <label for="parameter-def-min-input">{{ 'gatbaseParameters.definition.minValue' | transloco }}</label>
+        <input pInputText id="parameter-def-min-input" type="number" step="any" formControlName="min" data-testid="parameter-def-min" />
+        @for (message of minMessages(); track $index) {
+          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="parameter-def-min-error">{{ message }}</p-message>
+        }
+      </div>
+      <div class="flex flex-col gap-2">
+        <label for="parameter-def-max-input">{{ 'gatbaseParameters.definition.maxValue' | transloco }}</label>
+        <input pInputText id="parameter-def-max-input" type="number" step="any" formControlName="max" data-testid="parameter-def-max" />
+        @for (message of maxMessages(); track $index) {
+          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="parameter-def-max-error">{{ message }}</p-message>
+        }
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label for="parameter-def-allowed-input">{{ 'gatbaseParameters.definition.allowedValues' | transloco }}</label>
+      <input pInputText id="parameter-def-allowed-input" type="text" autocomplete="off" formControlName="allowedText" data-testid="parameter-def-allowed" />
+      @for (message of allowedMessages(); track $index) {
+        <p-message severity="error" variant="simple" size="small" role="alert" data-testid="parameter-def-allowed-error">{{ message }}</p-message>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label for="parameter-def-description-input">{{ 'gatbaseParameters.definition.description' | transloco }}</label>
+      <input pInputText id="parameter-def-description-input" type="text" autocomplete="off" formControlName="description" data-testid="parameter-def-description" />
+      @for (message of descriptionMessages(); track $index) {
+        <p-message severity="error" variant="simple" size="small" role="alert" data-testid="parameter-def-description-error">{{ message }}</p-message>
+      }
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label class="flex items-center gap-2" for="parameter-def-system-input">
+        <p-toggleswitch inputId="parameter-def-system-input" formControlName="isSystemRequired" data-testid="parameter-def-system" />
+        <span>{{ 'gatbaseParameters.definition.isSystemRequired' | transloco }}</span>
+      </label>
+      @for (message of systemMessages(); track $index) {
+        <p-message severity="error" variant="simple" size="small" role="alert" data-testid="parameter-def-system-error">{{ message }}</p-message>
+      }
+    </div>
+
+    @if (formMessages().length > 0) {
+      <div role="alert" data-testid="parameter-def-issues">
+        <p-message severity="error">
+          @for (message of formMessages(); track $index) {
+            <div>{{ message }}</div>
+          }
+        </p-message>
+      </div>
+    }
+  </div>
+  <ng-template #footer>
+    <button pButton type="button" severity="secondary" [outlined]="true" data-testid="parameter-def-cancel" (click)="close()">{{ 'gatbaseParameters.definition.cancel' | transloco }}</button>
+    <button pButton type="button" data-testid="parameter-def-save" [disabled]="isSubmitting()" (click)="save()">{{ 'gatbaseParameters.definition.save' | transloco }}</button>
+  </ng-template>
+</p-dialog>

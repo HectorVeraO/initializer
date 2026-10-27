@@ -1,0 +1,81 @@
+{
+  "nav": {
+    "parameters": "Parameters"
+  },
+  "list": {
+    "title": "Parameters",
+    "section": "parameters",
+    "empty": "There are no parameters yet.",
+    "truncated": "Showing {{shown}} of {{total}} parameters.",
+    "key": "Key",
+    "type": "Type",
+    "value": "Value",
+    "source": "Source",
+    "default": "Default",
+    "bounds": "Bounds",
+    "system": "System",
+    "systemBadge": "System",
+    "noBounds": "-",
+    "range": "{{min}}..{{max}}",
+    "allowed": "One of: {{values}}",
+    "setOverride": "Set override",
+    "clearOverride": "Clear override",
+    "new": "New parameter",
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "types": {
+    "string": "Text",
+    "number": "Number",
+    "boolean": "Yes / no",
+    "json": "JSON"
+  },
+  "sources": {
+    "global": "Global",
+    "tenant": "Tenant"
+  },
+  "override": {
+    "title": "Override for the active tenant",
+    "value": "Value",
+    "save": "Save",
+    "cancel": "Cancel",
+    "jsonInvalid": "The text is not valid JSON.",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "definition": {
+    "createTitle": "New parameter",
+    "editTitle": "Edit parameter",
+    "key": "Key",
+    "valueType": "Type",
+    "defaultValue": "Default value",
+    "minValue": "Minimum",
+    "maxValue": "Maximum",
+    "allowedValues": "Allowed values (JSON list)",
+    "description": "Description",
+    "isSystemRequired": "Required by the system",
+    "save": "Save",
+    "cancel": "Cancel",
+    "jsonInvalid": "The text is not valid JSON.",
+    "numberInvalid": "Enter a number.",
+    "allowedInvalid": "Enter a JSON list, for example [\"a\", \"b\"].",
+    "booleanInvalid": "Choose yes or no."
+  },
+  "messages": {
+    "deleted": "Parameter {{key}} deleted with {{count}} tenant overrides."
+  },
+  "issues": {
+    "PARAMETER_TYPE_MISMATCH": "The value does not match the type of the parameter.",
+    "PARAMETER_OUT_OF_RANGE": "The value is outside the allowed range.",
+    "PARAMETER_VALUE_NOT_ALLOWED": "The value is not one of the allowed values.",
+    "PARAMETER_FIELD_IMMUTABLE": "This field cannot be changed after the parameter is created.",
+    "PARAMETER_KEY_INVALID": "The key is not valid. Use lowercase letters, digits, dots and underscores.",
+    "PARAMETER_CONSTRAINT_INVALID": "The minimum, maximum or allowed values are not valid for this type."
+  },
+  "errors": {
+    "SYSTEM_PARAMETER_PROTECTED": "This parameter is required by the system and cannot be deleted.",
+    "PARAMETER_OVERRIDES_VIOLATE_CONSTRAINTS": "Some tenant overrides would break the new constraints. Change or clear them first.",
+    "PARAMETER_ALREADY_EXISTS": "A parameter with this key already exists.",
+    "rowGone": "That parameter no longer exists or changed. The list was refreshed."
+  }
+}
