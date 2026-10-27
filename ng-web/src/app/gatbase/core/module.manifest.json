@@ -2,7 +2,7 @@
   "schema": 1,
   "stack": "ng-web",
   "module": "core",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "implied": true,
   "implementsSpec": { "core": "1.0.0", "core-auth": "1.3.0" },
   "requiresModules": [],

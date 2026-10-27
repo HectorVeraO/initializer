@@ -166,7 +166,10 @@ func (rt *sessionRoutes) switchTenant(w http.ResponseWriter, r *http.Request) {
 		rt.writer.Fail(w, r, err)
 		return
 	}
+	// The XSRF-TOKEN value is unchanged; its cookie is rewritten with the
+	// session cookie's Max-Age so the two expire together.
 	rt.cookies.SetSession(w, newToken)
+	rt.cookies.SetCSRF(w, claims.CSRF)
 	rt.respondView(ctx, w, r, claims)
 }
 
