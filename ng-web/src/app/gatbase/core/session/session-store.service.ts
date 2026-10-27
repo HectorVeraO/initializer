@@ -62,6 +62,11 @@ export class SessionStore {
   private refreshing: Promise<'refreshed' | 'anonymous' | 'denied'> | null = null;
   private lastDenial: string | null = null;
   private lastLoadAt = 0;
+  // Each request that can replace the session takes a number when it starts; an answer older than the last committed one is dropped.
+  private lastStarted = 0;
+  private lastCommitted = 0;
+  private lastSwitchCommitted = 0;
+  private lastAnonymousCommitted = 0;
 
   readonly state: Signal<SessionState> = this._state.asReadonly();
   readonly session: Signal<SessionView | null> = this._session.asReadonly();
@@ -119,10 +124,22 @@ export class SessionStore {
   async switchTenant(tenantId: string): Promise<void> {
     const context = new HttpContext().set(NO_TENANT_HEADER, true);
 
+    const ticket = ++this.lastStarted;
+
     try {
       const view = await this.call<SessionView>(this.http.post<ApiEnvelope<SessionView>>(this.runtimeConfig.apiPath('/api/v1/auth/switch-tenant'), { tenantId }, { context }));
 
-      this.commit('authenticated', view);
+      // The server confirmed this tenant, so it wins over a load that started later but read the old one; a logout or a lost session still wins over it, and an older switch never overwrites a newer one.
+      // A session lost after this switch started (even if a later sign-in restored one) is not the session this answer belongs to.
+      const isStillSignedIn = this._state() === 'authenticated' && this.lastAnonymousCommitted < ticket;
+
+      const isLatestSwitch = ticket >= this.lastSwitchCommitted;
+
+      if (isLatestSwitch) {
+        this.lastSwitchCommitted = ticket;
+      }
+
+      this.commit('authenticated', view, false, ticket, isStillSignedIn && isLatestSwitch);
     } catch (error) {
       if (error instanceof HttpErrorResponse && error.status === 403) {
         await this.load(true).catch(() => undefined);
@@ -151,6 +168,8 @@ export class SessionStore {
 
     let target = LOGIN_PATH;
 
+    const ticket = ++this.lastStarted;
+
     try {
       const result = await this.call<LogoutResult>(this.http.post<ApiEnvelope<LogoutResult>>(this.runtimeConfig.apiPath('/api/v1/auth/logout'), {}, { context }));
 
@@ -162,7 +181,7 @@ export class SessionStore {
       // 401 means already logged out; any other failure also ends on /login.
     }
 
-    this.commit('anonymous', null);
+    this.commit('anonymous', null, false, ticket);
     this.announce();
     this.browserLocation.assign(target);
   }
@@ -190,19 +209,21 @@ export class SessionStore {
   private async load(broadcast: boolean): Promise<boolean> {
     const context = new HttpContext().set(SESSION_LIFECYCLE, true).set(SKIP_ERROR_TOAST, true);
 
+    const ticket = ++this.lastStarted;
+
     try {
       const view = await this.call<SessionView>(this.http.get<ApiEnvelope<SessionView>>(this.runtimeConfig.apiPath('/api/v1/auth/session'), { context }));
 
-      return this.commit('authenticated', view, broadcast);
+      return this.commit('authenticated', view, broadcast, ticket);
     } catch (error) {
       if (error instanceof HttpErrorResponse && error.status === 401) {
-        return this.commit('anonymous', null, broadcast);
+        return this.commit('anonymous', null, broadcast, ticket);
       }
 
       if (error instanceof HttpErrorResponse && error.status === 403 && errorCode(error) === ApiErrorCode.AccountLockedOrDisabled) {
         this.lastDenial = ApiErrorCode.AccountLockedOrDisabled;
 
-        return this.commit('anonymous', null, broadcast);
+        return this.commit('anonymous', null, broadcast, ticket);
       }
 
       throw error;
@@ -212,15 +233,18 @@ export class SessionStore {
   private async doRefresh(): Promise<'refreshed' | 'anonymous' | 'denied'> {
     const context = new HttpContext().set(SESSION_LIFECYCLE, true);
 
+    const ticket = ++this.lastStarted;
+
     try {
       const view = await this.call<SessionView>(this.http.post<ApiEnvelope<SessionView>>(this.runtimeConfig.apiPath('/api/v1/auth/refresh'), {}, { context }));
 
-      this.commit('authenticated', view, true);
+      this.commit('authenticated', view, true, ticket);
 
       return 'refreshed';
     } catch (error) {
       if (error instanceof HttpErrorResponse && error.status === 401) {
-        this.commit('anonymous', null, true);
+        // A refresh 401 is final: the caller leaves for /login, so the store must agree even when a newer load answered first.
+        this.commit('anonymous', null, true, ticket, true);
 
         return 'anonymous';
       }
@@ -241,8 +265,25 @@ export class SessionStore {
     return data;
   }
 
-  /** Stores the new state and returns whether the state or the active tenant changed. */
-  private commit(state: SessionState, view: SessionView | null, broadcast = false): boolean {
+  /** True when no request that started later has committed yet. */
+  private isCurrent(ticket: number): boolean {
+    const isCurrent = ticket >= this.lastCommitted;
+
+    return isCurrent;
+  }
+
+  /** Stores the new state and returns whether the state or the active tenant changed; an answer older than the last committed one is dropped and changes nothing. */
+  private commit(state: SessionState, view: SessionView | null, broadcast: boolean, ticket: number, force = false): boolean {
+    if (!force && !this.isCurrent(ticket)) {
+      return false;
+    }
+
+    this.lastCommitted = Math.max(this.lastCommitted, ticket);
+
+    if (state === 'anonymous') {
+      this.lastAnonymousCommitted = Math.max(this.lastAnonymousCommitted, ticket);
+    }
+
     const before = { state: this._state(), tenantId: this.activeTenantId() };
 
     this._session.set(view);
