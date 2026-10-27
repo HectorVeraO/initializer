@@ -1,0 +1,15 @@
+<div class="card">
+  <h1 class="text-2xl font-semibold mb-2">{{ 'home.title' | transloco }}</h1>
+  <p class="mb-4" data-testid="home-intro">{{ 'home.intro' | transloco }}</p>
+
+  @if (showDemos) {
+    <h2 class="text-xl font-semibold mb-2">{{ 'home.demos' | transloco }}</h2>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      @for (demo of demos; track demo.id) {
+        <a [routerLink]="demo.path" class="block p-4 border border-surface rounded-border no-underline hover:bg-surface-100 dark:hover:bg-surface-800" [attr.data-testid]="'home-demo-' + demo.id">
+          <span class="font-medium">{{ demo.label }}</span>
+        </a>
+      }
+    </div>
+  }
+</div>

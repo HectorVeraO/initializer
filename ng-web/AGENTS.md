@@ -4,7 +4,7 @@
 **Purpose**: Angular stack of the catalog: the console screens of each Gatbase module (login through the BFF session, tenant switch, module administration) that the generator copies into Angular projects.
 
 - **Stack**: Node.js 24.22.1 / Angular 22.2 / TypeScript
-- **UI libraries**: none yet
+- **UI libraries**: Optimus UI 2.0.2 (`@openng/optimus-ui`, a PrimeNG fork), Tailwind CSS 4, Transloco. The Sakai demos under `src/app/pages/uikit` are the component reference: copy their markup before inventing one.
 - **Cross-cutting rules**: see root `AGENTS.md`
 <!-- AGENTIC-SETUP:AUTOGEN:overview END -->
 
@@ -22,8 +22,9 @@ Read the fragment routed to your task before building here; this `AGENTS.md` is 
 <!-- AGENTIC-SETUP:AUTOGEN:commands START -->
 | Action | Command |
 |---|---|
-| Develop | `npm start` |
+| Develop (port 10120) | `npm start` |
 | Lint | `npm run lint` |
+| Format check | `npm run format:check` |
 | Build | `npm run build` |
 
 Available environment configurations: `production`, `development`.
@@ -46,7 +47,7 @@ Conventions for each file: `cookbooks/new-feature.md`, "Feature conventions".
 
 ### Layout of this Angular version
 
-Angular 22 (`ng new` default): standalone components, files named `<name>.ts` / `<name>.html` / `<name>.scss` without the `.component` suffix, routes in `<feature>.routes.ts`, no NgModules. Follow this layout where the generated file map above names `*.component.*` or `*.module.ts` files.
+Angular 22, standalone components only, no NgModules. Files are named `<name>.component.ts` / `.html` / `.scss` (the Sakai layout and demos use `<name>.ts`), routes live in `<feature>.routes.ts`, and the `@/` alias points to `src/app`. The Sakai shell sits in `src/app/layout`, shell pages in `src/app/pages`, developer demos in `src/app/dev` (replaced by empty files in production builds), generic code in `src/app/core`, and each feature in its own folder `src/app/<feature>/`, lazy-loaded from `src/app.routes.ts`. Gatbase modules go to `src/app/gatbase/<module>/`. Follow this layout where the file map above names `*.module.ts` or `*-routing.module.ts` files: use `<feature>.routes.ts` instead.
 
 ## Verification
 
@@ -58,7 +59,7 @@ Test runner: **Vitest**. Discipline rules: `.claude/references/test-rules.md`.
 | Action | Command |
 |---|---|
 | All tests | `npm test -- --watch=false` |
-| Single file | `npm test -- --watch=false --include src/app/app.spec.ts` |
+| Single file | `npm test -- --watch=false --include src/app/home/home.component.spec.ts` |
 | Pattern match | `npm test -- --watch=false --filter '<pattern>'` |
 
 The full suite runs in CI, or before pushing where no CI runs it (root `AGENTS.md` "Verification before push"). Locally, run only the tests relevant to your change.
@@ -69,7 +70,7 @@ The full suite runs in CI, or before pushing where no CI runs it (root `AGENTS.m
 |---|---|
 | `src/app/<feature>/<name>.ts` | `npm test -- --watch=false --include src/app/<feature>/<name>.spec.ts` |
 | several files of `src/app/<feature>/` | `npm test -- --watch=false --include src/app/<feature>` |
-| `src/app/app.config.ts`, `src/app/app.routes.ts` | `npm test -- --watch=false` |
+| `src/app.config.ts`, `src/app.routes.ts` | `npm test -- --watch=false` |
 
 ### Verification before push
 

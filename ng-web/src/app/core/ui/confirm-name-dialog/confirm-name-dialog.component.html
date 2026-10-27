@@ -1,0 +1,20 @@
+<p-dialog [visible]="svc.visible()" (visibleChange)="!$event && onCancel()" [modal]="true" [closable]="false" [showHeader]="false" [style]="{ width: '26rem' }" styleClass="confirm-delete-dialog">
+  <div class="confirm-delete-body">
+    <div class="confirm-delete-header">
+      <span class="confirm-delete-title">{{ svc.header() }}</span>
+      <span class="confirm-delete-message">{{ svc.message() }}</span>
+    </div>
+
+    <div class="confirm-delete-input-group">
+      <span class="confirm-delete-label"
+        >{{ 'confirmNameDialog.instruction' | transloco }} <strong>{{ svc.confirmText() }}</strong></span
+      >
+      <input pInputText [(ngModel)]="inputValue" [placeholder]="svc.confirmText()" class="w-full" (keyup.enter)="matchesConfirmText() && onAccept()" />
+    </div>
+
+    <div class="confirm-delete-actions">
+      <p-button [label]="'common.cancel' | transloco" severity="secondary" [outlined]="true" (onClick)="onCancel()" />
+      <p-button [label]="svc.acceptLabel()" severity="danger" [disabled]="!matchesConfirmText()" (onClick)="onAccept()" />
+    </div>
+  </div>
+</p-dialog>

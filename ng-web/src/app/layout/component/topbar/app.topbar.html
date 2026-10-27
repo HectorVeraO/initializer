@@ -1,0 +1,26 @@
+<div class="layout-topbar">
+  <div class="layout-topbar-logo-container">
+    <a class="layout-topbar-logo" routerLink="/">
+      <span data-testid="topbar-logo">initializer</span>
+    </a>
+    <button class="layout-menu-button layout-topbar-action" (click)="layoutService.onMenuToggle()">
+      <i class="pi pi-bars"></i>
+    </button>
+  </div>
+
+  <div class="layout-topbar-actions">
+    <div class="layout-config-menu">
+      <p-select [options]="languages" [ngModel]="selectedLang()" (onChange)="setLang($event.value.code)" dataKey="code" appendTo="body" styleClass="lang-select" [style]="{ minWidth: '7rem' }">
+        <ng-template #selectedItem let-lang>
+          <span class="text-sm font-medium">{{ 'topbar.lang.' + lang.code | transloco }}</span>
+        </ng-template>
+        <ng-template #item let-lang>
+          <span>{{ 'topbar.lang.' + lang.code | transloco }}</span>
+        </ng-template>
+      </p-select>
+      <button type="button" class="layout-topbar-action" (click)="toggleDarkMode()">
+        <i [class]="layoutService.isDarkTheme() ? 'pi pi-moon' : 'pi pi-sun'"></i>
+      </button>
+    </div>
+  </div>
+</div>

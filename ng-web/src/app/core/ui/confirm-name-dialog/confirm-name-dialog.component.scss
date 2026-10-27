@@ -1,0 +1,44 @@
+::ng-deep .confirm-delete-dialog .p-dialog-content {
+  padding: 1.5rem !important;
+}
+
+.confirm-delete-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.confirm-delete-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.confirm-delete-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.confirm-delete-message {
+  font-size: 0.875rem;
+  color: var(--text-color-secondary);
+  line-height: 1.5;
+}
+
+.confirm-delete-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.confirm-delete-label {
+  font-size: 0.875rem;
+  color: var(--text-color);
+}
+
+.confirm-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}

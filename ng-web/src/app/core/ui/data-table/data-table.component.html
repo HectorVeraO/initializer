@@ -1,0 +1,64 @@
+<p-table
+  #innerTable
+  [value]="value"
+  [loading]="loading"
+  [paginator]="true"
+  paginatorDropdownAppendTo="body"
+  [rows]="rows"
+  [rowsPerPageOptions]="rowsPerPageOptions"
+  [dataKey]="dataKey"
+  [styleClass]="styleClass"
+  [globalFilterFields]="globalFilterFields"
+  [showCurrentPageReport]="true"
+  [currentPageReportTemplate]="'common.pageReport' | transloco"
+  [showFirstLastIcon]="false"
+>
+  <ng-template pTemplate="header">
+    <tr>
+      @for (col of columns; track col.field) {
+        @if (col.sortable) {
+          <th [pSortableColumn]="col.field" [style.width]="col.width">
+            <div class="flex items-center gap-1">
+              {{ col.labelKey | transloco }}
+              <p-sortIcon [field]="col.field" />
+              @if (col.filterType) {
+                <p-columnFilter [type]="col.filterType" [field]="col.field" display="menu" />
+              }
+            </div>
+          </th>
+        } @else {
+          <th [style.width]="col.width">
+            <div class="flex items-center gap-1">
+              {{ col.labelKey | transloco }}
+              @if (col.filterType) {
+                <p-columnFilter [type]="col.filterType" [field]="col.field" display="menu" />
+              }
+            </div>
+          </th>
+        }
+      }
+      @if (showActionsColumn) {
+        <th [style.width]="actionsColumnWidth"></th>
+      }
+    </tr>
+  </ng-template>
+
+  <ng-template pTemplate="body" let-row>
+    <ng-container *ngTemplateOutlet="bodyTemplate ?? null; context: { $implicit: row }" />
+  </ng-template>
+
+  <ng-template pTemplate="emptymessage">
+    <tr>
+      <td [attr.colspan]="colspan" class="text-center py-6 text-surface-500">
+        {{ emptyMessageKey | transloco }}
+      </td>
+    </tr>
+  </ng-template>
+
+  <ng-template pTemplate="paginatorpreviouspagelinkicon">
+    <span class="text-sm font-medium">{{ 'common.prevPage' | transloco }}</span>
+  </ng-template>
+  <ng-template pTemplate="paginatornextpagelinkicon">
+    <span class="text-sm font-medium">{{ 'common.nextPage' | transloco }}</span>
+  </ng-template>
+</p-table>

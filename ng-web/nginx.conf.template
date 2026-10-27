@@ -1,0 +1,28 @@
+upstream go-srv {
+    ip_hash;
+    server ${GO_SRV_HOST};
+}
+
+server {
+    listen       80;
+    server_name  localhost;
+
+    location / {
+        root   /usr/share/nginx/html;
+        try_files $uri $uri/ /index.html;
+        index  index.html index.htm;
+    }
+
+    location = /assets/config/runtime-config.json {
+        root   /usr/share/nginx/html;
+        add_header Cache-Control "no-store" always;
+    }
+
+    location /api/ {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_pass http://go-srv;
+    }
+
+    client_max_body_size 128M;
+}

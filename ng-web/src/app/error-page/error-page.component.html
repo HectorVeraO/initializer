@@ -1,0 +1,25 @@
+<div class="error-container">
+  <div class="error-content">
+    <i class="pi pi-exclamation-triangle error-icon"></i>
+
+    <h1>{{ 'errors.' + errorKey() + '.title' | transloco }}</h1>
+
+    <p class="error-message">{{ 'errors.' + errorKey() + '.message' | transloco }}</p>
+
+    <p class="error-hint">{{ 'errors.' + errorKey() + '.additional' | transloco }}</p>
+
+    @if (missingFields().length > 0) {
+      <p class="error-hint" data-testid="error-missing-fields">{{ missingFields().join(', ') }}</p>
+    }
+
+    <button class="retry-button" (click)="onRetry()" [disabled]="isRetrying()">
+      @if (isRetrying()) {
+        <i class="pi pi-spin pi-spinner"></i>
+        {{ 'errors.siteUnavailable.retrying' | transloco }}
+      } @else {
+        <i class="pi pi-refresh"></i>
+        {{ 'errors.siteUnavailable.retry' | transloco }}
+      }
+    </button>
+  </div>
+</div>
