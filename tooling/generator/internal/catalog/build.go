@@ -313,6 +313,29 @@ func (b *builder) underUnmanagedStack(p string) bool {
 	return false
 }
 
+// unmanifestedModuleFolder returns the folder prefix (with trailing slash) when p sits
+// in a direct child folder of a managed stack's modules root that has no module
+// manifest, and "" otherwise. Core's broader claim on the stack root never covers
+// such a folder; an entry at least as specific as the folder still does.
+func (b *builder) unmanifestedModuleFolder(p string) string {
+	for _, stack := range stackTable {
+		if !b.managedStack[stack.name] || !strings.HasPrefix(p, stack.modulesRoot) {
+			continue
+		}
+		folder, _, nested := strings.Cut(p[len(stack.modulesRoot):], "/")
+		if !nested {
+			return ""
+		}
+		for _, doc := range b.modules {
+			if doc.stack.name == stack.name && doc.folder == folder {
+				return ""
+			}
+		}
+		return stack.modulesRoot + folder + "/"
+	}
+	return ""
+}
+
 func isCompositionRoot(p string) bool {
 	for _, stack := range stackTable {
 		if p == stack.compositionRoot {
@@ -431,6 +454,10 @@ func (b *builder) assignOwnership() error {
 			continue
 		}
 		winner, conflict := b.resolve(p)
+		if folder := b.unmanifestedModuleFolder(p); folder != "" && len(conflict) == 0 && (winner == nil || len(winner.entry.Path) < len(folder)) {
+			b.addPlain(CodeFileUnowned, p, "module folder has no module.manifest.json")
+			continue
+		}
 		switch {
 		case len(conflict) > 0:
 			names := make([]string, len(conflict))
