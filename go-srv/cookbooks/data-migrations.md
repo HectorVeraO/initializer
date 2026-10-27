@@ -11,22 +11,32 @@ Every table matches `^[a-z]{2,4}_[a-z0-9_]+$`: a 2 to 4 letter module prefix, an
 
 ## Prefix registry
 
+The registry the lint reads is each module's `go-srv/internal/gatbase/<module>/module.manifest.json` `tablePrefixes` (2 to 4 lowercase letters, no underscore). The table below is the human index: `cor_`, `ten_` and `iam_` are enforced once their module ships a manifest that claims them; until then the lint does not stop another manifest from claiming them, so check this table in review.
+
 | Prefix | Module | Tables |
 |---|---|---|
+| `cor_` | Core migration runner: goose version tables | `cor_migrations_<module>` (one goose version table per module) |
 | `ten_` | Tenancy and memberships (core) | `ten_tenants`, `ten_memberships`, `ten_invitations` |
 | `iam_` | Identity and API keys (core) | `iam_accounts`, `iam_api_keys` |
 | `sys_` | Parameters | `sys_parameters`, `sys_parameter_overrides` |
 | `flg_` | Feature flags | `flg_overrides`, `flg_tenant_overrides` |
 
-Reserved for planned catalog modules; do not use them for anything else: `aud_` (audit log), `pln_` (plans and entitlements), `mtr_` (metering), `bil_` (billing), `mkc_` (maker-checker), `jbr_` (support ticket bridge), `stg_` (file storage).
+Reserved for planned catalog modules; `gates migrations` rejects a manifest that claims one (list: `tooling/gates/internal/migrationlint/reserved-prefixes.json`): `aud_` (audit log), `pln_` (plans and entitlements), `mtr_` (metering), `bil_` (billing), `mkc_` (maker-checker), `jbr_` (support ticket bridge), `stg_` (file storage).
 
-- A new module claims a new prefix by adding a row here in the same PR as its first migration.
+- A new module claims a new prefix in its `module.manifest.json` and adds a row here in the same PR as its first migration. No two manifests claim the same prefix.
 - A generated project registers its own prefixes in its own copy of this table; it never reuses a core or reserved prefix.
 
 ## Migration files
 
-- One file per change, named `<timestamp>_<prefix>_<name>.sql` (for example `20260101120000_sys_create_parameters.sql`). The prefix is the module that owns the table.
-- Files are applied by the migration tool chosen in slice 1.1. Until that tool exists, no migration file is committed.
+- Run `go -C tooling/gates run ./cmd/gates migrations --root ../.. [--base-rev <rev>]` (CI job `gates` runs it with the PR base). Output ends with `<n> migration files checked`. It checks every `.sql` file under `go-srv/` except those inside a `testdata/` directory (test fixtures).
+- Files live in `go-srv/internal/gatbase/<module>/migrations/`, one file per change, named `^(\d{14})_([a-z]{2,4})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`: `<YYYYMMDDhhmmss>_<prefix>_<name>.sql` (for example `20260101120000_sys_create_parameters.sql`). The prefix is in the owning module's `tablePrefixes`; timestamps are unique across the repo.
+- Every file has the line `-- +goose Up`. Wrap PL/pgSQL bodies in `-- +goose StatementBegin` / `-- +goose StatementEnd`. No `-- +goose Down` (Expand-first), no `-- +goose NO TRANSACTION`.
+- Tables are unquoted, in schema `public` (qualifier optional), and carry the file's module prefix, also in `REFERENCES`, `ALTER TABLE`, `CREATE INDEX ... ON` and `DROP TABLE`; no cross-module foreign keys.
+- A Contract step (`DROP TABLE`, `DROP COLUMN`, `RENAME COLUMN`, `RENAME TO`, `ALTER COLUMN ... TYPE`, `ALTER COLUMN ... SET NOT NULL`) carries the line `-- gatbase:contract-step <reason>` directly above the statement.
+- A new file sorts after the newest file of its module on the base revision (its tip, not the fork point); a file that exists at the base is never edited, renamed or deleted.
+- A module embeds its files with `//go:embed migrations/*.sql` and passes the embedded FS as `core.Module.Migrations`. Core applies every module's files at startup (`core/migrate`, goose), after all `Provide` calls and before any `Mount`, in module list order, under one Postgres advisory lock so concurrent instances wait instead of racing.
+- Each module has its own goose version table `cor_migrations_<module>` (`-` becomes `_`: `cor_migrations_core_auth`). There is no `-- +goose Down`; a failed file fails startup.
+- Test migrations against a real database through `coretest.New(t, modules, coretest.Options{Database: true})` (`cookbooks/testing-tck.md`).
 - A merged migration is immutable. Fix a mistake with a new migration.
 - A migration touches only its own module's tables.
 

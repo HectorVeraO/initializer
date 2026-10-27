@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "spec": "core",
+  "version": "1.0.0",
+  "tckTags": ["@core", "@otel"],
+  "tckEnv": {}
+}

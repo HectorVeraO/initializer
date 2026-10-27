@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "spec": "feature-flags",
+  "version": "0.1.0",
+  "tckTags": ["@feature-flags"],
+  "tckEnv": {"GATBASE_FLAGS_FILE": "specs/feature-flags/tck/fixtures/flags.yaml"}
+}

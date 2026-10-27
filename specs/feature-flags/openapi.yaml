@@ -1,0 +1,637 @@
+openapi: 3.1.0
+info:
+  title: Gatbase feature flags
+  version: 0.1.0
+  description: >-
+    Platform-operator routes over the feature flags the flags.yaml manifest declares:
+    list every flag with its overrides, and set or clear a global override or a
+    per-tenant override. Every route is operator-only and cross-tenant by design: the
+    operator names the target tenant in the path. The flag map a tenant user receives
+    is data.flags of the core-auth session responses, declared in
+    specs/core-auth/openapi.yaml, and is not redeclared here. Every /api/v1 body is
+    the envelope of the core contract. Request schemas describe their constraints in
+    prose: a violation answers 422 VALIDATION_FAILED with every problem in error.issues.
+servers:
+  - url: /
+security: []
+tags:
+  - name: feature-flags
+paths:
+  /api/v1/feature-flags:
+    get:
+      operationId: listFeatureFlags
+      summary: List feature flags
+      description: >-
+        Platform operator only. One page of the manifest flags in file order, each with
+        its global override and every tenant override (ordered by tenantId). Overrides
+        of keys the manifest no longer declares never appear. There is no sort.
+      tags: [feature-flags]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: A page of flags.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FlagPage'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: PLATFORM_OPERATOR_REQUIRED.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '422':
+          description: VALIDATION_FAILED (issues FIELD_TYPE_INVALID, FIELD_OUT_OF_RANGE, FIELD_NOT_ALLOWED).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+  /api/v1/feature-flags/{key}:
+    put:
+      operationId: setGlobalFlagOverride
+      summary: Set the global override of a flag
+      description: >-
+        Platform operator only. Upserts the global override of a manifest flag; it applies
+        to every tenant without a tenant override.
+      tags: [feature-flags]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/ActiveTenantId'
+        - $ref: '#/components/parameters/FlagKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnabledBody'
+      responses:
+        '200':
+          description: The flag with its overrides.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FlagView'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID, PLATFORM_OPERATOR_REQUIRED.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '404':
+          description: FLAG_NOT_DEFINED_IN_MANIFEST.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: ACTIVE_TENANT_CHANGED, CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '413':
+          description: PAYLOAD_TOO_LARGE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '422':
+          description: VALIDATION_FAILED (issues FIELD_REQUIRED, FIELD_TYPE_INVALID, BODY_MALFORMED on enabled or the body).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+    delete:
+      operationId: clearGlobalFlagOverride
+      summary: Clear the global override of a flag
+      description: >-
+        Platform operator only. Deletes the global override when present; idempotent.
+      tags: [feature-flags]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/ActiveTenantId'
+        - $ref: '#/components/parameters/FlagKey'
+      responses:
+        '200':
+          description: The flag with its overrides; globalOverride is null.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FlagView'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID, PLATFORM_OPERATOR_REQUIRED.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '404':
+          description: FLAG_NOT_DEFINED_IN_MANIFEST.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: ACTIVE_TENANT_CHANGED, CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+  /api/v1/feature-flags/{key}/tenants/{tenantId}:
+    put:
+      operationId: setTenantFlagOverride
+      summary: Set the override of a flag for one tenant
+      description: >-
+        Platform operator only. Upserts the override of a manifest flag for the tenant named
+        in the path. Checks run in order: the key, then the tenant (format, then existence),
+        then the body.
+      tags: [feature-flags]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/ActiveTenantId'
+        - $ref: '#/components/parameters/FlagKey'
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnabledBody'
+      responses:
+        '200':
+          description: The flag with its overrides.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FlagView'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID, PLATFORM_OPERATOR_REQUIRED.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '404':
+          description: FLAG_NOT_DEFINED_IN_MANIFEST, RESOURCE_NOT_FOUND (a malformed or unknown tenant).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: ACTIVE_TENANT_CHANGED, CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '413':
+          description: PAYLOAD_TOO_LARGE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '422':
+          description: VALIDATION_FAILED (issues FIELD_REQUIRED, FIELD_TYPE_INVALID, BODY_MALFORMED on enabled or the body).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+    delete:
+      operationId: clearTenantFlagOverride
+      summary: Clear the override of a flag for one tenant
+      description: >-
+        Platform operator only. Deletes the tenant override when present; idempotent and
+        it needs no existing tenant, only a well-formed tenant id.
+      tags: [feature-flags]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/ActiveTenantId'
+        - $ref: '#/components/parameters/FlagKey'
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        '200':
+          description: The flag with its overrides.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FlagView'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID, PLATFORM_OPERATOR_REQUIRED.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '404':
+          description: FLAG_NOT_DEFINED_IN_MANIFEST, RESOURCE_NOT_FOUND (a malformed tenant id).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: ACTIVE_TENANT_CHANGED, CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: gb_session
+      description: Name is __Host-gb_session over https. Not pinned by the TCK; treat it as opaque.
+  parameters:
+    XsrfToken:
+      name: X-XSRF-TOKEN
+      in: header
+      required: false
+      description: Required on cookie-authenticated mutations; value of the XSRF-TOKEN cookie. Missing or wrong -> 403 CSRF_TOKEN_INVALID.
+      schema: { type: string }
+    ActiveTenantId:
+      name: X-Active-Tenant-Id
+      in: header
+      required: false
+      description: Tenant the client rendered. Differs from the session tenant -> 409 ACTIVE_TENANT_CHANGED, nothing executed. Ignored for API keys.
+      schema: { type: string, format: uuid }
+    FlagKey:
+      name: key
+      in: path
+      required: true
+      description: Flag key as declared in the manifest. An undeclared key answers 404 FLAG_NOT_DEFINED_IN_MANIFEST.
+      schema:
+        type: string
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      description: Tenant id (UUID, case-insensitive). A malformed id answers 404 RESOURCE_NOT_FOUND.
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 1-based page number. Not an integer -> FIELD_TYPE_INVALID; below 1 -> FIELD_OUT_OF_RANGE.
+      schema: { type: integer, minimum: 1, default: 1 }
+    Size:
+      name: size
+      in: query
+      required: false
+      description: Page size, 1 to 100. Not an integer -> FIELD_TYPE_INVALID; outside the range -> FIELD_OUT_OF_RANGE.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+  headers:
+    XTraceId:
+      description: The trace id of the request; equals meta.traceId of the body.
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{32}$'
+  schemas:
+    ApiMeta:
+      type: object
+      required: [traceId, timestamp]
+      additionalProperties: false
+      properties:
+        traceId:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+          description: 32 lowercase hex characters, never all zeros.
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC in whole seconds, ending in Z.
+    ApiIssue:
+      type: object
+      required: [field, code, message]
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+          description: JSON path into the request body or a query parameter name; empty means the whole body.
+        code:
+          $ref: '#/components/schemas/ApiIssueCode'
+        message:
+          type: string
+    ApiError:
+      type: object
+      required: [code, message, issues]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/ApiErrorCode'
+        message:
+          type: string
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiIssue'
+    ApiEnvelopeError:
+      type: object
+      required: [data, meta, error]
+      additionalProperties: false
+      properties:
+        data:
+          type: 'null'
+        meta:
+          $ref: '#/components/schemas/ApiMeta'
+        error:
+          $ref: '#/components/schemas/ApiError'
+    SuccessEnvelope:
+      type: object
+      required: [data, meta, error]
+      properties:
+        data: {}
+        meta:
+          $ref: '#/components/schemas/ApiMeta'
+        error:
+          type: 'null'
+    ApiErrorCode:
+      type: string
+      description: Top-level error.code. The set grows (x-extensible-enum), so a client treats an unknown code as a generic error; renaming or removing a code is a breaking change.
+      x-extensible-enum:
+        - SESSION_INVALID
+        - CREDENTIAL_CONFLICT
+        - CSRF_TOKEN_INVALID
+        - ACTIVE_TENANT_CHANGED
+        - PLATFORM_OPERATOR_REQUIRED
+        - FLAG_NOT_DEFINED_IN_MANIFEST
+        - RESOURCE_NOT_FOUND
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
+        - VALIDATION_FAILED
+        - INTERNAL_ERROR
+    ApiIssueCode:
+      type: string
+      description: error.issues[].code, always under a 422 VALIDATION_FAILED. The set grows (x-extensible-enum), so a client treats an unknown code as a generic problem.
+      x-extensible-enum:
+        - FIELD_REQUIRED
+        - FIELD_TYPE_INVALID
+        - FIELD_OUT_OF_RANGE
+        - FIELD_NOT_ALLOWED
+        - BODY_MALFORMED
+    FlagType: { type: string, enum: [release, ops] }
+    EnabledBody:
+      type: object
+      description: 'Required: enabled, a JSON boolean.'
+      properties:
+        enabled: { type: boolean }
+    GlobalOverride:
+      type: object
+      required: [enabled, updatedAt]
+      properties:
+        enabled: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    TenantOverride:
+      type: object
+      required: [tenantId, enabled, updatedAt]
+      properties:
+        tenantId: { type: string, format: uuid }
+        enabled: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    FlagView:
+      type: object
+      required: [key, type, default, expiresAt, description, globalOverride, tenantOverrides]
+      properties:
+        key: { type: string }
+        type: { $ref: '#/components/schemas/FlagType' }
+        default: { type: boolean }
+        expiresAt: { type: [string, 'null'], format: date, description: 'YYYY-MM-DD; null for ops flags' }
+        description: { type: string }
+        globalOverride:
+          oneOf:
+            - $ref: '#/components/schemas/GlobalOverride'
+            - type: 'null'
+        tenantOverrides:
+          type: array
+          description: 'Every tenant override of this key, ordered by tenantId.'
+          items: { $ref: '#/components/schemas/TenantOverride' }
+    FlagPage:
+      type: object
+      required: [items, page, size, totalItems]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/FlagView' }
+        page: { type: integer }
+        size: { type: integer }
+        totalItems: { type: integer }

@@ -1,0 +1,65 @@
+version: v26.2.0
+
+# Overridden by the DSN env var of the compose service.
+dsn: memory
+
+serve:
+  public:
+    # Overridden per environment with SERVE_PUBLIC_BASE_URL=${GATBASE_PUBLIC_BASE_URL}/kratos/
+    base_url: http://localhost:10120/kratos/
+    cors:
+      enabled: false
+  admin:
+    base_url: http://127.0.0.1:10134/
+
+# Kratos cookies must reach /api/v1/auth/session, not only /kratos/.
+cookies:
+  path: /
+  same_site: Lax
+
+session:
+  lifespan: 24h
+  cookie:
+    name: ory_kratos_session
+    path: /
+    same_site: Lax
+
+selfservice:
+  default_browser_return_url: http://localhost:10120/
+  allowed_return_urls:
+    - http://localhost:10120/
+  methods:
+    password:
+      enabled: true
+      config:
+        haveibeenpwned_enabled: false
+  flows:
+    error:
+      ui_url: http://localhost:10120/login
+    login:
+      ui_url: http://localhost:10120/login
+      lifespan: 1h
+    registration:
+      enabled: false
+      style: unified
+      ui_url: http://localhost:10120/login
+    recovery:
+      enabled: false
+    verification:
+      enabled: false
+    settings:
+      ui_url: http://localhost:10120/login
+    logout:
+      after:
+        default_browser_return_url: http://localhost:10120/login
+
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/config/kratos/identity.schema.json
+
+# No mail is ever sent (recovery and verification are off); a value is set only in case the config schema requires one.
+courier:
+  smtp:
+    connection_uri: smtp://localhost:1025/?disable_starttls=true

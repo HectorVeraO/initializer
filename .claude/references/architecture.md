@@ -200,8 +200,9 @@ Agent rules:
 ### Contracts, SemVer and the catalog
 
 - Each module has `specs/<module>/openapi.yaml` (or `asyncapi.yaml`) and `specs/<module>/tck/`. Contract and TCK share one SemVer tag, `spec-<module>-vX.Y.Z`: MAJOR for a breaking wire change, MINOR for a backward-compatible extension, PATCH for test or text fixes.
-- A breaking wire change carries the `BREAKING CHANGE:` trailer in its commit. The planned CI gate compares each contract against its last `spec-<module>-v*` tag with `oasdiff breaking` and fails a breaking change without a MAJOR bump.
-- Implementations are versioned separately from contracts and declare the contract version they implement (`implements_spec`) in a module manifest. Stacks may move at different speeds; each is tested against the TCK tag it declares.
+- A breaking wire change carries the `BREAKING CHANGE:` trailer in its commit. `gates contracts` (CI job `gates`) runs `oasdiff breaking --fail-on ERR --flatten-allof` on every `specs/<spec>/openapi.yaml` changed since `git merge-base <base-rev> HEAD` (a spec absent there is new and skipped). A breaking change fails `CONTRACT_BREAKING_UNMARKED` unless a commit touching `specs/<spec>/` carries a `BREAKING CHANGE:` footer (`feat!:` is not a marker), and `CONTRACT_BREAKING_NOT_MAJOR` unless `version` in `spec.manifest.json` has a higher MAJOR than at the merge base.
+- Every spec and module carries a manifest `version`. `gates versions` (CI job `gates`) compares HEAD with `git merge-base <base-rev> HEAD`: a component whose files changed (spec folder, or the longest-prefix `files` entry of a module manifest; `exclude` entries and the composition roots `go-srv/cmd/server/modules.go`, `ng-web/src/app/gatbase/modules.ts` belong to no component) must carry a higher `version` (`VERSION_NOT_BUMPED`), no version may drop (`VERSION_DECREASED`), versions are `X.Y.Z` (`VERSION_INVALID`) and no entry is claimed by two manifests (`COMPONENT_PATH_OVERLAP`). `gates tags` lists `<component>-v<version>` names with no git tag; `.github/workflows/tags.yml` pushes them on `main`.
+- Implementations are versioned separately from contracts and declare the contract version they implement (`implementsSpec`) in a module manifest. Stacks may move at different speeds; each is tested against the TCK tag it declares.
 - The contract changes in the same PR as the code that implements it.
 
 ### Wire format
@@ -231,5 +232,5 @@ Agent rules:
 
 ### Toolchain and ports
 
-- Go, Node, gitleaks and lefthook are pinned in root `mise.toml`. Run `mise install` once per clone; never rely on a globally installed version.
+- Go, Node, gitleaks, lefthook and oasdiff are pinned in root `mise.toml`. Run `mise install` once per clone; never rely on a globally installed version.
 - Local host ports come from band `101xx` (10100-10199); the per-service map is `.deploy/local/README.md`.

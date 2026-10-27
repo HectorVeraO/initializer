@@ -14,3 +14,9 @@ Format and examples: `.claude/references/code-path-parity-format.md`.
 ---
 
 <!-- Add parity rows below this line. The skill never edits below. -->
+
+| Group | Files | What duplicates | Check | What breaks silently |
+|---|---|---|---|---|
+| oasdiff pin | `mise.toml`, `.github/workflows/ci.yml` | The oasdiff version (`github:oasdiff/oasdiff` in `mise.toml`, `OASDIFF_VERSION` and its sha256 in `ci.yml`) | Both name the same version; the sha256 comment matches that release's linux_amd64 archive | Local and CI `gates contracts` classify breaking changes with different oasdiff versions |
+| Envelope schemas | `specs/core/openapi.yaml`, `specs/core-auth/openapi.yaml`, `specs/parameters/openapi.yaml`, `specs/feature-flags/openapi.yaml` | The `ApiMeta`, `ApiIssue`, `ApiError`, `ApiEnvelopeError` schemas and the `XTraceId` header, copied byte for byte (no external `$ref`) | `for f in <the files>; do awk '/^    ApiMeta:/{p=1} /^    (ApiPage\|ApiErrorCode\|SuccessEnvelope):/{p=0} p' $f \| sha256sum; done` prints one hash for all files (same for the `XTraceId` block) | A client generated from one spec reads another module's envelope differently; oasdiff sees no break because each file is self-consistent |
+| Flag key rule | `go-srv/internal/gatbase/featureflags/migrations/20261026170000_flg_create_overrides.sql`, `go-srv/internal/gatbase/featureflags/migrations/20261026170100_flg_create_tenant_overrides.sql`, `go-srv/internal/gatbase/featureflags/manifest.go`, `tooling/gates/internal/flagscheck/flagscheck.go` | The flag key rule `^[a-z][a-z0-9_]*$` with at most 64 characters (SQL `CHECK`, loader `keyPattern` and `maxKeyLength`, gate `keyPattern` and `maxKeyLength`) | `grep -n 'a-z0-9_\]\*\$' <the four files>` shows the same pattern and the same 64 limit in each | A key the gate accepts is refused by startup or by the database, or the reverse; the failure shows only at deploy |

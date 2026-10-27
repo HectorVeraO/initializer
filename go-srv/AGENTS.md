@@ -24,7 +24,7 @@ Read the fragment routed to your task before building here; this `AGENTS.md` is 
 <!-- AGENTIC-SETUP:AUTOGEN:commands START -->
 | Action | Command |
 |---|---|
-| Develop | `go run ./cmd/server` |
+| Develop | `go run ./cmd/server` (needs `GATBASE_DATABASE_URL`: `set -a; . ../.deploy/local/.env; set +a`) |
 | Lint | `go vet ./...` |
 | Build | `go build ./...` |
 <!-- AGENTIC-SETUP:AUTOGEN:commands END -->
@@ -37,7 +37,7 @@ Test runner: **go test** (`go test ./...`); no dedicated stub.
 
 Before declaring a change complete:
 
-- **Tests**: `go test ./...`
+- **Tests**: `go test ./...`; with `GATBASE_TEST_DATABASE_URL` set (cookbook `testing-tck.md`) the database tests run instead of skipping.
 - **Lint**: `go vet ./...`
 - **Build**: `go build ./...`
 - **Read the full modified file**, not just the diff.
