@@ -97,6 +97,11 @@ func readTrimmedName(body *api.Body, p *api.Problems, field string, max int) (st
 	if !api.CheckLength(p, field, value, 1, max) {
 		return "", false
 	}
+	// Postgres text columns reject NUL: it is invalid input, not a 500.
+	if strings.ContainsRune(value, 0) {
+		p.Add(field, api.CodeFieldInvalidFmt, "Must not contain a NUL character")
+		return "", false
+	}
 	return strings.TrimSpace(value), true
 }
 
