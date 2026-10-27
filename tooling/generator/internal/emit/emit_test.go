@@ -609,7 +609,8 @@ func assertFlagsConfigRefused(t *testing.T, templatePath string, template []byte
 		t.Fatal(err)
 	}
 	_, err = build(t, os.DirFS(root), crafted, encoded, selection(targetModule, "parameters"))
-	if err == nil || !strings.Contains(err.Error(), templatePath) {
-		t.Fatalf("want an error naming %s, got %v", templatePath, err)
+	isRefusal := err != nil && strings.Contains(err.Error(), templatePath) && strings.Contains(err.Error(), "the feature-flags block is missing")
+	if !isRefusal {
+		t.Fatalf("want a missing feature-flags block error naming %s, got %v", templatePath, err)
 	}
 }
