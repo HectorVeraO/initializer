@@ -1,7 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslocoTestingModule } from '@jsverse/transloco';
-import { ConfirmationService } from '@openng/optimus-ui/api';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { ConfirmationService, MessageService } from '@openng/optimus-ui/api';
+import { coreModule, provideGatbase } from '@/gatbase/core';
 import { provideOptimus } from '@openng/optimus-ui/config';
 import es from '../../../../assets/i18n/es.json';
 import { ConfirmDeleteService } from '@/core/ui/confirm-delete/confirm-delete.service';
@@ -13,7 +16,7 @@ describe('AppLayout', () => {
     stubMatchMedia();
     TestBed.configureTestingModule({
       imports: [TranslocoTestingModule.forRoot({ langs: { es }, translocoConfig: { availableLangs: ['es'], defaultLang: 'es' }, preloadLangs: true })],
-      providers: [provideRouter([]), provideOptimus({}), ConfirmationService]
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), provideGatbase([coreModule]), { provide: MessageService, useValue: { add: vi.fn() } }, provideOptimus({}), ConfirmationService]
     });
   });
 

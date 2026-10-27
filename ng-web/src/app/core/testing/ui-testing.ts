@@ -1,6 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, TestRequest, provideHttpClientTesting } from '@angular/common/http/testing';
-import { Provider, Type } from '@angular/core';
+import { Component, Provider, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Routes, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -8,6 +8,10 @@ import { TranslocoTestingModule } from '@jsverse/transloco';
 import { ConfirmationService } from '@openng/optimus-ui/api';
 import { provideOptimus } from '@openng/optimus-ui/config';
 import es from '../../../assets/i18n/es.json';
+
+/** Empty routed component for specs that need a route target. */
+@Component({ selector: 'p-blank', template: '' })
+export class BlankComponent {}
 
 /** Test module shared by the feature specs: Spanish translations and HTTP boundary doubles. */
 export function configureFeatureTest(routes: Routes = [], extraProviders: Provider[] = []): void {
