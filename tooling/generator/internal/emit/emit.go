@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strings"
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
@@ -33,6 +34,17 @@ const goCompositionRoot = "go-srv/cmd/server/modules.go"
 
 // webCompositionRoot is the rendered composition root of the ng-web stack.
 const webCompositionRoot = "ng-web/src/app/gatbase/modules.ts"
+
+// featureFlagsID is the module whose configuration core's .deploy/local files
+// carry.
+const featureFlagsID = "feature-flags"
+
+// envTemplateFile and deployReadmeFile hold the feature-flags configuration
+// that a project without that module must not receive.
+const (
+	envTemplateFile  = ".deploy/local/.example.env"
+	deployReadmeFile = ".deploy/local/README.md"
+)
 
 // BuildOptions are the inputs of one project build.
 type BuildOptions struct {
@@ -216,6 +228,12 @@ func (b *builder) transform(sourcePath string, data []byte) ([]byte, error) {
 		return out, nil
 	case sourcePath == composeFile:
 		return rewriteComposeName(data, b.opts.Plan.ComposeName, b.project)
+	case (sourcePath == envTemplateFile || sourcePath == deployReadmeFile) && !b.hasModule(featureFlagsID):
+		out, err := dropFlagsConfig(sourcePath, data)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", sourcePath, err)
+		}
+		return out, nil
 	case gorewrite.ShouldRewrite(sourcePath):
 		out, _, err := gorewrite.RewriteImports(sourcePath, data, b.source, b.target)
 		if err != nil {
@@ -224,6 +242,57 @@ func (b *builder) transform(sourcePath string, data []byte) ([]byte, error) {
 		return out, nil
 	}
 	return data, nil
+}
+
+// hasModule reports whether any selected stack installs the module.
+func (b *builder) hasModule(id string) bool {
+	for _, stack := range b.opts.Plan.Stacks {
+		for _, module := range stack.Modules {
+			if module.Module == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// dropFlagsConfig removes the feature-flags block of core's env template (the
+// comment lines from "# feature-flags:" through the GATBASE_FLAGS_FILE
+// assignment, with the blank line before them) or of the deploy README (the
+// "## Feature flags" section). It fails when the block is absent, so a
+// reworded source cannot ship the block silently.
+func dropFlagsConfig(sourcePath string, data []byte) ([]byte, error) {
+	lines := strings.SplitAfter(string(data), "\n")
+	start, end := -1, -1
+	for i, line := range lines {
+		text := strings.TrimRight(line, "\r\n")
+		switch sourcePath {
+		case envTemplateFile:
+			if start < 0 && strings.HasPrefix(text, "# feature-flags:") {
+				start = i
+			}
+			if start >= 0 && strings.HasPrefix(text, "GATBASE_FLAGS_FILE=") {
+				end = i + 1
+			}
+		default:
+			if start < 0 && text == "## Feature flags" {
+				start = i
+			} else if start >= 0 && strings.HasPrefix(text, "## ") {
+				end = i
+			}
+		}
+		if end >= 0 {
+			break
+		}
+	}
+	if start < 0 || end < 0 {
+		return nil, errors.New("the feature-flags block is missing; update dropFlagsConfig with its source")
+	}
+	if sourcePath == envTemplateFile && start > 0 && strings.TrimSpace(lines[start-1]) == "" {
+		start--
+	}
+	kept := append(append([]string{}, lines[:start]...), lines[end:]...)
+	return []byte(strings.Join(kept, "")), nil
 }
 
 // rewriteComposeName replaces line 1 "name: <from>" by "name: <to>".
