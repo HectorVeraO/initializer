@@ -28,6 +28,13 @@ function retryContext(context: HttpContext): HttpContext {
   return copy;
 }
 
+/** The URL without its fragment: a fragment can carry a one-time secret and must never reach a query parameter. */
+function withoutFragment(url: string): string {
+  const hashAt = url.indexOf('#');
+
+  return hashAt === -1 ? url : url.slice(0, hashAt);
+}
+
 /**
  * Session behaviour of every call to this deployment's API: the stale-tab header, one
  * refresh-and-retry on `401 SESSION_INVALID`, and the navigation for `409 ACTIVE_TENANT_CHANGED`
@@ -76,7 +83,7 @@ export const gatbaseSessionInterceptor: HttpInterceptorFn = (req, next) => {
               }
 
               if (outcome === 'anonymous') {
-                void router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
+                void router.navigate(['/login'], { queryParams: { returnUrl: withoutFragment(router.url) } });
               } else if (outcome === 'denied') {
                 void router.navigate(['/home']);
               }
