@@ -148,3 +148,31 @@ func TestMigrationsLintSkipsTestdataUnderGoSrv(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 }
+
+// A BREAKING CHANGE value that wraps onto an unindented line, as in Example B
+// of git-conventions.md, still counts as the trailer.
+func TestContractsBreakingTrailerWrappedOntoUnindentedLineIsAccepted(t *testing.T) {
+	_, err := exec.LookPath("oasdiff")
+	if err != nil {
+		t.Skip("oasdiff is not on PATH; run under mise exec --")
+	}
+	broken := strings.Replace(contractV1, "                  name:\n                    type: string\n", "", 1)
+	broken = strings.Replace(broken, "[id, name]", "[id]", 1)
+	broken = strings.Replace(broken, "version: 1.0.0", "version: 2.0.0", 1)
+	manifestV2 := `{"schema":1,"spec":"alpha","version":"2.0.0","tckTags":["@core"]}`
+	message := "feature(alpha): Drop name from the examples response\n\n" +
+		"Consumers no longer need the name field.\n\n" +
+		"- Remove name from the response schema.\n\n" +
+		"BREAKING CHANGE: the response of /api/v1/examples lost name. Consumers\n" +
+		"must stop reading the name field.\n" +
+		"Declared-change: specs/*/openapi.yaml (contracts)\n" +
+		"Refs: #2\n" +
+		"Co-Authored-By: Example Model <noreply@example.com>\n"
+	dir := contractsRepo(t, broken, manifestV2, message)
+
+	r := invoke([]string{"contracts", "--root", dir, "--base-rev", "main"}, fixedNow, nil)
+
+	if r.code != 0 {
+		t.Fatalf("documented BREAKING CHANGE trailer with MAJOR bump was rejected: code %d\nstdout: %s\nstderr: %s", r.code, r.stdout, r.stderr)
+	}
+}

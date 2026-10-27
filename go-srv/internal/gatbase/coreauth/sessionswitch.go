@@ -119,8 +119,10 @@ func (rt *sessionRoutes) refreshClaims(ctx context.Context, w http.ResponseWrite
 	if err != nil {
 		return session.Claims{}, err
 	}
-	// The XSRF-TOKEN value is unchanged: only the session cookie is rewritten.
+	// The XSRF-TOKEN value is unchanged; its cookie is rewritten with the
+	// session cookie's Max-Age so the two expire together.
 	rt.cookies.SetSession(w, token)
+	rt.cookies.SetCSRF(w, claims.CSRF)
 	return claims, nil
 }
 
