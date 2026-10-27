@@ -4,7 +4,7 @@
   "module": "core",
   "version": "0.1.16",
   "implied": true,
-  "implementsSpec": { "core": "1.0.0" },
+  "implementsSpec": { "core": "1.1.0" },
   "requiresModules": [],
   "tablePrefixes": ["cor"],
   "files": [
