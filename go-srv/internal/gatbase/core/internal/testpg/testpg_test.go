@@ -41,6 +41,31 @@ func connect(t *testing.T, ctx context.Context, adminURL, database string) *pgx.
 	return conn
 }
 
+// createHeld creates the stale-named database name and opens a connection to
+// it. Until that connection exists the database is idle, so a parallel package
+// binary's sweep may drop it in between; each such loss is retried.
+func createHeld(t *testing.T, ctx context.Context, admin *pgx.Conn, adminURL, name string) *pgx.Conn {
+	t.Helper()
+	parsed, err := url.Parse(adminURL)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	parsed.Path = "/" + name
+	const attempts = 5
+	for attempt := 1; attempt <= attempts; attempt++ {
+		if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		conn, err := pgx.Connect(ctx, parsed.String())
+		if err == nil {
+			return conn
+		}
+		t.Logf("connect to %s, attempt %d: %v", name, attempt, err)
+	}
+	t.Fatalf("connect to %s: the database was dropped before each of %d connections", name, attempts)
+	return nil
+}
+
 func exists(t *testing.T, ctx context.Context, admin *pgx.Conn, name string) bool {
 	t.Helper()
 	var found bool
@@ -79,12 +104,11 @@ func TestNewSweepsOnlyIdleStaleTestDatabases(t *testing.T) {
 			t.Cleanup(func() {
 				_, _ = admin.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{tc.database}.Sanitize()+" WITH (FORCE)")
 			})
-			if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{tc.database}.Sanitize()); err != nil {
-				t.Fatalf("create %s: %v", tc.database, err)
-			}
 			if tc.held {
-				held := connect(t, ctx, adminURL, tc.database)
+				held := createHeld(t, ctx, admin, adminURL, tc.database)
 				t.Cleanup(func() { _ = held.Close(ctx) })
+			} else if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{tc.database}.Sanitize()); err != nil {
+				t.Fatalf("create %s: %v", tc.database, err)
 			}
 
 			testpg.New(t, "sweeptest")
