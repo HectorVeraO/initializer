@@ -12,6 +12,7 @@ import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { SantiagoDatePipe } from '@/core/format/santiago-date.pipe';
+import { FormSectionComponent } from '@/core/ui/form-section/form-section.component';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 import { GATBASE_CORE_I18N } from '../module';
@@ -35,7 +36,21 @@ const EMAIL_CODES: readonly string[] = [ApiErrorCode.MembershipAlreadyActive, Ap
 /** Admin screen of the pending invitations of the active tenant, and the form that creates one. */
 @Component({
   selector: 'app-invitations-page',
-  imports: [ReactiveFormsModule, ButtonModule, InputTextModule, MessageModule, SelectModule, TableModule, TranslocoModule, SantiagoDatePipe, ListStateComponent, PageHeaderComponent, InlineConfirmComponent, OneTimeSecretDialogComponent],
+  imports: [
+    ReactiveFormsModule,
+    ButtonModule,
+    InputTextModule,
+    MessageModule,
+    SelectModule,
+    TableModule,
+    TranslocoModule,
+    SantiagoDatePipe,
+    FormSectionComponent,
+    ListStateComponent,
+    PageHeaderComponent,
+    InlineConfirmComponent,
+    OneTimeSecretDialogComponent
+  ],
   providers: [provideTranslocoScope(GATBASE_CORE_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './invitations-page.component.html'

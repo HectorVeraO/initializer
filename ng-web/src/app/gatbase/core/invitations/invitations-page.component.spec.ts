@@ -1,3 +1,4 @@
+import { formatSantiago } from '@/core/format/santiago-date';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
@@ -91,6 +92,7 @@ describe('InvitationsPage', () => {
     expect(rows.map((row) => row.getAttribute('data-key'))).toEqual(['jane@example.com', 'omar@example.com']);
     expect(textOf(byTestId(rows[0], 'invitations-cell-status'))).toBe('Pendiente');
     expect(textOf(byTestId(rows[1], 'invitations-cell-role'))).toBe('Lector');
+    expect(textOf(byTestId(rows[0], 'invitations-cell-expires'))).toBe(formatSantiago('2026-02-01T12:00:00Z'));
     expect(byTestId(root(fixture), 'invitations-truncated')).toBeNull();
   });
 

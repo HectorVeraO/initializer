@@ -1,8 +1,6 @@
 <p-page-header [title]="'gatbaseCore.invitations.title' | transloco" />
 
-<div class="card flex flex-col gap-4">
-  <h3 class="m-0 text-lg font-semibold">{{ 'gatbaseCore.invitations.inviteTitle' | transloco }}</h3>
-
+<p-form-section [title]="'gatbaseCore.invitations.inviteTitle' | transloco">
   <form [formGroup]="form" class="flex flex-col gap-4" data-testid="invite-form" (ngSubmit)="submit()">
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
       <div class="flex flex-col gap-2 md:col-span-2">
@@ -41,7 +39,7 @@
       <button pButton type="submit" data-testid="invite-submit" [disabled]="isSubmitting()">{{ 'gatbaseCore.invitations.submit' | transloco }}</button>
     </div>
   </form>
-</div>
+</p-form-section>
 
 <div class="card mt-4">
   <p-list-state feature="invitations" [loading]="isLoading()" [loadFailed]="loadFailed()" [empty]="isEmpty()" sectionKey="gatbaseCore.invitations.section" emptyKey="gatbaseCore.invitations.empty" (retry)="reload()">
