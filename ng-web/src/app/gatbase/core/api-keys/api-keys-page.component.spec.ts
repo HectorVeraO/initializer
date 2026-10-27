@@ -286,7 +286,7 @@ describe('ApiKeysPage', () => {
   it('shows every 422 issue under its field at once and keeps what was typed', async () => {
     const fixture = await open([]);
 
-    typeInto(byTestId(root(fixture), 'api-key-name') as HTMLInputElement, '');
+    typeInto(byTestId(root(fixture), 'api-key-name') as HTMLInputElement, 'typed-name');
     await submit(fixture);
 
     (await nextCall('POST', LIST_URL)).flush(
@@ -303,6 +303,7 @@ describe('ApiKeysPage', () => {
     expect(textOf(byTestId(root(fixture), 'api-key-name-error'))).toBe(es.validation.rules.FIELD_REQUIRED);
     expect(allByTestId(root(fixture), 'api-key-scopes-error').map(textOf)).toEqual([es.validation.rules.FIELD_REQUIRED, es.validation.rules.FIELD_NOT_ALLOWED]);
     expect(textOf(byTestId(root(fixture), 'api-key-issues'))).toBe(es.validation.rules.BODY_MALFORMED);
+    expect((byTestId(root(fixture), 'api-key-name') as HTMLInputElement).value).toBe('typed-name');
     expect(byTestId(document.body, 'one-time-secret-value')).toBeNull();
   });
 
