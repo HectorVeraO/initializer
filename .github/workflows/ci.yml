@@ -206,14 +206,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        selection: [core-parameters, all, all-web]
+        selection: [core-parameters, all, all-web, core-web]
         include:
           - selection: core-parameters
             public_base_url: http://localhost:10100
+            web: false
           - selection: all
             public_base_url: http://localhost:10100
+            web: false
           - selection: all-web
             public_base_url: http://localhost:10120
+            web: true
+          - selection: core-web
+            public_base_url: http://localhost:10120
+            web: true
     env:
       CI: "true"
       GATBASE_PUBLIC_BASE_URL: ${{ matrix.public_base_url }}
@@ -314,7 +320,7 @@ jobs:
           echo "timeout waiting for ${url}" >&2
           exit 1
       - name: Lint, build and test the generated ng-web
-        if: matrix.selection == 'all-web'
+        if: matrix.web
         working-directory: ${{ runner.temp }}/gen-a/ng-web
         run: |
           set -euo pipefail
@@ -323,7 +329,7 @@ jobs:
           npm run build
           npm test -- --watch=false
       - name: Start the generated ng-web dev server
-        if: matrix.selection == 'all-web'
+        if: matrix.web
         working-directory: ${{ runner.temp }}/gen-a/ng-web
         run: |
           set -euo pipefail
@@ -356,17 +362,17 @@ jobs:
           set -euo pipefail
           # The two TCK passes write one junit file, so the selected tests are counted from the lock's grep.
           npx playwright test --list --reporter=list --grep "$(jq -r .tckGrep ../gatbase.lock.json)" > "${RUNNER_TEMP}/tck-list.txt"
-          for spec in core core-auth parameters; do
+          # A spec in the lock must have tests; a spec outside it must have none.
+          for spec in core core-auth parameters feature-flags; do
             count="$(grep -c " ${spec}/tck/" "${RUNNER_TEMP}/tck-list.txt" || true)"
-            echo "${spec}: ${count} tests"
-            test "${count}" -gt 0
+            locked="$(jq -r --arg spec "${spec}" '[.specs[].spec] | index($spec) != null' ../gatbase.lock.json)"
+            echo "${spec}: ${count} tests, in lock: ${locked}"
+            if [ "${locked}" = "true" ]; then
+              test "${count}" -gt 0
+            else
+              test "${count}" -eq 0
+            fi
           done
-          flags="$(grep -c " feature-flags/tck/" "${RUNNER_TEMP}/tck-list.txt" || true)"
-          if [ "${{ matrix.selection }}" != "core-parameters" ]; then
-            test "${flags}" -gt 0
-          else
-            test "${flags}" -eq 0
-          fi
       - name: Collect logs
         if: always()
         run: |
