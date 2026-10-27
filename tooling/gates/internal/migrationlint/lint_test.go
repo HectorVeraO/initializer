@@ -185,6 +185,8 @@ func TestStatementRules(t *testing.T) {
 		"with select into foreign": {"WITH r AS (SELECT 1 AS a) SELECT a INTO iam_copy FROM r;", []string{"TABLE_PREFIX_MISMATCH"}},
 		"select into quoted":       {"SELECT a INTO \"iam_copy\" FROM sys_x;", []string{"TABLE_QUOTED_IDENTIFIER"}},
 		"cte insert hides target":  {"WITH i AS (INSERT INTO sys_log VALUES (1) RETURNING a) SELECT a INTO iam_copy FROM i;", []string{"TABLE_PREFIX_MISMATCH"}},
+		"top-level with insert":    {"WITH r AS (SELECT 1 AS a) INSERT INTO \"sys_x\" SELECT a FROM r;", nil},
+		"top-level with merge":     {"WITH r AS (SELECT 1 AS a) MERGE INTO sys_x t USING r ON t.id = r.a WHEN MATCHED THEN DO NOTHING;", nil},
 		"cte insert only":          {"WITH i AS (INSERT INTO sys_log VALUES (1) RETURNING a) SELECT a FROM i;", nil},
 		"cte foreign insert":       {"WITH i AS (INSERT INTO iam_log VALUES (1) RETURNING a) SELECT a FROM i;", nil},
 		"cte merge foreign":        {"WITH m AS (MERGE INTO iam_log t USING sys_x s ON t.id = s.id WHEN MATCHED THEN DO NOTHING RETURNING t.id) SELECT id FROM m;", nil},
