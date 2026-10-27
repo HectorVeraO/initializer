@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "spec": "core-auth",
+  "version": "1.0.0",
+  "tckTags": ["@core-auth"],
+  "tckEnv": {"FIXTURE_ADMIN": "admin@example.com"}
+}

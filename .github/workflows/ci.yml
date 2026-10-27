@@ -171,7 +171,7 @@ jobs:
             --root "${GITHUB_WORKSPACE}" \
             --catalog "${RUNNER_TEMP}/catalog.lock.json" \
             --out "${ref}" \
-            --all-modules --stacks go-srv --name initializer \
+            --all-modules --stacks go-srv,ng-web --name initializer \
             --go-module "$(head -1 go-srv/go.mod | cut -d' ' -f2)"
           # Rendered files and target-delivered files differ from the repository by design.
           status=0
@@ -185,6 +185,12 @@ jobs:
               status=1
             fi
           done < <(find "${ref}" -type f | sort)
+          for excluded in ng-web/AGENTS.md ng-web/cookbooks ng-web/.vscode; do
+            if [ -e "${ref}/${excluded}" ]; then
+              echo "excluded path delivered: ${excluded}" >&2
+              status=1
+            fi
+          done
           exit "${status}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -200,11 +206,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        selection: [core-parameters, all]
+        selection: [core-parameters, all, all-web]
+        include:
+          - selection: core-parameters
+            public_base_url: http://localhost:10100
+          - selection: all
+            public_base_url: http://localhost:10100
+          - selection: all-web
+            public_base_url: http://localhost:10120
     env:
       CI: "true"
-      GATBASE_PUBLIC_BASE_URL: http://localhost:10100
-      TCK_BASE_URL: http://localhost:10100
+      GATBASE_PUBLIC_BASE_URL: ${{ matrix.public_base_url }}
+      TCK_BASE_URL: ${{ matrix.public_base_url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -217,7 +230,9 @@ jobs:
         with:
           node-version-file: specs/package.json
           cache: npm
-          cache-dependency-path: specs/package-lock.json
+          cache-dependency-path: |
+            specs/package-lock.json
+            ng-web/package-lock.json
       - name: Build the CLI and the catalog
         run: |
           set -euo pipefail
@@ -286,10 +301,35 @@ jobs:
           while IFS= read -r pair; do
             export "${pair}"
           done < <(jq -r '.tckEnv | to_entries[] | "\(.key)=\(.value)"' gatbase.lock.json)
-          export GATBASE_PUBLIC_BASE_URL=http://localhost:10100
+          export GATBASE_PUBLIC_BASE_URL="${{ matrix.public_base_url }}"
           "${RUNNER_TEMP}/go-srv-bin" > "${RUNNER_TEMP}/go-srv.log" 2>&1 &
           echo $! > "${RUNNER_TEMP}/go-srv.pid"
           url=http://localhost:10100/health/ready
+          for _ in $(seq 1 60); do
+            if curl -fsS "${url}" > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "timeout waiting for ${url}" >&2
+          exit 1
+      - name: Lint, build and test the generated ng-web
+        if: matrix.selection == 'all-web'
+        working-directory: ${{ runner.temp }}/gen-a/ng-web
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm run build
+          npm test -- --watch=false
+      - name: Start the generated ng-web dev server
+        if: matrix.selection == 'all-web'
+        working-directory: ${{ runner.temp }}/gen-a/ng-web
+        run: |
+          set -euo pipefail
+          npm start > "${RUNNER_TEMP}/ng-web.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/ng-web.pid"
+          url=http://localhost:10120/
           for _ in $(seq 1 60); do
             if curl -fsS "${url}" > /dev/null; then
               exit 0
@@ -322,7 +362,7 @@ jobs:
             test "${count}" -gt 0
           done
           flags="$(grep -c " feature-flags/tck/" "${RUNNER_TEMP}/tck-list.txt" || true)"
-          if [ "${{ matrix.selection }}" = "all" ]; then
+          if [ "${{ matrix.selection }}" != "core-parameters" ]; then
             test "${flags}" -gt 0
           else
             test "${flags}" -eq 0
@@ -340,6 +380,7 @@ jobs:
             ${{ runner.temp }}/gen-a/specs/test-results/
             ${{ runner.temp }}/gen-a/specs/playwright-report/
             ${{ runner.temp }}/go-srv.log
+            ${{ runner.temp }}/ng-web.log
             ${{ runner.temp }}/compose.log
             ${{ runner.temp }}/tck-list.txt
           if-no-files-found: warn
@@ -349,6 +390,9 @@ jobs:
         run: |
           if [ -f "${RUNNER_TEMP}/go-srv.pid" ]; then
             kill "$(cat "${RUNNER_TEMP}/go-srv.pid")" || true
+          fi
+          if [ -f "${RUNNER_TEMP}/ng-web.pid" ]; then
+            kill "$(cat "${RUNNER_TEMP}/ng-web.pid")" || true
           fi
           if [ -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" ]; then
             docker compose -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" down -v

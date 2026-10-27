@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "stack": "ng-web",
+  "module": "feature-flags",
+  "version": "0.1.0",
+  "implied": false,
+  "implementsSpec": {"feature-flags": "0.1.0"},
+  "requiresCore": "^0.1.0",
+  "requiresModules": [],
+  "files": ["ng-web/src/app/gatbase/feature-flags/"],
+  "exclude": []
+}
