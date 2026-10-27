@@ -133,11 +133,12 @@ func TestReadmeGoldens(t *testing.T) {
 
 func TestReadmeRefusesUnsafeFields(t *testing.T) {
 	base := render.ReadmeInput{Name: "acme-backend", GeneratorVersion: "0.1.0"}
-	bad := []render.ReadmeInput{base, base, base, base}
+	bad := []render.ReadmeInput{base, base, base, base, base}
 	bad[0].Name = "x\n# injected"
 	bad[1].TCKEnv = []render.EnvPair{{Key: "K", Value: "a`b"}}
 	bad[2].Modules = []render.ReadmeModule{{Stack: "go-srv", Module: "a\r", Version: "0.1.0"}}
 	bad[3].TCKTags = []string{"@core\n# injected"}
+	bad[4].TCKEnv = []render.EnvPair{{Key: "K`", Value: "v"}}
 	for i, in := range bad {
 		if out, err := render.Readme(in); err == nil {
 			t.Fatalf("case %d: want an error, got:\n%s", i, out)

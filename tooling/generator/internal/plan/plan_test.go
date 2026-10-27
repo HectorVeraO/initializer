@@ -370,6 +370,30 @@ func TestCoreMissing(t *testing.T) {
 	wantCodes(t, cat, selection(), catalog.CodeCoreMissing)
 }
 
+func TestCoreIsPlannedWhenNotImplied(t *testing.T) {
+	cat := load(t, "backend.json")
+	backendModule(t, &cat, "core").Implied = false
+	p := mustResolve(t, cat, selection())
+	wantIDs(t, p.Stacks[0], "core", "core-auth")
+}
+
+func TestSpecUnknown(t *testing.T) {
+	cat := load(t, "backend.json")
+	kept := cat.Specs[:0:0]
+	for _, spec := range cat.Specs {
+		if spec.Spec != "feature-flags" {
+			kept = append(kept, spec)
+		}
+	}
+	cat.Specs = kept
+	issues := wantCodes(t, cat, selection("feature-flags"), catalog.CodeSpecUnknown)
+	if !strings.Contains(issues[0].Message, "feature-flags") {
+		t.Fatalf("message = %s", issues[0].Message)
+	}
+	// A spec no selected module implements is not required.
+	mustResolve(t, cat, selection())
+}
+
 func TestIssuesAreReportedTogether(t *testing.T) {
 	cat := load(t, "backend.json")
 	cat.Generator = "9.9.9"
