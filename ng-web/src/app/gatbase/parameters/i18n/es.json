@@ -1,0 +1,81 @@
+{
+  "nav": {
+    "parameters": "Parámetros"
+  },
+  "list": {
+    "title": "Parámetros",
+    "section": "los parámetros",
+    "empty": "Aún no hay parámetros.",
+    "truncated": "Mostrando {{shown}} de {{total}} parámetros.",
+    "key": "Clave",
+    "type": "Tipo",
+    "value": "Valor",
+    "source": "Origen",
+    "default": "Predeterminado",
+    "bounds": "Límites",
+    "system": "Sistema",
+    "systemBadge": "Sistema",
+    "noBounds": "-",
+    "range": "{{min}}..{{max}}",
+    "allowed": "Uno de: {{values}}",
+    "setOverride": "Definir valor propio",
+    "clearOverride": "Quitar valor propio",
+    "new": "Nuevo parámetro",
+    "edit": "Editar",
+    "delete": "Eliminar"
+  },
+  "types": {
+    "string": "Texto",
+    "number": "Número",
+    "boolean": "Sí / no",
+    "json": "JSON"
+  },
+  "sources": {
+    "global": "Global",
+    "tenant": "Tenant"
+  },
+  "override": {
+    "title": "Valor propio del tenant activo",
+    "value": "Valor",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "jsonInvalid": "El texto no es un JSON válido.",
+    "yes": "Sí",
+    "no": "No"
+  },
+  "definition": {
+    "createTitle": "Nuevo parámetro",
+    "editTitle": "Editar parámetro",
+    "key": "Clave",
+    "valueType": "Tipo",
+    "defaultValue": "Valor predeterminado",
+    "minValue": "Mínimo",
+    "maxValue": "Máximo",
+    "allowedValues": "Valores permitidos (lista JSON)",
+    "description": "Descripción",
+    "isSystemRequired": "Requerido por el sistema",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "jsonInvalid": "El texto no es un JSON válido.",
+    "numberInvalid": "Ingresa un número.",
+    "allowedInvalid": "Ingresa una lista JSON, por ejemplo [\"a\", \"b\"].",
+    "booleanInvalid": "Elige sí o no."
+  },
+  "messages": {
+    "deleted": "Parámetro {{key}} eliminado junto con {{count}} valores propios de tenants."
+  },
+  "issues": {
+    "PARAMETER_TYPE_MISMATCH": "El valor no corresponde al tipo del parámetro.",
+    "PARAMETER_OUT_OF_RANGE": "El valor está fuera del rango permitido.",
+    "PARAMETER_VALUE_NOT_ALLOWED": "El valor no es uno de los valores permitidos.",
+    "PARAMETER_FIELD_IMMUTABLE": "Este campo no se puede cambiar después de crear el parámetro.",
+    "PARAMETER_KEY_INVALID": "La clave no es válida. Usa minúsculas, dígitos, puntos y guiones bajos.",
+    "PARAMETER_CONSTRAINT_INVALID": "El mínimo, el máximo o los valores permitidos no son válidos para este tipo."
+  },
+  "errors": {
+    "SYSTEM_PARAMETER_PROTECTED": "Este parámetro lo requiere el sistema y no se puede eliminar.",
+    "PARAMETER_OVERRIDES_VIOLATE_CONSTRAINTS": "Algunos valores propios de tenants romperían las nuevas restricciones. Cámbialos o quítalos primero.",
+    "PARAMETER_ALREADY_EXISTS": "Ya existe un parámetro con esta clave.",
+    "rowGone": "Ese parámetro ya no existe o cambió. Se actualizó la lista."
+  }
+}
