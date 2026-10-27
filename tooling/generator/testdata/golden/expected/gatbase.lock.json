@@ -1,0 +1,190 @@
+{
+  "schema": 1,
+  "generator": "0.1.0",
+  "catalogSha256": "e5ad79a246ca177eb2d436ab6d3b342fa255e28ea6ee5766da945c0e6c001056",
+  "selection": {
+    "schema": 1,
+    "project": {
+      "name": "acme-backend",
+      "goModule": "example.com/acme/backend"
+    },
+    "stacks": [
+      "go-srv"
+    ],
+    "modules": [
+      "core",
+      "core-auth",
+      "parameters"
+    ]
+  },
+  "tckTags": [
+    "@core",
+    "@core-auth",
+    "@otel",
+    "@parameters"
+  ],
+  "tckGrep": "@(core|core-auth|otel|parameters)(?![A-Za-z0-9_-])",
+  "tckEnv": {
+    "FIXTURE_ADMIN": "admin@example.com"
+  },
+  "specs": [
+    {
+      "spec": "core",
+      "version": "1.0.0",
+      "files": [
+        {
+          "path": "specs/core/openapi.yaml",
+          "sha256": "369bb55c82e2433de67951bbc35a4deca97aca700880b45fb75b9736ebcd40e1"
+        },
+        {
+          "path": "specs/core/spec.manifest.json",
+          "sha256": "a761a7828ba336ff6c6999b10471ce26139e9c3fcef3c4a3e63ab688f7c8731f"
+        }
+      ]
+    },
+    {
+      "spec": "core-auth",
+      "version": "1.0.0",
+      "files": [
+        {
+          "path": "specs/core-auth/openapi.yaml",
+          "sha256": "a3a469f7ad2121a47ccef1a165f32fe0d262dc65a167a711ea08734ad1b7ac06"
+        },
+        {
+          "path": "specs/core-auth/spec.manifest.json",
+          "sha256": "b9b880065a7651867c2e64e4edf207d2646fe6641cc4772ff2b00bdd15102a70"
+        }
+      ]
+    },
+    {
+      "spec": "parameters",
+      "version": "0.1.0",
+      "files": [
+        {
+          "path": "specs/parameters/openapi.yaml",
+          "sha256": "cd140ec887aa743360b3072b29bcd81aeb77e63104603e4f3eac351bab6991d4"
+        },
+        {
+          "path": "specs/parameters/spec.manifest.json",
+          "sha256": "652ec70aff9c51bfe273b5ef7adf974fcfe2a124dee4152c16196ca63d506988"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "stack": "go-srv",
+      "module": "core",
+      "version": "0.1.0",
+      "implementsSpec": {
+        "core": "1.0.0"
+      },
+      "files": [
+        {
+          "path": ".deploy/local/docker-compose.yml",
+          "sha256": "a87f2699110456df393415c395e7eab006c8406a50dba3485163dd25cb4174e3",
+          "sourceSha256": "b6d6f3ffc20b36e3878696fafac499bc39151bab9ea7c19e5cb6f532bb1ac517"
+        },
+        {
+          "path": ".gitattributes",
+          "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
+        },
+        {
+          "path": ".gitignore",
+          "sha256": "4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97"
+        },
+        {
+          "path": "go-srv/cmd/server/main.go",
+          "sha256": "45a1cbd2fb66b0f53e2bbea9f84b9b808c6f39dd72c56d8144b5fdf3ce452b7c",
+          "sourceSha256": "55d4342a5756cf566507d833fa62069341b17efaa0614d0b29f81f06992fc333"
+        },
+        {
+          "path": "go-srv/go.mod",
+          "sha256": "e89e75e8b5a9fe5c7ea5c5e900d754102c12f4646742c9a7dbee27a393829f2b",
+          "sourceSha256": "597fb3bb55c2b0f6092731ec09f748cdef795e166dfdbafa3718da1e47f8b5c3"
+        },
+        {
+          "path": "go-srv/internal/gatbase/core/core.go",
+          "sha256": "b115c3aed45ee55aacd6eae3a55109823238ae84b705ca0bb6fff67c882262a8"
+        },
+        {
+          "path": "go-srv/internal/gatbase/core/module.manifest.json",
+          "sha256": "0301655fcfab21a3a2eb517975d47e45acb257ad6b43a59fd9e593a858bb71ae"
+        },
+        {
+          "path": "go-srv/internal/gatbase/core/testdata/sample.go",
+          "sha256": "aac68f0046ac661942bdae56845c0b6f3400f17e5c0bfa8e8feb1fe9a31936aa"
+        },
+        {
+          "path": "specs/package.json",
+          "sha256": "5803374698fcdcfa7819e6037ff5d1f6c43df7a084a3e5d19fde4c6d8ebf62b2"
+        },
+        {
+          "path": "specs/tck-support/index.ts",
+          "sha256": "81442353d956688286a71320ea1452a102b080989da743313f6e7483c7bb0c52"
+        }
+      ]
+    },
+    {
+      "stack": "go-srv",
+      "module": "core-auth",
+      "version": "0.1.0",
+      "implementsSpec": {
+        "core-auth": "1.0.0"
+      },
+      "files": [
+        {
+          "path": ".deploy/local/kratos/kratos.yml",
+          "sha256": "da22cf00112181c10aca161583da518c2e392f615f40c9f0a7e0b598dd24e73b"
+        },
+        {
+          "path": "go-srv/internal/gatbase/coreauth/coreauth.go",
+          "sha256": "cd66d7efd5ab147bdbfbb3c5dbee100a4d76d013ac851285c410f4546e186811",
+          "sourceSha256": "406d84ffd657a95167da1b8c57e7a8bca549a27bd00967a29818a0986b614335"
+        },
+        {
+          "path": "go-srv/internal/gatbase/coreauth/module.manifest.json",
+          "sha256": "21425ea25685c46bc99d57de37c884a3e9ebdf07293e69443b4574e69fe10958"
+        }
+      ]
+    },
+    {
+      "stack": "go-srv",
+      "module": "parameters",
+      "version": "0.1.0",
+      "implementsSpec": {
+        "parameters": "0.1.0"
+      },
+      "files": [
+        {
+          "path": "go-srv/internal/gatbase/parameters/module.manifest.json",
+          "sha256": "2292c309ccdb2c098d0471228c97cb97586ae5558c59b12722d462e5fcf832c8"
+        },
+        {
+          "path": "go-srv/internal/gatbase/parameters/parameters.go",
+          "sha256": "80dcd2b048b0d67aff90ee5cf4a20fcc54cafa3442d0305b1b2ac509ab41263e",
+          "sourceSha256": "8052a3c0978207b82f15169e86b544728b08c7a6077e51ff3906948baddd4f30"
+        },
+        {
+          "path": "go-srv/internal/gatbase/parameters/parameters_test.go",
+          "sha256": "2e995a474013daa5b40aa063da37e3258ee96cdad111e4d8d211615bf6f5aff8",
+          "sourceSha256": "af9d0d675881376c2d1e36d8c61b7bee42a76a59d2395e5d3db76d5798ba60ef"
+        }
+      ]
+    }
+  ],
+  "generated": [
+    {
+      "path": "README.md",
+      "sha256": "7b9ebb01f4e22076a9ade898e3dd4c4b181abf09d7ed525014877033cbb85905"
+    },
+    {
+      "path": "gatbase.selection.json",
+      "sha256": "4b46d919ee6c86ec1232eea4824cd69d94a452e49a47542a36de477257ff6198"
+    },
+    {
+      "path": "go-srv/cmd/server/modules.go",
+      "sha256": "8869bb624d15f31bb705f50279d90513c640475c83158026243e4184c2acde46"
+    }
+  ]
+}

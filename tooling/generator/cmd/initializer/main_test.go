@@ -175,10 +175,10 @@ func decodedEvent(t *testing.T, stderr string) map[string]any {
 	return nil
 }
 
-func TestValidSelectionFileIsDecodedBeforeGenerate(t *testing.T) {
+func TestValidSelectionFileIsDecodedBeforeTheCatalogIsRead(t *testing.T) {
 	code, stdout, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", writeSelection(t, validSelection))
-	if code != exitInternal || !strings.Contains(stderr, "not implemented") {
-		t.Fatalf("want exit %d with not implemented: %d %s", exitInternal, code, stderr)
+	if code != exitInternal || !strings.Contains(stderr, "input_unreadable") {
+		t.Fatalf("want exit %d with an unreadable catalog: %d %s", exitInternal, code, stderr)
 	}
 	if issueArray(t, stderr) != nil || stdout != "" {
 		t.Fatalf("want no issues and empty stdout: %q %s", stdout, stderr)
@@ -195,20 +195,6 @@ func TestValidFlagSelectionAndAllModules(t *testing.T) {
 	event := decodedEvent(t, stderr)
 	if event["stack_count"] != float64(2) || event["module_count"] != float64(0) || event["all_modules"] != true {
 		t.Fatalf("decoded selection mismatch: %v", event)
-	}
-}
-
-func TestUnimplementedSubcommandsExitThree(t *testing.T) {
-	cases := map[string][]string{
-		"verify": {"verify", "--project", "p"},
-	}
-	for name, args := range cases {
-		t.Run(name, func(t *testing.T) {
-			code, _, stderr := execute(t, args...)
-			if code != 3 || !strings.Contains(stderr, "not implemented") {
-				t.Fatalf("exit %d, stderr %s", code, stderr)
-			}
-		})
 	}
 }
 

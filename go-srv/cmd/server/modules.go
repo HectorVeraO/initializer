@@ -4,11 +4,8 @@ package main
 
 import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core"
-
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/coreauth"
-
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/featureflags"
-
 	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/parameters"
 )
 
