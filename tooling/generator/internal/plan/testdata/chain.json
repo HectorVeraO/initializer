@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "generator": "0.1.0",
+  "goModule": "example.com/fixture/srv",
+  "composeName": "fixture-app",
+  "specs": [
+    {"spec": "core", "version": "0.1.0", "tckTags": ["@core"], "tckEnv": {}, "files": []},
+    {"spec": "core-auth", "version": "0.1.0", "tckTags": ["@core-auth"], "tckEnv": {}, "files": []}
+  ],
+  "stacks": [
+    {
+      "stack": "go-srv",
+      "role": "backend",
+      "modules": [
+        {"module": "a", "version": "0.1.0", "implied": false, "implementsSpec": {}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []},
+        {"module": "b", "version": "0.1.0", "implied": false, "implementsSpec": {}, "requiresCore": "^0.1.0", "requiresModules": [{"module": "a", "range": "^0.1.0"}], "files": []},
+        {"module": "c", "version": "0.1.0", "implied": false, "implementsSpec": {}, "requiresCore": "^0.1.0", "requiresModules": [{"module": "a", "range": "0.1.0"}], "files": []},
+        {"module": "core", "version": "0.1.0", "implied": true, "implementsSpec": {"core": "0.1.0"}, "requiresModules": [], "files": []},
+        {"module": "core-auth", "version": "0.1.0", "implied": true, "implementsSpec": {"core-auth": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []},
+        {"module": "d", "version": "0.1.0", "implied": false, "implementsSpec": {}, "requiresCore": "^0.1.0", "requiresModules": [{"module": "b", "range": "^0.1.0"}, {"module": "c", "range": "^0.1.0"}], "files": []}
+      ]
+    }
+  ]
+}
