@@ -488,3 +488,76 @@ jobs:
         run: npm run lint
       - name: Type check
         run: npm run typecheck
+
+  e2e-gatbase:
+    name: e2e-gatbase
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: "true"
+      INIT_START_STACK: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go-srv/go.mod
+          cache-dependency-path: go-srv/go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: initializer-e2e/package.json
+          cache: npm
+          cache-dependency-path: |
+            ng-web/package-lock.json
+            initializer-e2e/package-lock.json
+      - name: Install ng-web and the e2e suite
+        run: |
+          set -euo pipefail
+          npm --prefix ng-web ci
+          npm --prefix initializer-e2e ci
+          (cd initializer-e2e && npx playwright install --with-deps chromium)
+      - name: Prepare the env files
+        run: |
+          set -euo pipefail
+          cp .deploy/local/.example.env .deploy/local/.env
+          cp initializer-e2e/.example.env initializer-e2e/.env
+      - name: Start the local stack
+        run: |
+          set -euo pipefail
+          compose="docker compose -f .deploy/local/docker-compose.yml"
+          ${compose} up -d
+          for _ in $(seq 1 60); do
+            state="$(${compose} ps --format json postgres | jq -rs 'flatten | .[0].Health // empty')"
+            if [ "${state}" = "healthy" ] && curl -fsS http://localhost:10133/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "timeout waiting for the local stack" >&2
+          exit 1
+      - name: Create the e2e database
+        run: |
+          set -euo pipefail
+          docker compose -f .deploy/local/docker-compose.yml exec -T postgres psql -U initializer -d postgres -c 'CREATE DATABASE it_e2e_gatbase'
+      - name: Run the Gatbase e2e
+        working-directory: initializer-e2e
+        run: npx playwright test tests/e2e/gatbase
+      - name: Collect logs
+        if: always()
+        run: |
+          docker compose -f .deploy/local/docker-compose.yml logs --no-color > "${RUNNER_TEMP}/compose.log" 2>&1 || true
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-gatbase-${{ github.run_id }}
+          path: |
+            initializer-e2e/playwright-report/
+            initializer-e2e/test-results/
+            ${{ runner.temp }}/compose.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f .deploy/local/docker-compose.yml down -v

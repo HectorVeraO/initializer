@@ -19,8 +19,8 @@ describe('Gatbase composition', () => {
     it('holds the core routes only for the core-only list', () => {
       const routes = gatbaseRoutes([coreModule]);
 
-      expect(routes.shell).toEqual([]);
-      expect(routes.public).toEqual([]);
+      expect(routes.shell.map((route) => route.path)).toEqual(['no-tenant']);
+      expect(routes.public.map((route) => route.path)).toEqual(['login']);
     });
 
     it('keeps the core routes and puts the others after them, in list order', () => {

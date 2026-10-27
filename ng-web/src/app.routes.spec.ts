@@ -11,7 +11,13 @@ import { buildAppRoutes } from './app.routes';
 const CONFIG_URL = '/assets/config/runtime-config.json';
 
 // The core module ships no login page yet; the stub gives the anonymous redirect a target.
-const APP_MODULE: GatbaseWebModule = { ...coreModule, publicRoutes: [{ path: 'login', canMatch: [anonymousGuard], component: BlankComponent }] };
+const APP_MODULE: GatbaseWebModule = {
+  ...coreModule,
+  publicRoutes: [
+    { path: 'login', canMatch: [anonymousGuard], component: BlankComponent },
+    { path: 'invitations/accept', component: BlankComponent }
+  ]
+};
 
 const DEV_STUB: Routes = [{ path: 'probe', component: BlankComponent }];
 
@@ -84,5 +90,12 @@ describe('app routes', () => {
 
   it('sends an unknown path to /notfound', async () => {
     expect(await resolve('/no-such-page')).toBe('/notfound');
+  });
+
+  it('mounts a multi-segment public route outside the shell', async () => {
+    await router.navigateByUrl('/invitations/accept');
+
+    expect(router.url).toBe('/invitations/accept');
+    http.expectNone('/api/v1/auth/session');
   });
 });

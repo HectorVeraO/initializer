@@ -1,4 +1,5 @@
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
 import * as path from 'path';
 import type { BrowserContextOptions } from '@playwright/test';
 
@@ -176,4 +177,81 @@ export function buildBaseUrl(env: EnvShape): string {
 
 export function buildWebLoginUrl(env: EnvShape): string {
   return new URL(env.web.loginPath || '/', env.web.baseUrl).toString();
+}
+
+/** Skip guard of every gatbase spec: INIT_USER_EMAIL, INIT_USER_PASSWORD and INIT_WEB_BASE_URL set. */
+export function assertGatbaseEnv(): EnvCheck {
+  return checkEnvKeys([
+    'INIT_USER_EMAIL',
+    'INIT_USER_PASSWORD',
+    'INIT_WEB_BASE_URL',
+  ]);
+}
+
+export type GatbaseStack = {
+  readonly start: boolean;
+  readonly goSrvDir: string;
+  readonly ngWebDir: string;
+  readonly flagsFile: string;
+  readonly goSrvEnv: Readonly<Record<string, string>>;
+};
+
+const REPO_ROOT = path.resolve(E2E_ROOT, '..');
+
+const DEFAULT_GO_SRV_DATABASE = 'it_e2e_gatbase';
+
+/**
+ * The go-srv database of the e2e run. It lives on the shared compose Postgres
+ * and is never the dev database: the name must start with `it_`.
+ */
+function readGoSrvDatabase(): string {
+  const database = readString('INIT_GO_SRV_DATABASE', DEFAULT_GO_SRV_DATABASE);
+  if (!/^it_[a-z0-9_]+$/.test(database)) {
+    throw new Error(
+      `INIT_GO_SRV_DATABASE must match ^it_[a-z0-9_]+$ (got "${database}")`,
+    );
+  }
+  return database;
+}
+
+/**
+ * `.deploy/local/.env` with GATBASE_DATABASE_URL rebuilt for the e2e database.
+ * dotenv.parse does not expand `${INITIALIZER_PG_PASSWORD}`, so the URL is
+ * assembled here.
+ */
+function readGoSrvEnv(): Record<string, string> {
+  const envFile = path.join(REPO_ROOT, '.deploy', 'local', '.env');
+  if (!fs.existsSync(envFile)) {
+    throw new Error(`INIT_START_STACK=true needs ${envFile}`);
+  }
+  const parsed = dotenv.parse(fs.readFileSync(envFile));
+  const password = parsed['INITIALIZER_PG_PASSWORD'];
+  if (password === undefined || password === '') {
+    throw new Error(`INITIALIZER_PG_PASSWORD is not set in ${envFile}`);
+  }
+  const database = readGoSrvDatabase();
+  const databaseUrl = `postgres://initializer:${encodeURIComponent(password)}@localhost:10132/${database}?sslmode=disable`;
+  return { ...parsed, GATBASE_DATABASE_URL: databaseUrl };
+}
+
+/**
+ * Values the webServer entries of playwright.config.ts need. Reads
+ * INIT_START_STACK; when it is not `true` nothing is read from disk.
+ */
+export function gatbaseStack(): GatbaseStack {
+  const start = readString('INIT_START_STACK') === 'true';
+  return {
+    start,
+    goSrvDir: path.join(REPO_ROOT, 'go-srv'),
+    ngWebDir: path.join(REPO_ROOT, 'ng-web'),
+    flagsFile: path.join(
+      REPO_ROOT,
+      'specs',
+      'feature-flags',
+      'tck',
+      'fixtures',
+      'flags.yaml',
+    ),
+    goSrvEnv: start ? readGoSrvEnv() : {},
+  };
 }

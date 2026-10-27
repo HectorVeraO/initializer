@@ -1,8 +1,17 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as path from 'path';
-import { loadEnv, buildBaseUrl, readGrepInvert } from './src/env';
+import { loadEnv, buildBaseUrl, readGrepInvert, gatbaseStack } from './src/env';
 
 const env = loadEnv();
+const stack = gatbaseStack();
+
+/** process.env without undefined values, as webServer.env requires. */
+function definedEnv(source: NodeJS.ProcessEnv): Record<string, string> {
+  const entries = Object.entries(source).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined,
+  );
+  return Object.fromEntries(entries);
+}
 
 export default defineConfig({
   testDir: './tests',
@@ -43,6 +52,41 @@ export default defineConfig({
     locale: 'es-CL',
     timezoneId: 'America/Santiago',
   },
+
+  // go-srv and ng-web start only when INIT_START_STACK=true; the shared compose
+  // stack (postgres, kratos) must already run. Never reuse a server: a go-srv on
+  // the dev database must not serve this run.
+  webServer: stack.start
+    ? [
+        {
+          name: 'go-srv',
+          command: process.env.CI
+            ? 'go run ./cmd/server'
+            : 'mise exec -- go run ./cmd/server',
+          cwd: stack.goSrvDir,
+          url: 'http://localhost:10100/health/ready',
+          reuseExistingServer: false,
+          timeout: 180_000,
+          stdout: 'pipe',
+          env: {
+            ...definedEnv(process.env),
+            ...stack.goSrvEnv,
+            GATBASE_PUBLIC_BASE_URL: env.web.baseUrl,
+            GATBASE_BOOTSTRAP_ADMIN_EMAIL: env.auth.email,
+            GATBASE_BOOTSTRAP_ADMIN_PASSWORD: env.auth.password,
+            GATBASE_FLAGS_FILE: stack.flagsFile,
+          },
+        },
+        {
+          name: 'ng-web',
+          command: process.env.CI ? 'npm start' : 'mise exec -- npm start',
+          cwd: stack.ngWebDir,
+          url: 'http://localhost:10120/',
+          reuseExistingServer: false,
+          timeout: 180_000,
+        },
+      ]
+    : undefined,
 
   projects: [
     {

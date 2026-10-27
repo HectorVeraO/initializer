@@ -1,5 +1,47 @@
 {
   "session": {
     "tenantChanged": "The active tenant changed in another tab."
+  },
+  "shell": {
+    "activeTenant": "Active tenant",
+    "noTenant": "No active tenant",
+    "tenantSwitched": "Active tenant changed.",
+    "account": "Account",
+    "signOut": "Sign out",
+    "operator": "Platform operator",
+    "roles": {
+      "admin": "Admin",
+      "member": "Member",
+      "viewer": "Viewer"
+    }
+  },
+  "login": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in",
+    "unavailable": "Sign in is not available right now. Try again in a few minutes.",
+    "rejected": "The email or the password is not valid.",
+    "kratos": {
+      "4000006": "The email or the password is not valid."
+    },
+    "notices": {
+      "invitationAccepted": "Your invitation was accepted. Sign in to continue."
+    }
+  },
+  "noTenant": {
+    "title": "You have no tenant",
+    "message": "You are not an active member of any tenant. Ask an admin for an invitation.",
+    "account": "Signed in as",
+    "operatorTenants": "Manage tenants",
+    "operatorFlags": "Manage feature flags"
+  },
+  "errors": {
+    "TENANT_ACCESS_DENIED": "You do not have access to that tenant.",
+    "TENANT_SUSPENDED": "That tenant is suspended.",
+    "MEMBERSHIP_REVOKED": "Your membership in that tenant was revoked.",
+    "ACCOUNT_LOCKED_OR_DISABLED": "This account is locked or disabled. Contact an administrator.",
+    "switchFailed": "The active tenant could not be changed. Try again."
   }
 }

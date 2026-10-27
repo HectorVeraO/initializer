@@ -74,6 +74,15 @@ describe('KratosLoginClient', () => {
     expect(await result).toEqual({ kind: 'signed-in' });
   });
 
+  it('is signed in when Kratos answers session_already_available to the POST', async () => {
+    const { done: result } = await start();
+
+    await answerFlow(flow());
+    (await vi.waitFor(() => http.expectOne((request) => request.method === 'POST'))).flush({ error: { id: 'session_already_available' } }, { status: 400, statusText: 'Bad Request' });
+
+    expect(await result).toEqual({ kind: 'signed-in' });
+  });
+
   it('rejects with the flow and node messages on a 400', async () => {
     const { done: result } = await start();
 

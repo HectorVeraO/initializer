@@ -134,6 +134,11 @@ export class KratosLoginClient {
 
     const isCsrfViolation = error.status === 403 && body?.error?.id === 'security_csrf_violation';
 
+    // A second tab signed in meanwhile: Kratos refuses the POST with the same id as the GET.
+    if (isSessionAlreadyAvailable(error)) {
+      return { kind: 'signed-in' };
+    }
+
     if (error.status === 400) {
       return { kind: 'rejected', messages: collectMessages(error.error) };
     }

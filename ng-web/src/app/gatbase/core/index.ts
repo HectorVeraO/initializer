@@ -9,3 +9,5 @@ export type { SessionRequirement } from './guards/guards';
 export { GATBASE_MODULES, provideGatbase, gatbaseRoutes } from './composition/web-module';
 export type { GatbaseWebModule, NavEntry } from './composition/web-module';
 export { coreModule, GATBASE_CORE_I18N } from './module';
+export { TenantSwitcher } from './shell/tenant-switcher.component';
+export { AccountMenu } from './shell/account-menu.component';

@@ -1,0 +1,29 @@
+<div class="flex items-center justify-center min-h-screen">
+  <form [formGroup]="form" class="card w-full max-w-md flex flex-col gap-4" data-testid="login-form" (ngSubmit)="submit()">
+    <h1 class="text-2xl font-semibold m-0">{{ 'gatbaseCore.login.title' | transloco }}</h1>
+
+    @if (notice(); as noticeText) {
+      <div class="text-sm" role="status" data-testid="login-notice">{{ noticeText }}</div>
+    }
+
+    <div class="flex flex-col gap-2">
+      <label for="login-email">{{ 'gatbaseCore.login.email' | transloco }}</label>
+      <input pInputText id="login-email" formControlName="email" type="email" autocomplete="username" required data-testid="login-email" />
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <label for="login-password">{{ 'gatbaseCore.login.password' | transloco }}</label>
+      <input pInputText id="login-password" formControlName="password" type="password" autocomplete="current-password" required data-testid="login-password" />
+    </div>
+
+    @if (hasErrors()) {
+      <div class="text-red-500 text-sm" role="alert" data-testid="login-error">
+        @for (text of errors(); track $index) {
+          <div>{{ text }}</div>
+        }
+      </div>
+    }
+
+    <button pButton type="submit" data-testid="login-submit" [disabled]="isSubmitting()">{{ (isSubmitting() ? 'gatbaseCore.login.submitting' : 'gatbaseCore.login.submit') | transloco }}</button>
+  </form>
+</div>

@@ -9,6 +9,8 @@
   </div>
 
   <div class="layout-topbar-actions">
+    <app-tenant-switcher />
+    <app-account-menu />
     <div class="layout-config-menu">
       <p-select [options]="languages" [ngModel]="selectedLang()" (onChange)="setLang($event.value.code)" dataKey="code" appendTo="body" styleClass="lang-select" [style]="{ minWidth: '7rem' }">
         <ng-template #selectedItem let-lang>
