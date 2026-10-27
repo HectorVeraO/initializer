@@ -1,9 +1,13 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { SKIP_ERROR_TOAST } from '@/core/api/api-http-context';
 import { RuntimeConfigService } from '@/core/config/runtime-config.service';
 import { BROWSER_LOCATION } from '../session/browser-location';
 import type { KratosLoginFlow, KratosLoginResult, KratosMessage } from './kratos.types';
+
+// The login view shows its own unavailable text, so the generic error toast stays off.
+const KRATOS_CONTEXT = new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 const FLOW_PATH = '/kratos/self-service/login/browser';
 
@@ -99,7 +103,7 @@ export class KratosLoginClient {
     let flow: KratosLoginFlow;
 
     try {
-      flow = await firstValueFrom(this.http.get<KratosLoginFlow>(`${this.runtimeConfig.apiUrl()}${FLOW_PATH}`, { headers: { Accept: 'application/json' } }));
+      flow = await firstValueFrom(this.http.get<KratosLoginFlow>(`${this.runtimeConfig.apiUrl()}${FLOW_PATH}`, { headers: { Accept: 'application/json' }, context: KRATOS_CONTEXT }));
     } catch (error) {
       if (error instanceof HttpErrorResponse && isSessionAlreadyAvailable(error)) {
         return { kind: 'signed-in' };
@@ -117,7 +121,7 @@ export class KratosLoginClient {
     }
 
     try {
-      await firstValueFrom(this.http.post(action, { method: 'password', identifier, password, csrf_token: csrfToken }, { headers: { Accept: 'application/json' } }));
+      await firstValueFrom(this.http.post(action, { method: 'password', identifier, password, csrf_token: csrfToken }, { headers: { Accept: 'application/json' }, context: KRATOS_CONTEXT }));
 
       return { kind: 'signed-in' };
     } catch (error) {
@@ -133,6 +137,11 @@ export class KratosLoginClient {
     const body = error.error as { error?: { id?: unknown } } | null;
 
     const isCsrfViolation = error.status === 403 && body?.error?.id === 'security_csrf_violation';
+
+    // A second tab signed in meanwhile: Kratos refuses the POST with the same id as the GET.
+    if (isSessionAlreadyAvailable(error)) {
+      return { kind: 'signed-in' };
+    }
 
     if (error.status === 400) {
       return { kind: 'rejected', messages: collectMessages(error.error) };

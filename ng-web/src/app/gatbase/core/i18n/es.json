@@ -1,5 +1,47 @@
 {
   "session": {
     "tenantChanged": "El tenant activo cambió en otra pestaña."
+  },
+  "shell": {
+    "activeTenant": "Tenant activo",
+    "noTenant": "Sin tenant activo",
+    "tenantSwitched": "El tenant activo cambió.",
+    "account": "Cuenta",
+    "signOut": "Cerrar sesión",
+    "operator": "Operador de plataforma",
+    "roles": {
+      "admin": "Administrador",
+      "member": "Miembro",
+      "viewer": "Lector"
+    }
+  },
+  "login": {
+    "title": "Iniciar sesión",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "submit": "Iniciar sesión",
+    "submitting": "Iniciando sesión",
+    "unavailable": "El inicio de sesión no está disponible por ahora. Intenta de nuevo en unos minutos.",
+    "rejected": "El correo o la contraseña no son válidos.",
+    "kratos": {
+      "4000006": "El correo o la contraseña no son válidos."
+    },
+    "notices": {
+      "invitationAccepted": "Tu invitación fue aceptada. Inicia sesión para continuar."
+    }
+  },
+  "noTenant": {
+    "title": "No tienes un tenant",
+    "message": "No eres miembro activo de ningún tenant. Pide una invitación a un administrador.",
+    "account": "Sesión iniciada como",
+    "operatorTenants": "Administrar tenants",
+    "operatorFlags": "Administrar feature flags"
+  },
+  "errors": {
+    "TENANT_ACCESS_DENIED": "No tienes acceso a ese tenant.",
+    "TENANT_SUSPENDED": "Ese tenant está suspendido.",
+    "MEMBERSHIP_REVOKED": "Tu membresía en ese tenant fue revocada.",
+    "ACCOUNT_LOCKED_OR_DISABLED": "Esta cuenta está bloqueada o deshabilitada. Contacta a un administrador.",
+    "switchFailed": "No se pudo cambiar el tenant activo. Intenta de nuevo."
   }
 }

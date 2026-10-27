@@ -1,0 +1,23 @@
+@if (isAuthenticated()) {
+  <div class="flex items-center gap-2">
+    <p-select
+      data-testid="tenant-switcher"
+      [options]="options()"
+      [ngModel]="shownTenantId()"
+      (onChange)="onChange($event.value)"
+      optionValue="tenant.id"
+      appendTo="body"
+      [style]="{ minWidth: '12rem' }"
+      [placeholder]="'gatbaseCore.shell.noTenant' | transloco"
+      [ariaLabel]="'gatbaseCore.shell.activeTenant' | transloco"
+    >
+      <ng-template #selectedItem let-membership>
+        <span class="text-sm font-medium">{{ membership.tenant.name }} ({{ membership.tenant.slug }})</span>
+      </ng-template>
+      <ng-template #item let-membership>
+        <span data-testid="tenant-option" [attr.data-key]="membership.tenant.slug">{{ membership.tenant.name }} ({{ membership.tenant.slug }})</span>
+      </ng-template>
+    </p-select>
+    <span class="text-sm text-muted-color" data-testid="active-tenant-slug">{{ activeTenant()?.slug }}</span>
+  </div>
+}

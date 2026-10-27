@@ -2,13 +2,14 @@ import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@a
 import { RouterModule } from '@angular/router';
 import { SelectModule } from '@openng/optimus-ui/select';
 import { FormsModule } from '@angular/forms';
+import { AccountMenu, TenantSwitcher } from '@/gatbase/core';
 import { LayoutService } from '../../service/layout.service';
 import { TranslocoModule, TranslocoService } from '@jsverse/transloco';
 
 @Component({
   selector: 'p-topbar',
   standalone: true,
-  imports: [RouterModule, TranslocoModule, SelectModule, FormsModule],
+  imports: [RouterModule, TranslocoModule, SelectModule, FormsModule, TenantSwitcher, AccountMenu],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.topbar.html'
 })
