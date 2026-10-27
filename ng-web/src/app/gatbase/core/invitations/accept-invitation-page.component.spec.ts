@@ -83,6 +83,7 @@ describe('AcceptInvitationPage', () => {
     const fixture = await open(`#token=${TOKEN}`);
 
     expect(TestBed.inject(Location).path(true)).toBe('/invitations/accept');
+    await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/invitations/accept'));
     expect(byTestId(root(fixture), 'accept-submit')).not.toBeNull();
   });
 

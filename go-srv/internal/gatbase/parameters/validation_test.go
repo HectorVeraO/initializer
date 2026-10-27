@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/parameters"
 )
 
 // manyEntries renders a JSON array of n distinct strings or numbers.
@@ -92,5 +94,42 @@ func TestCreateRejectsInvalidBodies(t *testing.T) {
 			_, err := svc.Create(context.Background(), account, body(t, tc.body))
 			requireValidation(t, err, tc.want)
 		})
+	}
+}
+
+// A value written exactly as a decimal minValue or maxValue is inside the
+// inclusive range.
+func TestCreateAcceptsValueEqualToDecimalBound(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"default equal to minValue 0.1", `{"key":"retry.backoff_factor","valueType":"number","minValue":0.1,"maxValue":1,"defaultValue":0.1}`},
+		{"default equal to maxValue 0.3", `{"key":"retry.backoff_factor","valueType":"number","minValue":0,"maxValue":0.3,"defaultValue":0.3}`},
+		{"allowed entry equal to maxValue 0.3", `{"key":"retry.backoff_factor","valueType":"number","maxValue":0.3,"allowedValues":[0.3],"defaultValue":0.3}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parameters.ParseCreate(body(t, tc.body))
+			if err != nil {
+				t.Fatalf("body %s rejected with issues %v", tc.body, issueList(asAPIError(t, err)))
+			}
+		})
+	}
+}
+
+// Values just outside a decimal bound stay rejected.
+func TestCreateRejectsValueBeyondDecimalBound(t *testing.T) {
+	cases := []string{
+		`{"key":"retry.backoff_factor","valueType":"number","minValue":0.1,"defaultValue":0.09}`,
+		`{"key":"retry.backoff_factor","valueType":"number","maxValue":0.3,"defaultValue":0.31}`,
+		`{"key":"retry.backoff_factor","valueType":"number","maxValue":0.3,"defaultValue":0.30000000000000004}`,
+	}
+	for _, raw := range cases {
+		_, err := parameters.ParseCreate(body(t, raw))
+		if err == nil {
+			t.Fatalf("body %s accepted", raw)
+		}
+		requireValidation(t, err, []string{"defaultValue:PARAMETER_OUT_OF_RANGE"})
 	}
 }
