@@ -88,6 +88,11 @@ export class AcceptInvitationPage {
 
     this.token.set(fromHash ?? this.pending.take());
 
+    // The router's own URL keeps the fragment until it navigates; later navigations copy router.url.
+    if (document.location.hash !== '') {
+      void this.router.navigateByUrl(ACCEPT_PATH, { replaceUrl: true });
+    }
+
     void this.start();
   }
 

@@ -274,6 +274,22 @@ describe('gatbaseSessionInterceptor', () => {
       expect(result.ok === false && result.error.status).toBe(401);
     });
 
+    it('drops the URL fragment from returnUrl', async () => {
+      await router.navigateByUrl('/reports/1?tab=a#frag=synthetic-secret');
+      await loadSession();
+
+      const outcome = call('GET', '/api/v1/parameters');
+
+      (await nextCall('GET', '/api/v1/parameters')).flush(errorEnvelope('SESSION_INVALID'), UNAUTHORIZED);
+      (await nextCall('POST', REFRESH_URL)).flush(errorEnvelope('SESSION_INVALID'), UNAUTHORIZED);
+      await outcome;
+
+      await vi.waitFor(() => expect(router.url).toContain('/login'));
+
+      expect(router.url).toBe('/login?returnUrl=%2Freports%2F1%3Ftab%3Da');
+      expect(router.url).not.toContain('synthetic-secret');
+    });
+
     it('sends the user to /home when the refresh is denied', async () => {
       await loadSession();
 
