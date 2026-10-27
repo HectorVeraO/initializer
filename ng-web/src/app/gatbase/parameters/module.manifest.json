@@ -2,7 +2,7 @@
   "schema": 1,
   "stack": "ng-web",
   "module": "parameters",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "implied": false,
   "implementsSpec": { "parameters": "0.2.0" },
   "requiresCore": "^0.1.0",

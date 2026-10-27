@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { TranslocoService } from '@jsverse/transloco';
 import { MessageService, ToastMessageOptions } from '@openng/optimus-ui/api';
-import { apiIssues, apiTraceId, errorMessage } from '@/core/api/api-error';
+import { apiIssues, errorMessageWithReference } from '@/core/api/api-error';
 import type { ApiIssue } from '@/core/envelope';
 
 /**
@@ -43,11 +43,7 @@ export class IssueDisplayService {
       return true;
     }
 
-    const traceId = apiTraceId(error);
-
-    const message = errorMessage(this.transloco, error);
-
-    const detail = traceId === null ? message : `${message} ${this.transloco.translate('errors.reference', { traceId })}`;
+    const detail = errorMessageWithReference(this.transloco, error);
 
     this.messageService.add({
       severity: 'error',

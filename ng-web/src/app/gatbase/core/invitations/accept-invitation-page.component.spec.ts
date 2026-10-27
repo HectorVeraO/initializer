@@ -132,7 +132,7 @@ describe('AcceptInvitationPage', () => {
     });
 
     expect(TestBed.inject(Router).url).not.toBe('/home');
-    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(es.errors.codes.SERVICE_UNAVAILABLE);
+    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(`${es.errors.codes.SERVICE_UNAVAILABLE} Referencia: abc`);
     expect(textOf(root(fixture))).not.toContain(es.errors.codes.INVITATION_INVALID);
   });
 
@@ -269,17 +269,24 @@ describe('AcceptInvitationPage', () => {
     expect(byTestId(root(fixture), 'accept-invalid')).not.toBeNull();
   });
 
-  it.each([
-    [404, 'INVITATION_INVALID'],
-    [503, 'IDENTITY_PROVIDER_UNAVAILABLE']
-  ])('shows accept-error after a %s on accept-new', async (status, code) => {
+  it('shows accept-error without a reference after a 404 on accept-new', async () => {
     const fixture = await open(`#token=${TOKEN}`, null);
 
     await fillNew(fixture);
-    (await nextCall('POST', ACCEPT_NEW_URL)).flush(errorEnvelope(code), { status, statusText: 'Error' });
+    (await nextCall('POST', ACCEPT_NEW_URL)).flush(errorEnvelope('INVITATION_INVALID'), { status: 404, statusText: 'Error' });
     await settle(fixture);
 
-    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(es.errors.codes[code as 'INVITATION_INVALID']);
+    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(es.errors.codes.INVITATION_INVALID);
+  });
+
+  it('shows accept-error with the trace reference after a 503 on accept-new', async () => {
+    const fixture = await open(`#token=${TOKEN}`, null);
+
+    await fillNew(fixture);
+    (await nextCall('POST', ACCEPT_NEW_URL)).flush(errorEnvelope('IDENTITY_PROVIDER_UNAVAILABLE'), { status: 503, statusText: 'Error' });
+    await settle(fixture);
+
+    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(`${es.errors.codes.IDENTITY_PROVIDER_UNAVAILABLE} Referencia: abc`);
   });
 
   it.each(['IDENTITY_ALREADY_EXISTS', 'MEMBERSHIP_ALREADY_ACTIVE'])('hints to sign in after a 409 %s', async (code) => {

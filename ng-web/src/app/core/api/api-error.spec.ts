@@ -148,7 +148,13 @@ describe('errorMessage', () => {
   it('falls back to the generic detail for an unknown code', () => {
     const transloco = configureTranslations();
 
-    expect(errorMessage(transloco, failure(409, envelope('SOME_FUTURE_CODE')))).toBe(es['errors']['generic-error'].detail);
+    expect(errorMessage(transloco, failure(409, envelope('SOME_FUTURE_CODE')))).toBe(`${es['errors']['generic-error'].detail} Referencia: abc`);
+  });
+
+  it('appends the trace reference to a 5xx answered with a registry code', () => {
+    const transloco = configureTranslations();
+
+    expect(errorMessage(transloco, failure(503, envelope('SERVICE_UNAVAILABLE')))).toBe(`${es.errors.codes.SERVICE_UNAVAILABLE} Referencia: abc`);
   });
 
   it('answers the operation-failed text for status 0', () => {
