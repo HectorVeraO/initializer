@@ -68,6 +68,6 @@ describe('OperatorTenantsPage trace reference', () => {
     (await nextCall('POST', LIST_URL)).flush(errorEnvelope('INTERNAL_ERROR', [], TRACE_ID), { status: 500, statusText: 'Error', headers: { 'X-Trace-Id': TRACE_ID } });
     await settle(fixture);
 
-    expect(textOf(byTestId(root, 'tenant-issues'))).toContain(TRACE_ID);
+    expect(textOf(byTestId(root, 'tenant-issues'))).toContain(`Referencia: ${TRACE_ID}`);
   });
 });
