@@ -130,10 +130,21 @@ func TestRefreshKeepsTheChainTenantAndCSRFValue(t *testing.T) {
 	if want := e.clock.Now().Add(10 * time.Minute); !after.ExpiresAt.Equal(want) {
 		t.Errorf("exp = %v, want now + TTL = %v", after.ExpiresAt, want)
 	}
+	sessionMaxAge, csrfMaxAge, csrfSets := 0, 0, 0
 	for _, set := range rec.Result().Cookies() {
-		if set.Name == "XSRF-TOKEN" {
-			t.Errorf("refresh must not rewrite the XSRF-TOKEN cookie")
+		if set.Name == c.sessionCookieName() {
+			sessionMaxAge = set.MaxAge
 		}
+		if set.Name == "XSRF-TOKEN" {
+			csrfSets++
+			csrfMaxAge = set.MaxAge
+			if set.Value != csrfBefore {
+				t.Errorf("refresh rewrote XSRF-TOKEN with a new value")
+			}
+		}
+	}
+	if csrfSets != 1 || sessionMaxAge <= 0 || csrfMaxAge != sessionMaxAge {
+		t.Errorf("XSRF-TOKEN sets = %d, Max-Age = %d, want one set with the session Max-Age %d", csrfSets, csrfMaxAge, sessionMaxAge)
 	}
 	if c.cookies["XSRF-TOKEN"] != csrfBefore {
 		t.Error("XSRF-TOKEN value changed")
@@ -845,5 +856,69 @@ func TestSwitchSetsNoCookieWhenTheLastActiveWriteFails(t *testing.T) {
 	tenantID := c.claims().TenantID
 	if tenantID == nil || *tenantID != home {
 		t.Errorf("session tenant = %v, want it to stay on %s", tenantID, home)
+	}
+}
+
+// A chain that outlives the refresh max age: refresh renews the session
+// cookie, so it must renew XSRF-TOKEN too, or the browser drops the CSRF
+// cookie while the session still verifies and logout answers 403.
+func TestLogoutStillWorksAfterTheOriginalCSRFCookieMaxAge(t *testing.T) {
+	e := newSessEnv(t, sessEnvOptions{})
+	p := e.person()
+	tenant := e.tenant("acme", "active")
+	e.member(tenant, p.accountID, "admin", "active", e.clock.Now().Add(-time.Hour))
+	c := e.client()
+	c.cookies[kratosCookieName] = p.kratosCookie
+	chainStart := e.clock.Now()
+
+	issued := c.do(http.MethodGet, "/api/v1/auth/session", nil)
+	if issued.Code != http.StatusOK {
+		t.Fatalf("sign in answered %d: %s", issued.Code, issued.Body.String())
+	}
+	csrfMaxAge := -1
+	for _, set := range issued.Result().Cookies() {
+		if set.Name == "XSRF-TOKEN" {
+			csrfMaxAge = set.MaxAge
+		}
+	}
+	if csrfMaxAge <= 0 {
+		t.Fatalf("XSRF-TOKEN Max-Age = %d", csrfMaxAge)
+	}
+	csrfExpiresAt := chainStart.Add(time.Duration(csrfMaxAge) * time.Second)
+
+	// Refresh of an expired token inside the refresh max age.
+	e.clock.advance(23*time.Hour + 55*time.Minute)
+	first := c.mutate(http.MethodPost, refreshPath)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first refresh: status %d: %s", first.Code, first.Body.String())
+	}
+	// Refresh of a token that has not expired yet, past chainStart + max age.
+	e.clock.advance(9 * time.Minute)
+	second := c.mutate(http.MethodPost, refreshPath)
+	if second.Code != http.StatusOK {
+		t.Fatalf("second refresh: status %d: %s", second.Code, second.Body.String())
+	}
+	claims := c.claims()
+	if !e.clock.Now().After(csrfExpiresAt) || !claims.ExpiresAt.After(e.clock.Now()) {
+		t.Fatalf("setup: want the token live after the original XSRF-TOKEN cookie expired")
+	}
+
+	// The browser drops XSRF-TOKEN once its Max-Age passes; the last refresh
+	// response renewed it, so the client holds the renewed cookie instead.
+	renewed := ""
+	for _, set := range second.Result().Cookies() {
+		if set.Name == "XSRF-TOKEN" {
+			renewed = set.Value
+		}
+	}
+	delete(c.cookies, "XSRF-TOKEN")
+	if renewed != "" {
+		c.cookies["XSRF-TOKEN"] = renewed
+	}
+	logout := c.mutate(http.MethodPost, "/api/v1/auth/logout")
+
+	if logout.Code != http.StatusOK {
+		t.Errorf("logout of a verifying session after the original XSRF-TOKEN cookie expired: status %d, want 200: %s",
+			logout.Code, logout.Body.String())
 	}
 }
