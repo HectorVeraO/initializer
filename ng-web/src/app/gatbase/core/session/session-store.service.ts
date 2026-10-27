@@ -181,7 +181,8 @@ export class SessionStore {
       // 401 means already logged out; any other failure also ends on /login.
     }
 
-    this.commit('anonymous', null, false, ticket);
+    // Logout is final: the tab leaves the app, so the store must agree even when a load that started later answered first.
+    this.commit('anonymous', null, false, ticket, true);
     this.announce();
     this.browserLocation.assign(target);
   }

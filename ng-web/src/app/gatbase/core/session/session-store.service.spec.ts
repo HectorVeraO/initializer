@@ -400,10 +400,27 @@ describe('SessionStore', () => {
 
       switchCall.flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
       await switched;
-      laterLoad.flush(okEnvelope(sessionView({ activeTenant: SECOND_TENANT })));
+      laterLoad.flush(okEnvelope(sessionView()));
       await reload;
 
-      expect(store().activeTenantId()).toBe(SECOND_TENANT.id);
+      expect(store().activeTenantId()).toBe(FIRST_TENANT_ID);
+    });
+
+    it('ends anonymous when a load started after the logout answers before the logout', async () => {
+      await loadSession();
+
+      const done = store().logout();
+
+      const logoutCall = await nextCall('POST', '/api/v1/auth/logout');
+
+      const reload = store().reload();
+
+      (await nextCall('GET', SESSION_URL)).flush(okEnvelope(sessionView()));
+      await reload;
+      logoutCall.flush(okEnvelope({ logoutUrl: '/kratos/self-service/logout?token=synthetic-logout' }));
+      await done;
+
+      expect(store().state()).toBe('anonymous');
     });
   });
 
