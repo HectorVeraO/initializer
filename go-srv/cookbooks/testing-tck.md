@@ -24,7 +24,7 @@ Read before writing or changing tests in `go-srv`. Project-wide test discipline:
 
 ## Integration tests (PostgreSQL)
 
-- Set `GATBASE_TEST_DATABASE_URL` to an admin connection on the compose service `postgres` (host port `10132`, see `.deploy/local/README.md`; the password is in `.deploy/local/.env`). Tests never use that URL's own database: `coretest.Options{Database: true}` creates an `it_*` database on the server, applies the modules' migrations and drops it on cleanup.
+- Set `GATBASE_TEST_DATABASE_URL` to an admin connection on the compose service `postgres` (host port `10132`, see `.deploy/local/README.md`; the password is in `.deploy/local/.env`). Tests never use that URL's own database: `coretest.Options{Database: true}` creates an `it_*` database on the server, applies the modules' migrations and drops it on cleanup; the next database test also drops `it_*` leftovers of killed runs that are older than an hour and have no connection.
 - Without `Database: true` the pool rejects every query, so a module that touches `Pool` fails.
 - Each test owns its database and never depends on another test's rows.
 - A test skips with a clear message when `GATBASE_TEST_DATABASE_URL` is unset (the `go (go-srv)` CI job sets it); never report a skipped integration test as passed.
