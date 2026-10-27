@@ -2,7 +2,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
-import { of } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf } from '@/core/testing/ui-testing';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { flagView, tenantOverride, tenantView } from '../../../../testing/fixtures/flag-view';
@@ -33,15 +33,18 @@ describe('FlagDetailPage', () => {
 
   let messages: { add: ReturnType<typeof vi.fn> };
 
+  let params: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+
   beforeEach(() => {
     stubBroadcastChannel();
     stubMatchMedia();
     messages = { add: vi.fn() };
+    params = new BehaviorSubject(convertToParamMap({ key: KEY }));
     configureFeatureTest(
       [],
       [
         { provide: MessageService, useValue: messages },
-        { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({ key: KEY })), snapshot: { paramMap: convertToParamMap({ key: KEY }) } } }
+        { provide: ActivatedRoute, useValue: { paramMap: params, snapshot: { paramMap: convertToParamMap({ key: KEY }) } } }
       ]
     );
     http = TestBed.inject(HttpTestingController);
@@ -89,6 +92,12 @@ describe('FlagDetailPage', () => {
     return row as HTMLElement;
   }
 
+  function toggleOf(fixture: ComponentFixture<FlagDetailPage>): HTMLElement | null {
+    const host = byTestId(root(fixture), 'flag-tenant-enabled');
+
+    return host?.querySelector('[role="switch"]') as HTMLElement | null;
+  }
+
   async function click(fixture: ComponentFixture<FlagDetailPage>, element: HTMLElement | null): Promise<void> {
     (element as HTMLElement).click();
     await settle(fixture);
@@ -101,6 +110,19 @@ describe('FlagDetailPage', () => {
 
     await click(fixture, option as HTMLElement);
   }
+
+  it('loads the flag of the new key when the route key changes', async () => {
+    const otherKey = 'example_other_flag';
+
+    const fixture = await open([flagView(KEY), flagView(otherKey)]);
+
+    params.next(convertToParamMap({ key: otherKey }));
+    fixture.detectChanges();
+    await answerLoad([flagView(KEY), flagView(otherKey)]);
+    await settle(fixture);
+
+    expect(textOf(root(fixture))).toContain(otherKey);
+  });
 
   it('reads the flag from the list and the tenants from the tenant list', async () => {
     const fixture = TestBed.createComponent(FlagDetailPage);
@@ -218,7 +240,7 @@ describe('FlagDetailPage', () => {
       const fixture = await open([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, true)] })]);
 
       await pickTenant(fixture, 'tenant-a');
-      await click(fixture, byTestId(root(fixture), 'flag-tenant-enabled')?.querySelector('input') ?? null);
+      await click(fixture, toggleOf(fixture));
       await click(fixture, byTestId(root(fixture), 'flag-tenant-save'));
 
       const put = await nextCall('PUT', `${LIST_URL}/${KEY}/tenants/${TENANT_A}`);
@@ -235,7 +257,7 @@ describe('FlagDetailPage', () => {
       const fixture = await open();
 
       await pickTenant(fixture, 'tenant-a');
-      await click(fixture, byTestId(root(fixture), 'flag-tenant-enabled')?.querySelector('input') ?? null);
+      await click(fixture, toggleOf(fixture));
       await click(fixture, byTestId(root(fixture), 'flag-tenant-save'));
 
       const put = await nextCall('PUT', `${LIST_URL}/${KEY}/tenants/${TENANT_A}`);
