@@ -97,8 +97,21 @@ describe('apiErrorInterceptor', () => {
     fail('/api/v1/parameters', 503, apiError('SERVICE_UNAVAILABLE'));
     await settle();
 
-    expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ severity: 'error', detail: 'No pudimos completar la operación. Intenta de nuevo.' }));
+    expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ severity: 'error', detail: `${es.errors.operationFailed} Referencia: abc` }));
     expect(router.url).toBe('/home');
+  });
+
+  it('shows the trace id from the X-Trace-Id header when the failure has no envelope', () => {
+    client.get('/api/v1/parameters').subscribe({ error: () => undefined });
+    http.expectOne('/api/v1/parameters').flush(null, { status: 502, statusText: 'Bad Gateway', headers: { 'X-Trace-Id': '4bf92f3577b34da6a3ce929d0e0e4736' } });
+
+    expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ detail: `${es.errors.operationFailed} Referencia: 4bf92f3577b34da6a3ce929d0e0e4736` }));
+  });
+
+  it('shows the generic toast without a reference when the failure carries no trace id', () => {
+    fail('/api/v1/parameters', 500, { data: null, meta: {}, error: { code: 'INTERNAL_ERROR', message: 'text', issues: [] } });
+
+    expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ detail: es.errors.operationFailed }));
   });
 
   it('shows the generic toast on a network error', () => {

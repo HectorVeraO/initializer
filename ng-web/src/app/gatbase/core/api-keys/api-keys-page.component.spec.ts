@@ -316,7 +316,7 @@ describe('ApiKeysPage', () => {
     (await nextCall('POST', LIST_URL)).flush(errorEnvelope('INTERNAL_ERROR'), { status: 500, statusText: 'Error' });
     await settle(fixture);
 
-    expect(textOf(byTestId(root(fixture), 'api-key-issues'))).toBe(es.errors.codes.INTERNAL_ERROR);
+    expect(textOf(byTestId(root(fixture), 'api-key-issues'))).toBe(`${es.errors.codes.INTERNAL_ERROR} Referencia: abc`);
     expect(byTestId(document.body, 'one-time-secret-value')).toBeNull();
   });
 
@@ -372,7 +372,7 @@ describe('ApiKeysPage', () => {
     (await nextCall('GET', LIST_URL)).flush(pageOf([apiKey('ci')]));
     await settle(fixture);
 
-    await vi.waitFor(() => expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warn', summary: es.errors.codes.INTERNAL_ERROR })));
+    await vi.waitFor(() => expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warn', summary: `${es.errors.codes.INTERNAL_ERROR} Referencia: abc` })));
     expect(allByTestId(root(fixture), 'api-keys-row')).toHaveLength(1);
   });
 

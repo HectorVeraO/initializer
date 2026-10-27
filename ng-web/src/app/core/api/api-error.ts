@@ -132,19 +132,60 @@ export function apiTraceId(error: unknown): string | null {
   return fromHeader !== null && fromHeader !== '' ? fromHeader : null;
 }
 
-/** Text for a failed call: `errors.codes.<CODE>` when that key exists, `errors.operationFailed` for status 0 or 5xx without an envelope, else `errors.generic-error.detail`. */
+/** Appends `errors.reference` with the trace id of a failed call to its text; the text alone when the call carries none. */
+export function withTraceReference(transloco: TranslocoService, text: string, error: unknown): string {
+  const traceId = apiTraceId(error);
+
+  if (traceId === null) {
+    return text;
+  }
+
+  const referenced = `${text} ${transloco.translate('errors.reference', { traceId })}`;
+
+  return referenced;
+}
+
+/**
+ * Text for a failed call: `errors.codes.<CODE>` when that key exists, `errors.operationFailed` for status 0 or 5xx without an envelope, else `errors.generic-error.detail`.
+ * A failure the person cannot act on (status 0, 5xx, or a code without its own text) is followed by the trace reference, so support can find the server logs.
+ */
 export function errorMessage(transloco: TranslocoService, error: unknown): string {
+  const isActionable = !isServerFailure(error) && translatedCode(transloco, error) !== null;
+
+  const text = failureText(transloco, error);
+
+  return isActionable ? text : withTraceReference(transloco, text, error);
+}
+
+/** Like `errorMessage`, but the trace reference follows every failure that carries a trace id. */
+export function errorMessageWithReference(transloco: TranslocoService, error: unknown): string {
+  const message = withTraceReference(transloco, failureText(transloco, error), error);
+
+  return message;
+}
+
+function translatedCode(transloco: TranslocoService, error: unknown): string | null {
   const code = errorCode(error);
 
-  if (code !== null) {
-    const key = `errors.codes.${code}`;
+  if (code === null) {
+    return null;
+  }
 
-    const translated = transloco.translate(key);
+  const key = `errors.codes.${code}`;
 
-    if (translated !== key) {
-      return translated;
-    }
-  } else if (isServerFailure(error)) {
+  const translated = transloco.translate(key);
+
+  return translated !== key ? translated : null;
+}
+
+function failureText(transloco: TranslocoService, error: unknown): string {
+  const translated = translatedCode(transloco, error);
+
+  if (translated !== null) {
+    return translated;
+  }
+
+  if (errorCode(error) === null && isServerFailure(error)) {
     return transloco.translate('errors.operationFailed');
   }
 

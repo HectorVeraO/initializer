@@ -271,7 +271,7 @@ describe('ParameterOverrideDialog', () => {
     sent().flush(errorEnvelope('INTERNAL_ERROR'), 500);
     await settle(fixture);
 
-    expect(textOf(byTestId(document.body, 'parameter-override-issues'))).toBe('Algo salió mal. Inténtalo de nuevo.');
+    expect(textOf(byTestId(document.body, 'parameter-override-issues'))).toBe('Algo salió mal. Inténtalo de nuevo. Referencia: abc');
     expect(fixture.componentInstance.parameter()).not.toBeNull();
   });
 
