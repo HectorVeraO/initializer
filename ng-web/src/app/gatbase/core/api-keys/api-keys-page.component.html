@@ -1,0 +1,90 @@
+<p-page-header [title]="'gatbaseCore.apiKeys.title' | transloco" />
+
+<p-form-section [title]="'gatbaseCore.apiKeys.createTitle' | transloco">
+  <form [formGroup]="form" class="flex flex-col gap-4" data-testid="api-key-form" (ngSubmit)="submit()">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+      <div class="flex flex-col gap-2 md:col-span-2">
+        <label for="api-key-name">{{ 'gatbaseCore.apiKeys.name' | transloco }}</label>
+        <input pInputText id="api-key-name" formControlName="name" type="text" autocomplete="off" data-testid="api-key-name" />
+        @for (message of nameMessages(); track $index) {
+          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="api-key-name-error">{{ message }}</p-message>
+        }
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label for="api-key-expires-at">{{ 'gatbaseCore.apiKeys.expiresAt' | transloco }}</label>
+        <p-datepicker inputId="api-key-expires-at" formControlName="expiresAt" dateFormat="yy-mm-dd" [showButtonBar]="true" appendTo="body" data-testid="api-key-expires-at" />
+        @for (message of expiresAtMessages(); track $index) {
+          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="api-key-expires-at-error">{{ message }}</p-message>
+        }
+      </div>
+    </div>
+
+    <fieldset class="flex flex-col gap-2 border-0 p-0 m-0">
+      <legend class="mb-2">{{ 'gatbaseCore.apiKeys.scopes' | transloco }}</legend>
+      @if (hasNoScopes()) {
+        <p class="m-0" data-testid="api-key-scopes-empty">{{ 'gatbaseCore.apiKeys.noScopes' | transloco }}</p>
+      }
+      @for (scope of availableScopes(); track scope.name) {
+        <label class="flex items-center gap-2">
+          <input type="checkbox" data-testid="api-key-scope" [attr.data-key]="scope.name" [checked]="isScopeSelected(scope.name)" (change)="toggleScope(scope.name, $any($event.target).checked)" />
+          <span>{{ scope.name }}</span>
+          <span class="text-sm">{{ scope.description }}</span>
+        </label>
+      }
+      @for (message of scopesMessages(); track $index) {
+        <p-message severity="error" variant="simple" size="small" role="alert" data-testid="api-key-scopes-error">{{ message }}</p-message>
+      }
+    </fieldset>
+
+    @if (formMessages().length > 0) {
+      <div role="alert" data-testid="api-key-issues">
+        <p-message severity="error">
+          @for (message of formMessages(); track $index) {
+            <div>{{ message }}</div>
+          }
+        </p-message>
+      </div>
+    }
+
+    <div>
+      <button pButton type="submit" data-testid="api-key-submit" [disabled]="isSubmitting() || hasNoScopes()">{{ 'gatbaseCore.apiKeys.submit' | transloco }}</button>
+    </div>
+  </form>
+</p-form-section>
+
+<div class="card mt-4">
+  <p-list-state feature="api-keys" [loading]="isLoading()" [loadFailed]="loadFailed()" [empty]="isEmpty()" sectionKey="gatbaseCore.apiKeys.section" emptyKey="gatbaseCore.apiKeys.empty" (retry)="reload()">
+    <p-table [value]="rows()" dataKey="id">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>{{ 'gatbaseCore.apiKeys.name' | transloco }}</th>
+          <th>{{ 'gatbaseCore.apiKeys.prefix' | transloco }}</th>
+          <th>{{ 'gatbaseCore.apiKeys.scopes' | transloco }}</th>
+          <th>{{ 'gatbaseCore.apiKeys.expires' | transloco }}</th>
+          <th>{{ 'gatbaseCore.apiKeys.status' | transloco }}</th>
+          <th></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr data-testid="api-keys-row" [attr.data-key]="row.name">
+          <td data-testid="api-keys-cell-name">{{ row.name }}</td>
+          <td data-testid="api-keys-cell-prefix">{{ row.keyPrefix }}</td>
+          <td data-testid="api-keys-cell-scopes">{{ row.scopes.join(', ') }}</td>
+          <td data-testid="api-keys-cell-expires">{{ row.expiresAt === null ? '-' : (row.expiresAt | santiagoDate) }}</td>
+          <td data-testid="api-keys-cell-status" [attr.data-value]="row.status">{{ 'gatbaseCore.apiKeys.statuses.' + row.status | transloco }}</td>
+          <td class="text-right">
+            @if (row.status === 'active') {
+              <app-inline-confirm labelKey="gatbaseCore.apiKeys.revoke" testId="api-key-revoke" (confirmed)="revoke(row)" />
+            }
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+    @if (isTruncated()) {
+      <p class="mt-2 mb-0 text-sm" data-testid="api-keys-truncated">{{ 'gatbaseCore.apiKeys.truncated' | transloco: { shown: rows().length, total: totalItems() } }}</p>
+    }
+  </p-list-state>
+</div>
+
+<app-one-time-secret-dialog titleKey="gatbaseCore.apiKeys.secretTitle" [secret]="secret()" (closed)="closeSecret()" />

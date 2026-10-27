@@ -49,7 +49,8 @@
   "nav": {
     "invitations": "Invitaciones",
     "memberships": "Miembros",
-    "operatorTenants": "Tenants"
+    "operatorTenants": "Tenants",
+    "apiKeys": "Claves de API"
   },
   "secret": {
     "once": "Este valor se muestra una sola vez. Guárdalo ahora.",
@@ -140,6 +141,28 @@
     "statuses": {
       "active": "Activo",
       "suspended": "Suspendido"
+    }
+  },
+  "apiKeys": {
+    "title": "Claves de API",
+    "createTitle": "Crear clave de API",
+    "name": "Nombre",
+    "expiresAt": "Vence el (opcional)",
+    "scopes": "Permisos",
+    "noScopes": "No hay permisos disponibles para otorgar.",
+    "submit": "Crear clave de API",
+    "section": "las claves de API",
+    "empty": "No hay claves de API.",
+    "prefix": "Prefijo",
+    "expires": "Vence",
+    "status": "Estado",
+    "revoke": "Revocar",
+    "secretTitle": "Nueva clave de API",
+    "truncated": "Mostrando las primeras {{shown}} de {{total}}",
+    "statuses": {
+      "active": "Activa",
+      "expired": "Vencida",
+      "revoked": "Revocada"
     }
   }
 }

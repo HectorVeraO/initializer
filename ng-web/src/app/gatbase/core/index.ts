@@ -17,6 +17,8 @@ export { issueMessage, fieldIssueMessages, unmatchedIssueMessages } from './ui/i
 export { InvitationsApi } from './invitations/invitations-api.service';
 export type { InvitationView, CreatedInvitation, AcceptInvitationResult, AcceptNewInvitationResult } from './invitations/invitations-api.service';
 export { PendingInvitation } from './invitations/pending-invitation.service';
+export { ApiKeysApi } from './api-keys/api-keys-api.service';
+export type { ApiKeyView, ApiKeyScope, ApiKeyStatus, CreatedApiKey, CreateApiKeyInput } from './api-keys/api-keys-api.service';
 export { MembershipsApi } from './memberships/memberships-api.service';
 export type { MemberView, MembershipChange } from './memberships/memberships-api.service';
 export { TenantsApi } from './tenants/tenants-api.service';
