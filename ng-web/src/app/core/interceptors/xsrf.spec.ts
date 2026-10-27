@@ -1,6 +1,11 @@
-import { HttpClient, provideHttpClient } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { TranslocoTestingModule } from '@jsverse/transloco';
+import { MessageService } from '@openng/optimus-ui/api';
+import es from '../../../assets/i18n/es.json';
+import { provideApiHttpClient } from './api-http.providers';
 
 describe('XSRF protection of same-origin API calls', () => {
   let http: HttpTestingController;
@@ -9,7 +14,10 @@ describe('XSRF protection of same-origin API calls', () => {
 
   beforeEach(() => {
     document.cookie = 'XSRF-TOKEN=synthetic-xsrf; path=/';
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.configureTestingModule({
+      imports: [TranslocoTestingModule.forRoot({ langs: { es }, translocoConfig: { availableLangs: ['es'], defaultLang: 'es' }, preloadLangs: true })],
+      providers: [provideApiHttpClient(), provideHttpClientTesting(), provideRouter([]), { provide: MessageService, useValue: { add: vi.fn() } }]
+    });
     http = TestBed.inject(HttpTestingController);
     client = TestBed.inject(HttpClient);
   });

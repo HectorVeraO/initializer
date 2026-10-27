@@ -145,6 +145,12 @@ describe('errorMessage', () => {
     expect(errorMessage(transloco, failure(0, null))).toBe(es.errors.operationFailed);
   });
 
+  it('answers the operation-failed text for a 5xx without an envelope', () => {
+    const transloco = configureTranslations();
+
+    expect(errorMessage(transloco, failure(500, null))).toBe(es.errors.operationFailed);
+  });
+
   it('answers the generic detail for a client error without an envelope', () => {
     const transloco = configureTranslations();
 

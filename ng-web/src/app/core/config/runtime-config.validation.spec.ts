@@ -21,10 +21,19 @@ describe('validateRuntimeConfig', () => {
     expect(validateRuntimeConfig({ apiUrl: ' ' })).toEqual({ ok: false, missingFields: ['apiUrl'] });
   });
 
-  it('rejects a missing apiUrl, a wrong type and a non-object', () => {
+  it('rejects a missing apiUrl', () => {
     expect(validateRuntimeConfig({})).toEqual({ ok: false, missingFields: ['apiUrl'] });
+  });
+
+  it('rejects a null apiUrl', () => {
     expect(validateRuntimeConfig({ apiUrl: null })).toEqual({ ok: false, missingFields: ['apiUrl'] });
+  });
+
+  it('rejects a string document', () => {
     expect(validateRuntimeConfig('')).toEqual({ ok: false, missingFields: ['apiUrl'] });
+  });
+
+  it('rejects a null document', () => {
     expect(validateRuntimeConfig(null)).toEqual({ ok: false, missingFields: ['apiUrl'] });
   });
 });
