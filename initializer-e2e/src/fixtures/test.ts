@@ -1,7 +1,17 @@
 import { test as base, expect } from '@playwright/test';
 import { loadEnv } from '../env';
 import { GatbaseApi } from '../helpers/gatbase/api';
+import type { SeedTenant, SeedUser } from '../helpers/gatbase/api';
+import {
+  emailFor,
+  passwordFor,
+  tenantSlug,
+  uniqueId,
+} from '../helpers/gatbase/ids';
 import { ExamplePage } from '../pages/ExamplePage';
+import { AcceptInvitationPage } from '../pages/gatbase/core/AcceptInvitationPage';
+import { InvitationsPage } from '../pages/gatbase/core/InvitationsPage';
+import { OneTimeSecretDialog } from '../pages/gatbase/core/OneTimeSecretDialog';
 import { LoginPage } from '../pages/gatbase/core/LoginPage';
 import { ShellPage } from '../pages/gatbase/core/ShellPage';
 
@@ -9,11 +19,20 @@ type Pages = {
   examplePage: ExamplePage;
   loginPage: LoginPage;
   shellPage: ShellPage;
+  acceptInvitationPage: AcceptInvitationPage;
+  invitationsPage: InvitationsPage;
+  secretDialog: OneTimeSecretDialog;
 };
 
 type Seeds = {
   /** The bootstrap admin (platform operator) with its own API session. */
   operator: GatbaseApi;
+  /** Creates tenant e2e-<id> whose first admin is a fresh user created through accept-new, and signs that user in over the API. */
+  newTenantAdmin: () => Promise<{
+    readonly tenant: SeedTenant;
+    readonly admin: SeedUser;
+    readonly api: GatbaseApi;
+  }>;
 };
 
 // Custom test that injects Page Objects. Specs import { test, expect } from here,
@@ -21,6 +40,15 @@ type Seeds = {
 export const test = base.extend<Pages & Seeds>({
   examplePage: async ({ page }, use) => {
     await use(new ExamplePage(page));
+  },
+  acceptInvitationPage: async ({ page }, use) => {
+    await use(new AcceptInvitationPage(page));
+  },
+  invitationsPage: async ({ page }, use) => {
+    await use(new InvitationsPage(page));
+  },
+  secretDialog: async ({ page }, use) => {
+    await use(new OneTimeSecretDialog(page));
   },
   loginPage: async ({ page }, use) => {
     await use(new LoginPage(page));
@@ -36,6 +64,39 @@ export const test = base.extend<Pages & Seeds>({
     });
     await use(api);
     await api.dispose();
+  },
+  newTenantAdmin: async ({ playwright, operator }, use, testInfo) => {
+    const env = loadEnv();
+    const sessions: GatbaseApi[] = [];
+    await use(async () => {
+      const id = uniqueId(testInfo);
+      const adminUser = {
+        email: emailFor('admin', id),
+        password: passwordFor(id),
+      };
+      const created = await operator.createTenant({
+        slug: tenantSlug(id),
+        name: `E2E ${id}`,
+        adminEmail: adminUser.email,
+      });
+      await GatbaseApi.acceptNew(
+        playwright,
+        env.web.baseUrl,
+        created.invitationToken,
+        adminUser.password,
+        `Admin ${id}`,
+      );
+      const api = await GatbaseApi.signIn(
+        playwright,
+        env.web.baseUrl,
+        adminUser,
+      );
+      sessions.push(api);
+      return { tenant: created, admin: adminUser, api };
+    });
+    for (const session of sessions) {
+      await session.dispose();
+    }
   },
 });
 

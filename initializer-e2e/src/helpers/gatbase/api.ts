@@ -36,6 +36,17 @@ interface KratosFlow {
 
 const FLOW_PATH = '/kratos/self-service/login/browser';
 const SESSION_PATH = '/api/v1/auth/session';
+const XSRF_COOKIE = 'XSRF-TOKEN';
+const XSRF_HEADER = 'X-XSRF-TOKEN';
+
+/** A tenant created by the operator and the token of its first-admin invitation. */
+export interface SeedTenant {
+  readonly id: string;
+  readonly slug: string;
+  readonly invitationToken: string;
+}
+
+type Role = 'admin' | 'member' | 'viewer';
 
 /**
  * An authenticated API session of one user over its own APIRequestContext.
@@ -96,12 +107,111 @@ export class GatbaseApi {
     }
   }
 
+  /**
+   * Anonymous POST /api/v1/invitations/accept-new on a throwaway context.
+   * Returns the created user and the id of the tenant of the membership.
+   * Throws unless the answer is 201.
+   */
+  static async acceptNew(
+    playwright: PlaywrightWorkerArgs['playwright'],
+    baseURL: string,
+    token: string,
+    password: string,
+    fullName: string,
+  ): Promise<SeedUser & { readonly tenantId: string }> {
+    const request = await playwright.request.newContext({ baseURL });
+    try {
+      const response = await request.post('/api/v1/invitations/accept-new', {
+        data: { token, password, fullName },
+      });
+      if (response.status() !== 201) {
+        throw new Error(
+          `accept-new: ${response.status()} ${await response.text()}`,
+        );
+      }
+      const body = (await response.json()) as {
+        data: {
+          membership: { tenant: { id: string } };
+          account: { email: string };
+        };
+      };
+      return {
+        email: body.data.account.email,
+        password,
+        tenantId: body.data.membership.tenant.id,
+      };
+    } finally {
+      await request.dispose();
+    }
+  }
+
+  /** Token from an invitationUrl: the `token` param of its `#` fragment. */
+  static tokenOf(invitationUrl: string): string {
+    const hash = new URL(invitationUrl).hash.slice(1);
+    const token = new URLSearchParams(hash).get('token');
+    if (token === null || token === '') {
+      throw new Error('invitationUrl has no token fragment');
+    }
+    return token;
+  }
+
+  /** POST /api/v1/tenants (operator) -> id, slug and the first-admin invitation token. */
+  async createTenant(input: {
+    readonly slug: string;
+    readonly name: string;
+    readonly adminEmail: string;
+  }): Promise<SeedTenant> {
+    const data = await this.post<{
+      tenant: { id: string; slug: string };
+      invitationUrl: string;
+    }>('/api/v1/tenants', input, 201);
+    return {
+      id: data.tenant.id,
+      slug: data.tenant.slug,
+      invitationToken: GatbaseApi.tokenOf(data.invitationUrl),
+    };
+  }
+
+  /** POST /api/v1/invitations (admin of the active tenant) -> invitation token. */
+  async invite(email: string, role: Role): Promise<string> {
+    const data = await this.post<{ invitationUrl: string }>(
+      '/api/v1/invitations',
+      { email, role },
+      201,
+    );
+    return GatbaseApi.tokenOf(data.invitationUrl);
+  }
+
   /** GET /api/v1/auth/session -> data. */
   async session(): Promise<SessionView> {
     const response = await this.request.get(SESSION_PATH);
     expect(response.status()).toBe(200);
     const body = (await response.json()) as { data: SessionView };
     return body.data;
+  }
+
+  /** POST with the XSRF header read from the context cookie; throws unless the status is `expected`. Returns `data`. */
+  private async post<T>(
+    path: string,
+    body: unknown,
+    expected: number,
+  ): Promise<T> {
+    const state = await this.request.storageState();
+    const cookie = state.cookies.find((entry) => entry.name === XSRF_COOKIE);
+    if (cookie === undefined) {
+      throw new Error(`no ${XSRF_COOKIE} cookie for POST ${path}`);
+    }
+    const response = await this.request.post(path, {
+      data: body,
+      headers: { [XSRF_HEADER]: decodeURIComponent(cookie.value) },
+    });
+    if (response.status() !== expected) {
+      throw new Error(
+        `POST ${path}: ${response.status()} ${await response.text()}`,
+      );
+    }
+    const json = (await response.json()) as { data: T };
+    return json.data;
   }
 
   async dispose(): Promise<void> {

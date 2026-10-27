@@ -6,7 +6,7 @@
 } @else if (loadFailed()) {
   <div class="flex flex-col gap-2 items-start" [attr.data-testid]="feature() + '-load-error'">
     <p-message severity="error">{{ 'states.loadFailed' | transloco: { section: section } }}</p-message>
-    <button type="button" class="p-button p-component" (click)="retry.emit()">{{ 'errors.siteUnavailable.retry' | transloco }}</button>
+    <button type="button" class="p-button p-component" [attr.data-testid]="feature() + '-retry'" (click)="retry.emit()">{{ 'errors.siteUnavailable.retry' | transloco }}</button>
   </div>
 } @else if (notFound()) {
   <div class="flex flex-col gap-2 items-start" [attr.data-testid]="feature() + '-not-found'">
