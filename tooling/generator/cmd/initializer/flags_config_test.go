@@ -80,17 +80,19 @@ func TestGenerateWithoutFeatureFlagsShipsNoFlagsConfig(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(out, "flags.yaml")); err == nil {
 		t.Fatal("flags.yaml delivered without feature-flags")
 	}
-	survivors := map[string]string{
-		".deploy/local/.example.env": "INITIALIZER_PG_PASSWORD=",
-		".deploy/local/README.md":    "## Start and stop",
+	survivors := map[string][]string{
+		".deploy/local/.example.env": {"INITIALIZER_PG_PASSWORD=", "OTEL_SERVICE_NAME=", "GATBASE_SESSION_KEYS=", "GATBASE_KRATOS_ADMIN_URL="},
+		".deploy/local/README.md":    {"## Start and stop", "## Session keys"},
 	}
-	for p, survivor := range survivors {
+	for p, wanted := range survivors {
 		data, err := os.ReadFile(filepath.Join(out, filepath.FromSlash(p)))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(data), survivor) {
-			t.Errorf("%s lost unrelated core content %q", p, survivor)
+		for _, survivor := range wanted {
+			if !strings.Contains(string(data), survivor) {
+				t.Errorf("%s lost unrelated core content %q", p, survivor)
+			}
 		}
 		for _, banned := range []string{"GATBASE_FLAGS_FILE", "feature-flags", "Feature flags"} {
 			if strings.Contains(string(data), banned) {
