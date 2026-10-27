@@ -340,8 +340,9 @@ func TestCatalogFileOnARenderedPathIsRefused(t *testing.T) {
 			crafted.Specs[i].Files = []catalog.File{{Path: "specs/parameters/openapi.yaml", SHA256: hashOfFile(t, repo.Root, "specs/parameters/openapi.yaml"), Target: "README.md"}}
 		}
 	}
-	if _, err := build(t, os.DirFS(repo.Root), crafted, repo.CatalogBytes, selection(targetModule, "parameters")); err == nil {
-		t.Fatal("want an error for a copy that lands on README.md")
+	_, err := build(t, os.DirFS(repo.Root), crafted, repo.CatalogBytes, selection(targetModule, "parameters"))
+	if err == nil || !strings.Contains(err.Error(), "lands on the rendered path") || !strings.Contains(err.Error(), "README.md") {
+		t.Fatalf("want a rendered-path collision error naming README.md, got %v", err)
 	}
 }
 
