@@ -1,0 +1,59 @@
+{
+  "nav": {
+    "featureFlags": "Feature flags"
+  },
+  "notice": "Tenants see a change at their next session refresh or tenant switch.",
+  "list": {
+    "title": "Feature flags",
+    "section": "feature flags",
+    "empty": "There are no feature flags.",
+    "truncated": "Showing {{shown}} of {{total}} flags.",
+    "key": "Key",
+    "type": "Type",
+    "default": "Default",
+    "global": "Global override",
+    "tenants": "Tenant overrides",
+    "expires": "Expires",
+    "open": "Open",
+    "noExpiry": "-"
+  },
+  "types": {
+    "release": "Release",
+    "ops": "Ops"
+  },
+  "state": {
+    "on": "On",
+    "off": "Off"
+  },
+  "global": {
+    "inherit": "Inherit",
+    "on": "On",
+    "off": "Off"
+  },
+  "detail": {
+    "title": "Feature flag",
+    "section": "feature flag",
+    "notFound": "That flag is not defined in the manifest.",
+    "truncated": "Only {{shown}} of {{total}} flags could be searched, so this one may exist beyond them.",
+    "type": "Type",
+    "default": "Default",
+    "expires": "Expires",
+    "global": "Global override",
+    "tenantsTitle": "Tenant overrides",
+    "noOverrides": "This flag has no tenant overrides.",
+    "tenantName": "Tenant",
+    "tenantSlug": "Slug",
+    "enabled": "State",
+    "remove": "Remove",
+    "addTitle": "Add tenant override",
+    "tenant": "Tenant",
+    "pickTenant": "Choose a tenant",
+    "enabledToggle": "Enabled",
+    "save": "Save",
+    "tenantsFailed": "The tenant list could not be loaded; tenants show as ids."
+  },
+  "errors": {
+    "FLAG_NOT_DEFINED_IN_MANIFEST": "That flag is no longer defined in the manifest. The list was refreshed.",
+    "tenantGone": "That tenant no longer exists. The list was refreshed."
+  }
+}
