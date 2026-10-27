@@ -96,7 +96,8 @@ test('rejects: a module folder that exists only for this run', () => {
     console.log(JSON.stringify(result.messages.filter((message) => message.ruleId === 'no-restricted-imports').map((message) => message.message)));
   `;
 
-  mkdirSync(probeDir, { recursive: true });
+  // Not recursive: an existing folder of that name fails the test here instead of being deleted below.
+  mkdirSync(probeDir);
   try {
     const output = execFileSync(process.execPath, ['--input-type=module', '-e', script, cwd], { cwd, encoding: 'utf8' });
     const messages = JSON.parse(output);
