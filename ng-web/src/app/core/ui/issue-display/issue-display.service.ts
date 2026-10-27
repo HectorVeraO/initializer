@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { TranslocoService } from '@jsverse/transloco';
 import { MessageService, ToastMessageOptions } from '@openng/optimus-ui/api';
-import { apiIssues } from '@/core/api/api-error';
+import { apiIssues, apiTraceId, errorMessage } from '@/core/api/api-error';
 import type { ApiIssue } from '@/core/envelope';
 
 /**
@@ -30,7 +30,7 @@ export class IssueDisplayService {
 
   /**
    * Displays the issues of a failed call as toasts; without issues, one
-   * generic toast with the envelope message.
+   * generic toast with the message of the error code and the trace reference.
    *
    * @returns `true` if issues were displayed, `false` for the generic toast.
    */
@@ -43,10 +43,16 @@ export class IssueDisplayService {
       return true;
     }
 
+    const traceId = apiTraceId(error);
+
+    const message = errorMessage(this.transloco, error);
+
+    const detail = traceId === null ? message : `${message} ${this.transloco.translate('errors.reference', { traceId })}`;
+
     this.messageService.add({
       severity: 'error',
       summary: this.transloco.translate('errors.generic-error.summary'),
-      detail: this.transloco.translate('errors.generic-error.detail'),
+      detail,
       life: 4000
     });
 

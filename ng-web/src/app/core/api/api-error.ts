@@ -1,11 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TranslocoService } from '@jsverse/transloco';
 import type { ApiErrorBody, ApiIssue } from '@/core/envelope';
+import { ApiErrorCode } from './api-error-codes';
 
 export const DEFAULT_RULE_KEY = 'validation.rules.default';
 
-/** Error code of a `403` that sends the person to the forbidden page. */
-export const PERMISSION_DENIED = 'PERMISSION_DENIED';
+/** `403` codes that send the person to the forbidden page. */
+export const FORBIDDEN_PAGE_CODES: readonly string[] = [ApiErrorCode.InsufficientRole, ApiErrorCode.PlatformOperatorRequired];
+
+const TRACE_ID_HEADER = 'X-Trace-Id';
 
 interface ErrorBody {
   error?: Partial<ApiErrorBody> | null;
@@ -94,11 +97,56 @@ export function errorCode(error: unknown): string | null {
   return typeof code === 'string' ? code : null;
 }
 
-/** False for a `403 PERMISSION_DENIED`, which the interceptor already turns into the forbidden page. */
-export function showsLoadError(error: unknown): boolean {
-  if (!(error instanceof HttpErrorResponse)) {
-    return true;
+/** True for a `403` whose code sends the person to the forbidden page. */
+export function isForbiddenPageError(error: unknown): boolean {
+  if (!(error instanceof HttpErrorResponse) || error.status !== 403) {
+    return false;
   }
 
-  return !(error.status === 403 && errorCode(error) === PERMISSION_DENIED);
+  const code = errorCode(error);
+
+  return code !== null && FORBIDDEN_PAGE_CODES.includes(code);
+}
+
+/** False for a `GET`/`HEAD` `403` whose code is in FORBIDDEN_PAGE_CODES (the interceptor already navigated). */
+export function showsLoadError(error: unknown): boolean {
+  return !isForbiddenPageError(error);
+}
+
+/** Trace id of a failed call: `meta.traceId` of the envelope, else the `X-Trace-Id` header, else null. */
+export function apiTraceId(error: unknown): string | null {
+  if (!(error instanceof HttpErrorResponse)) {
+    return null;
+  }
+
+  const body = parseBody(error.error) as { meta?: { traceId?: unknown } | null } | null;
+
+  const fromBody = body?.meta?.traceId;
+
+  if (typeof fromBody === 'string' && fromBody !== '') {
+    return fromBody;
+  }
+
+  const fromHeader = error.headers?.get(TRACE_ID_HEADER) ?? null;
+
+  return fromHeader !== null && fromHeader !== '' ? fromHeader : null;
+}
+
+/** Text for a failed call: `errors.codes.<CODE>` when that key exists, `errors.operationFailed` for status 0 or 5xx without an envelope, else `errors.generic-error.detail`. */
+export function errorMessage(transloco: TranslocoService, error: unknown): string {
+  const code = errorCode(error);
+
+  if (code !== null) {
+    const key = `errors.codes.${code}`;
+
+    const translated = transloco.translate(key);
+
+    if (translated !== key) {
+      return translated;
+    }
+  } else if (isServerFailure(error)) {
+    return transloco.translate('errors.operationFailed');
+  }
+
+  return transloco.translate('errors.generic-error.detail');
 }

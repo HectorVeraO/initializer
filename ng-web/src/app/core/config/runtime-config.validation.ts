@@ -13,13 +13,15 @@ function asRecord(value: unknown): Record<string, unknown> {
 /**
  * Validates the parsed runtime config. Every problem is accumulated so the
  * error page can name all of them at once; there are no fallback values.
+ * `apiUrl` must be "": the app and the API share one origin, so Angular's
+ * XSRF protection covers every call.
  */
 export function validateRuntimeConfig(raw: unknown): RuntimeConfigValidation {
   const root = asRecord(raw);
 
   const missingFields: string[] = [];
 
-  if (typeof root['apiUrl'] !== 'string') {
+  if (root['apiUrl'] !== '') {
     missingFields.push('apiUrl');
   }
 
@@ -27,9 +29,7 @@ export function validateRuntimeConfig(raw: unknown): RuntimeConfigValidation {
     return { ok: false, missingFields };
   }
 
-  const apiUrl = (root['apiUrl'] as string).trim().replace(/\/+$/, '');
-
-  const config: RuntimeConfig = { apiUrl };
+  const config: RuntimeConfig = { apiUrl: '' };
 
   return { ok: true, config };
 }

@@ -1,4 +1,6 @@
-import { isApiEnvelope } from './envelope.utils';
+import { firstValueFrom, of } from 'rxjs';
+import { UnexpectedResponseError, isApiEnvelope, unwrapData } from './envelope.utils';
+import type { ApiEnvelope } from './envelope.types';
 
 describe('isApiEnvelope', () => {
   it('accepts a success envelope', () => {
@@ -18,5 +20,33 @@ describe('isApiEnvelope', () => {
     expect(isApiEnvelope('<html>Bad Gateway</html>')).toBe(false);
     expect(isApiEnvelope({ meta: null })).toBe(false);
     expect(isApiEnvelope({ meta: {} })).toBe(false);
+  });
+});
+
+describe('unwrapData', () => {
+  const meta = { traceId: '0af7651916cd43dd8448eb211c80319c', timestamp: '2026-01-01T00:00:00Z' };
+
+  it('maps an envelope to its data', async () => {
+    const body: ApiEnvelope<{ id: string }> = { data: { id: 'tenant-a' }, meta, error: null };
+
+    await expect(firstValueFrom(of(body).pipe(unwrapData()))).resolves.toEqual({ id: 'tenant-a' });
+  });
+
+  it('passes data null as null', async () => {
+    const body: ApiEnvelope<string> = { data: null, meta, error: null };
+
+    await expect(firstValueFrom(of(body).pipe(unwrapData()))).resolves.toBeNull();
+  });
+
+  it('errors with UnexpectedResponseError for a body that is not an envelope', async () => {
+    const html = of('<html>Bad Gateway</html>' as unknown as ApiEnvelope<string>);
+
+    await expect(firstValueFrom(html.pipe(unwrapData()))).rejects.toBeInstanceOf(UnexpectedResponseError);
+  });
+
+  it('errors for a null body', async () => {
+    const empty = of(null as unknown as ApiEnvelope<string>);
+
+    await expect(firstValueFrom(empty.pipe(unwrapData()))).rejects.toBeInstanceOf(UnexpectedResponseError);
   });
 });

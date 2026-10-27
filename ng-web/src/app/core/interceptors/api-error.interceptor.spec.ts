@@ -51,22 +51,45 @@ describe('apiErrorInterceptor', () => {
     await TestBed.inject(ApplicationRef).whenStable();
   }
 
-  it('sends the person to /forbidden on 403 PERMISSION_DENIED', async () => {
-    fail('/api/v1/parameters', 403, apiError('PERMISSION_DENIED'));
+  it('sends the person to /forbidden on a GET answering 403 INSUFFICIENT_ROLE', async () => {
+    fail('/api/v1/parameters', 403, apiError('INSUFFICIENT_ROLE'));
     await settle();
 
     expect(router.url).toBe('/forbidden');
   });
 
+  it('sends the person to /forbidden on a HEAD answering 403 INSUFFICIENT_ROLE', async () => {
+    client.head('/api/v1/parameters').subscribe({ error: () => undefined });
+    http.expectOne('/api/v1/parameters').flush(apiError('INSUFFICIENT_ROLE'), { status: 403, statusText: 'x' });
+    await settle();
+
+    expect(router.url).toBe('/forbidden');
+  });
+
+  it('sends the person to /forbidden on a GET answering 403 PLATFORM_OPERATOR_REQUIRED', async () => {
+    fail('/api/v1/tenants', 403, apiError('PLATFORM_OPERATOR_REQUIRED'));
+    await settle();
+
+    expect(router.url).toBe('/forbidden');
+  });
+
+  it('navigates nowhere when a POST answers 403 INSUFFICIENT_ROLE', async () => {
+    client.post('/api/v1/parameters', {}).subscribe({ error: () => undefined });
+    http.expectOne('/api/v1/parameters').flush(apiError('INSUFFICIENT_ROLE'), { status: 403, statusText: 'x' });
+    await settle();
+
+    expect(router.url).toBe('/home');
+  });
+
   it('does not treat a 403 with another code as a permission problem', async () => {
-    fail('/api/v1/parameters', 403, apiError('TENANT_MISMATCH'));
+    fail('/api/v1/parameters', 403, apiError('TENANT_SUSPENDED'));
     await settle();
 
     expect(router.url).toBe('/home');
   });
 
   it('leaves a 403 from a URL that is not the API alone', async () => {
-    fail('https://elsewhere.test/other', 403, apiError('PERMISSION_DENIED'));
+    fail('https://elsewhere.test/other', 403, apiError('INSUFFICIENT_ROLE'));
     await settle();
 
     expect(router.url).toBe('/home');

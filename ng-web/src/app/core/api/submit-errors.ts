@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TranslocoService } from '@jsverse/transloco';
 import type { ApiIssue } from '@/core/envelope';
-import { apiIssues, errorCode, validationMessage } from './api-error';
+import { apiIssues, apiTraceId, errorCode, validationMessage } from './api-error';
 
 /**
  * What a failed write left on screen: the envelope code, the issues of a
@@ -13,11 +13,13 @@ export class SubmitErrors {
   readonly status = signal<number | null>(null);
   readonly code = signal<string | null>(null);
   readonly issues = signal<ApiIssue[]>([]);
+  readonly traceId = signal<string | null>(null);
 
   clear(): void {
     this.status.set(null);
     this.code.set(null);
     this.issues.set([]);
+    this.traceId.set(null);
   }
 
   record(error: unknown): void {
@@ -25,6 +27,7 @@ export class SubmitErrors {
       this.status.set(0);
       this.code.set(null);
       this.issues.set([]);
+      this.traceId.set(null);
 
       return;
     }
@@ -32,6 +35,7 @@ export class SubmitErrors {
     this.status.set(error.status);
     this.code.set(errorCode(error));
     this.issues.set(apiIssues(error));
+    this.traceId.set(apiTraceId(error));
   }
 
   /** True for `0` and `5xx`: the form stays open and shows the load-failure message. */
