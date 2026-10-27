@@ -48,10 +48,7 @@ test.describe('Gatbase parameters', () => {
 
       await parametersPage.clearOverride(key);
       await expect(parametersPage.value(key)).toHaveText('3');
-      await expect(parametersPage.source(key)).toHaveAttribute(
-        'data-value',
-        'global',
-      );
+      await expect(parametersPage.source(key)).toHaveText('Global');
     },
   );
 });

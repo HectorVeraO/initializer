@@ -161,6 +161,17 @@ describe('ParameterDefinitionDialog', () => {
     http.expectNone(LIST_URL);
   });
 
+  it('sends a valid json default as the parsed value', async () => {
+    const fixture = await open();
+
+    typeInto(field('parameter-def-key'), 'example.payload');
+    await chooseType(fixture, 'json');
+    typeInto(field('parameter-def-default'), '{"a":[1]}');
+    await save(fixture);
+
+    expect(pending('POST', LIST_URL).body).toMatchObject({ key: 'example.payload', valueType: 'json', defaultValue: { a: [1] } });
+  });
+
   it('maps 422 issues to the field they name', async () => {
     const fixture = await open();
 
@@ -207,14 +218,24 @@ describe('ParameterDefinitionDialog', () => {
     expect(fixture.componentInstance.isVisible()).toBe(true);
   });
 
-  it('opens an edit with key, type and system flag read-only and the stored values filled in', async () => {
+  it('opens an edit with the key read-only and the stored key filled in', async () => {
     await open(parameterView(KEY, { isSystemRequired: true }));
 
     expect(field('parameter-def-key').readOnly).toBe(true);
     expect(field('parameter-def-key').value).toBe(KEY);
+  });
+
+  it('opens an edit with the stored default and bounds filled in', async () => {
+    await open(parameterView(KEY));
+
     expect(field('parameter-def-default').value).toBe('3');
     expect(field('parameter-def-min').value).toBe('1');
     expect(field('parameter-def-max').value).toBe('10');
+  });
+
+  it('opens an edit with the type and the system flag read-only', async () => {
+    await open(parameterView(KEY, { isSystemRequired: true }));
+
     expect((byTestId(document.body, 'parameter-def-type') as HTMLElement).querySelector('[aria-disabled="true"]')).not.toBeNull();
     expect((byTestId(document.body, 'parameter-def-system') as HTMLElement).querySelector('input')?.disabled).toBe(true);
   });

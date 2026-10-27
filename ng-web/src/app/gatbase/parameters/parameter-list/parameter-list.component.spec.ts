@@ -328,6 +328,24 @@ describe('ParameterListPage', () => {
       await click(fixture, byTestId(rowOf(fixture, KEY), 'parameter-edit'));
       await vi.waitFor(() => expect((byTestId(document.body, 'parameter-def-key') as HTMLInputElement).value).toBe(KEY));
     });
+
+    it('saves an edit and shows the refetched definition', async () => {
+      const fixture = await open(OPERATOR_WITHOUT_TENANT);
+
+      await click(fixture, byTestId(rowOf(fixture, KEY), 'parameter-edit'));
+      await vi.waitFor(() => expect((byTestId(document.body, 'parameter-def-key') as HTMLInputElement).value).toBe(KEY));
+      typeInto(byTestId(document.body, 'parameter-def-default') as HTMLInputElement, '4');
+      await click(fixture, byTestId(document.body, 'parameter-def-save'));
+
+      const put = await nextCall('PUT', `${LIST_URL}/${KEY}`);
+
+      expect(put.request.body).toMatchObject({ defaultValue: 4 });
+      put.flush(okEnvelope(parameterView(KEY, { defaultValue: 4, effectiveValue: 4 })));
+      (await nextCall('GET', LIST_URL)).flush(pageOf([parameterView(KEY, { defaultValue: 4, effectiveValue: 4 })]));
+      await settle(fixture);
+
+      expect(textOf(byTestId(rowOf(fixture, KEY), 'parameters-cell-default'))).toBe('4');
+    });
   });
 
   it('refetches when the active tenant changes', async () => {
