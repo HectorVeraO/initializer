@@ -119,3 +119,16 @@ func TestMigrationsUsageErrorsExitTwo(t *testing.T) {
 		})
 	}
 }
+
+func TestMigrationsSelectIntoTableWithForeignPrefixIsRejected(t *testing.T) {
+	migration := "-- +goose Up\n" +
+		"CREATE TABLE sys_parameters (key text PRIMARY KEY);\n" +
+		"SELECT key INTO bad_parameters_copy FROM sys_parameters;\n"
+	dir := migrationsRepo(t, migration)
+
+	r := invoke([]string{"migrations", "--root", dir, "--base-rev", "main"}, fixedNow, nil)
+
+	if r.code != 1 || !strings.Contains(r.stdout, "TABLE_PREFIX_MISMATCH") || !strings.Contains(r.stdout, "bad_parameters_copy") {
+		t.Fatalf("table bad_parameters_copy created by SELECT INTO passed the prefix gate: code %d\nstdout: %s\nstderr: %s", r.code, r.stdout, r.stderr)
+	}
+}
