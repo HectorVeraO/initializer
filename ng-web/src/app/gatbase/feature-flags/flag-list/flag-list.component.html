@@ -1,0 +1,49 @@
+<p-page-header [title]="'gatbaseFeatureFlags.list.title' | transloco" />
+
+<p-message severity="info" class="mb-3" data-testid="flags-notice">{{ 'gatbaseFeatureFlags.notice' | transloco }}</p-message>
+
+<div class="card">
+  <p-list-state feature="flags" [loading]="isLoading()" [loadFailed]="loadFailed()" [empty]="isEmpty()" sectionKey="gatbaseFeatureFlags.list.section" emptyKey="gatbaseFeatureFlags.list.empty" (retry)="reload()">
+    <p-table [value]="rows()" dataKey="key">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>{{ 'gatbaseFeatureFlags.list.key' | transloco }}</th>
+          <th>{{ 'gatbaseFeatureFlags.list.type' | transloco }}</th>
+          <th>{{ 'gatbaseFeatureFlags.list.default' | transloco }}</th>
+          <th>{{ 'gatbaseFeatureFlags.list.global' | transloco }}</th>
+          <th>{{ 'gatbaseFeatureFlags.list.tenants' | transloco }}</th>
+          <th>{{ 'gatbaseFeatureFlags.list.expires' | transloco }}</th>
+          <th></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr data-testid="flags-row" [attr.data-key]="row.key">
+          <td data-testid="flags-cell-key" class="font-mono">
+            {{ row.key }}
+            @if (row.description !== '') {
+              <div class="text-sm font-sans">{{ row.description }}</div>
+            }
+          </td>
+          <td data-testid="flags-cell-type" [attr.data-value]="row.type">{{ 'gatbaseFeatureFlags.types.' + row.type | transloco }}</td>
+          <td data-testid="flags-cell-default" [attr.data-value]="row.default">{{ (row.default ? 'gatbaseFeatureFlags.state.on' : 'gatbaseFeatureFlags.state.off') | transloco }}</td>
+          <td data-testid="flags-cell-global" [attr.data-value]="choiceOf(row)">
+            <p-select data-testid="flag-global-select" [ngModel]="choiceOf(row)" (onChange)="change(row, $event.value)" [options]="options" optionValue="value" appendTo="body" size="small" [ariaLabel]="'gatbaseFeatureFlags.list.global' | transloco">
+              <ng-template #selectedItem let-option>{{ option.labelKey | transloco }}</ng-template>
+              <ng-template #item let-option>
+                <span data-testid="flag-global-option" [attr.data-key]="option.value">{{ option.labelKey | transloco }}</span>
+              </ng-template>
+            </p-select>
+          </td>
+          <td data-testid="flags-cell-tenants">{{ row.tenantOverrides.length }}</td>
+          <td data-testid="flags-cell-expires">{{ row.expiresAt ?? ('gatbaseFeatureFlags.list.noExpiry' | transloco) }}</td>
+          <td class="text-right">
+            <a [routerLink]="['/operator/feature-flags', row.key]" class="text-primary" data-testid="flag-open">{{ 'gatbaseFeatureFlags.list.open' | transloco }}</a>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+    @if (isTruncated()) {
+      <p class="mt-2 mb-0 text-sm" data-testid="flags-truncated">{{ 'gatbaseFeatureFlags.list.truncated' | transloco: { shown: rows().length, total: totalItems() } }}</p>
+    }
+  </p-list-state>
+</div>

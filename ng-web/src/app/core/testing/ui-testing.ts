@@ -138,6 +138,11 @@ export function stubMatchMedia(): void {
   });
 }
 
+/** Gives jsdom the scrollIntoView that an open select calls when its overlay opens. */
+export function stubScrollIntoView(): void {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+
 /** The one pending request with this method and path (query string left out); fails when there is none or several. */
 export function expectCall(method: string, path: string): TestRequest {
   return httpController().expectOne((request) => request.method === method && request.url === path);

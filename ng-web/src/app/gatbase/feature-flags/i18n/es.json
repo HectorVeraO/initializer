@@ -1,0 +1,59 @@
+{
+  "nav": {
+    "featureFlags": "Feature flags"
+  },
+  "notice": "Los tenants ven un cambio en la próxima actualización de su sesión o al cambiar de tenant.",
+  "list": {
+    "title": "Feature flags",
+    "section": "feature flags",
+    "empty": "No hay feature flags.",
+    "truncated": "Mostrando {{shown}} de {{total}} flags.",
+    "key": "Clave",
+    "type": "Tipo",
+    "default": "Por defecto",
+    "global": "Override global",
+    "tenants": "Overrides de tenant",
+    "expires": "Vence",
+    "open": "Abrir",
+    "noExpiry": "-"
+  },
+  "types": {
+    "release": "Release",
+    "ops": "Ops"
+  },
+  "state": {
+    "on": "Activo",
+    "off": "Inactivo"
+  },
+  "global": {
+    "inherit": "Heredar",
+    "on": "Activo",
+    "off": "Inactivo"
+  },
+  "detail": {
+    "title": "Feature flag",
+    "section": "feature flag",
+    "notFound": "Esa flag no está definida en el manifiesto.",
+    "truncated": "Solo se pudieron buscar {{shown}} de {{total}} flags, así que esta podría existir más allá de ellas.",
+    "type": "Tipo",
+    "default": "Por defecto",
+    "expires": "Vence",
+    "global": "Override global",
+    "tenantsTitle": "Overrides de tenant",
+    "noOverrides": "Esta flag no tiene overrides de tenant.",
+    "tenantName": "Tenant",
+    "tenantSlug": "Slug",
+    "enabled": "Estado",
+    "remove": "Quitar",
+    "addTitle": "Agregar override de tenant",
+    "tenant": "Tenant",
+    "pickTenant": "Elige un tenant",
+    "enabledToggle": "Activo",
+    "save": "Guardar",
+    "tenantsFailed": "No se pudo cargar la lista de tenants; se muestran los ids."
+  },
+  "errors": {
+    "FLAG_NOT_DEFINED_IN_MANIFEST": "Esa flag ya no está definida en el manifiesto. Se actualizó la lista.",
+    "tenantGone": "Ese tenant ya no existe. Se actualizó la lista."
+  }
+}
