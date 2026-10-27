@@ -16,8 +16,11 @@ import (
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/emit"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/verify"
 )
 
 // Exit codes.
@@ -39,8 +42,6 @@ const usageText = `usage:
   initializer generate --root <repo> --catalog <file> --out <dir> (--selection <file> | --name <n> --go-module <m> --stacks <a,b> (--modules <a,b> | --all-modules))
   initializer verify --project <dir>
 `
-
-var errNotImplemented = errors.New("not implemented")
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -64,7 +65,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "generate":
 		return runGenerate(args[1:], stdout, stderr, logger)
 	case "verify":
-		return runVerify(args[1:], stdout, logger)
+		return runVerify(args[1:], stdout, stderr, logger)
 	}
 	return usageError(logger, "unknown subcommand")
 }
@@ -72,13 +73,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 func usageError(logger *slog.Logger, message string) int {
 	logger.Error("usage_error", slog.String("error", message))
 	return exitUsage
-}
-
-func notImplemented(logger *slog.Logger, command string) int {
-	logger.Error("command_failed",
-		slog.String("command", command),
-		slog.String("error", errNotImplemented.Error()))
-	return exitInternal
 }
 
 // newFlagSet returns a flag set that reports errors through run, not the process.
@@ -198,23 +192,57 @@ func writeOutput(path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func runVerify(args []string, stdout io.Writer, logger *slog.Logger) int {
+func runVerify(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
 	fs := newFlagSet("verify")
-	fs.String("project", "", "generated project directory")
+	project := fs.String("project", "", "generated project directory")
 	if code, done := parseFlags(fs, args, stdout, logger); done {
 		return code
 	}
 	if name := missingFlag(fs, "project"); name != "" {
 		return usageError(logger, "missing required flag: "+name)
 	}
-	return notImplemented(logger, "verify")
+	differences, err := verify.Project(*project)
+	if err != nil {
+		logger.Error("verify_unreadable", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	result := struct {
+		Project     string `json:"project"`
+		Differences int    `json:"differences"`
+	}{Project: filepath.ToSlash(*project), Differences: len(differences)}
+	if code := writeResult(stdout, result, logger); code != exitOK {
+		return code
+	}
+	if len(differences) > 0 {
+		logger.Warn("verify_failed", slog.Int("difference_count", len(differences)))
+		if err := issue.Write(stderr, differences); err != nil {
+			logger.Error("issues_unwritable", slog.String("error", err.Error()))
+			return exitInternal
+		}
+		return exitIssues
+	}
+	return exitOK
+}
+
+// writeResult writes v as one JSON line on stdout.
+func writeResult(stdout io.Writer, v any, logger *slog.Logger) int {
+	line, err := json.Marshal(v)
+	if err != nil {
+		logger.Error("result_unencodable", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	if _, err := stdout.Write(append(line, 0x0a)); err != nil {
+		logger.Error("result_unwritable", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	return exitOK
 }
 
 func runGenerate(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
 	fs := newFlagSet("generate")
-	fs.String("root", "", "repository root")
-	fs.String("catalog", "", "catalog file")
-	fs.String("out", "", "output directory")
+	root := fs.String("root", "", "repository root")
+	catalogPath := fs.String("catalog", "", "catalog file")
+	outDir := fs.String("out", "", "output directory")
 	selectionFile := fs.String("selection", "", "selection file")
 	name := fs.String("name", "", "project name")
 	goModule := fs.String("go-module", "", "Go module path")
@@ -278,7 +306,81 @@ func runGenerate(args []string, stdout, stderr io.Writer, logger *slog.Logger) i
 		slog.Int("stack_count", len(selection.Stacks)),
 		slog.Int("module_count", len(selection.Modules)),
 		slog.Bool("all_modules", selection.AllModules))
-	return notImplemented(logger, "generate")
+	return generateProject(generateInput{
+		root: *root, catalogPath: *catalogPath, out: *outDir, selection: selection,
+	}, stdout, stderr, logger)
+}
+
+type generateInput struct {
+	root, catalogPath, out string
+	selection              manifest.Selection
+}
+
+// generateProject runs everything after the selection is decoded: catalog,
+// plan, source and output checks, the in-memory build and the write.
+func generateProject(in generateInput, stdout, stderr io.Writer, logger *slog.Logger) int {
+	info, err := os.Stat(in.root)
+	if err != nil || !info.IsDir() {
+		logger.Error("input_unreadable", slog.String("error", "root is not a readable directory"))
+		return exitInternal
+	}
+	catalogBytes, err := readLimited(in.catalogPath, maxFileListBytes)
+	if err != nil {
+		logger.Error("input_unreadable", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	built, decodeIssues := catalog.Decode(catalogBytes)
+	if len(decodeIssues) > 0 {
+		logger.Error("catalog_undecodable", slog.Int("issue_count", len(decodeIssues)),
+			slog.String("error", decodeIssues[0].Message))
+		return exitInternal
+	}
+	resolved, issues := plan.Resolve(built, in.selection)
+	root := os.DirFS(in.root)
+	if len(issues) == 0 {
+		sourceIssues, err := plan.CheckSources(root, resolved)
+		if err != nil {
+			logger.Error("sources_unreadable", slog.String("error", err.Error()))
+			return exitInternal
+		}
+		issues = append(issues, sourceIssues...)
+	}
+	outputIssues, err := emit.CheckOutput(in.out)
+	if err != nil {
+		logger.Error("output_unreadable", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	issues = append(issues, outputIssues...)
+	if len(issues) > 0 {
+		logger.Warn("validation_failed", slog.Int("issue_count", len(issues)))
+		if err := issue.Write(stderr, issues); err != nil {
+			logger.Error("issues_unwritable", slog.String("error", err.Error()))
+			return exitInternal
+		}
+		return exitIssues
+	}
+
+	sum := sha256.Sum256(catalogBytes)
+	project, err := emit.Build(emit.BuildOptions{Root: root, Plan: resolved, CatalogSHA256: hex.EncodeToString(sum[:])})
+	if err != nil {
+		logger.Error("project_build_failed", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	if err := emit.Write(in.out, project); err != nil {
+		logger.Error("project_write_failed", slog.String("error", err.Error()))
+		return exitInternal
+	}
+	result := struct {
+		Project string `json:"project"`
+		Files   int    `json:"files"`
+	}{Project: filepath.ToSlash(in.out), Files: len(project.Files)}
+	if code := writeResult(stdout, result, logger); code != exitOK {
+		return code
+	}
+	logger.Info("project_generated",
+		slog.Int("file_count", len(project.Files)),
+		slog.Int("module_count", len(resolved.Selection.Modules)))
+	return exitOK
 }
 
 func splitList(value string) []string {
