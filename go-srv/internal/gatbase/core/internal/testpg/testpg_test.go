@@ -51,7 +51,7 @@ func exists(t *testing.T, ctx context.Context, admin *pgx.Conn, name string) boo
 	return found
 }
 
-func TestNewDropsOnlyIdleStaleTestDatabases(t *testing.T) {
+func TestNewSweepsOnlyIdleStaleTestDatabases(t *testing.T) {
 	adminURL := os.Getenv(testpg.EnvURL)
 	if adminURL == "" {
 		t.Skipf("%s is not set; skipping database test", testpg.EnvURL)
@@ -60,36 +60,39 @@ func TestNewDropsOnlyIdleStaleTestDatabases(t *testing.T) {
 	admin := connect(t, ctx, adminURL, "")
 	t.Cleanup(func() { _ = admin.Close(ctx) })
 
-	stale := syntheticName(t, "it_sweeptest", time.Now().Add(-2*time.Hour))
-	staleHeld := syntheticName(t, "it_sweeptest", time.Now().Add(-2*time.Hour))
-	fresh := syntheticName(t, "it_sweeptest", time.Now())
-	nearThreshold := syntheticName(t, "it_sweeptest", time.Now().Add(-59*time.Minute))
 	suffix := syntheticName(t, "", time.Time{})
-	otherShape := "it_sweeptest_" + suffix[len(suffix)-8:]
-	names := []string{stale, staleHeld, fresh, nearThreshold, otherShape}
-	t.Cleanup(func() {
-		for _, name := range names {
-			_, _ = admin.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)")
-		}
-	})
-	for _, name := range names {
-		if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
-			t.Fatalf("create %s: %v", name, err)
-		}
+	cases := []struct {
+		name     string
+		database string
+		held     bool
+		wantKept bool
+	}{
+		{"idle stale database is dropped", syntheticName(t, "it_sweeptest", time.Now().Add(-2*time.Hour)), false, false},
+		{"stale database with a connection is kept", syntheticName(t, "it_sweeptest", time.Now().Add(-2*time.Hour)), true, true},
+		{"fresh database is kept", syntheticName(t, "it_sweeptest", time.Now()), false, true},
+		{"database near the threshold is kept", syntheticName(t, "it_sweeptest", time.Now().Add(-59*time.Minute)), false, true},
+		{"name of another shape is kept", "it_sweeptest_" + suffix[len(suffix)-8:], false, true},
 	}
-	held := connect(t, ctx, adminURL, staleHeld)
-	t.Cleanup(func() { _ = held.Close(ctx) })
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Cleanup(func() {
+				_, _ = admin.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{tc.database}.Sanitize()+" WITH (FORCE)")
+			})
+			if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{tc.database}.Sanitize()); err != nil {
+				t.Fatalf("create %s: %v", tc.database, err)
+			}
+			if tc.held {
+				held := connect(t, ctx, adminURL, tc.database)
+				t.Cleanup(func() { _ = held.Close(ctx) })
+			}
 
-	testpg.New(t, "sweeptest")
+			testpg.New(t, "sweeptest")
 
-	// Another package binary may sweep the idle stale one first; either way it must be gone.
-	if exists(t, ctx, admin, stale) {
-		t.Errorf("idle stale database %s was not dropped", stale)
-	}
-	for _, kept := range []string{staleHeld, fresh, nearThreshold, otherShape} {
-		if !exists(t, ctx, admin, kept) {
-			t.Errorf("database %s must not be dropped", kept)
-		}
+			// Another package binary may sweep an idle stale database first; either way it must be gone.
+			if got := exists(t, ctx, admin, tc.database); got != tc.wantKept {
+				t.Errorf("database %s exists = %v, want %v", tc.database, got, tc.wantKept)
+			}
+		})
 	}
 }
 
@@ -110,13 +113,8 @@ func TestNewSweepsStaleDatabasesOfLongPackageNames(t *testing.T) {
 		t.Errorf("database name %q is %d bytes, want at most 63", db.Name, len(db.Name))
 	}
 
-	// Rebuild the same name shape with a timestamp two hours old.
-	parts := strings.Split(db.Name, "_")
-	if len(parts) < 4 {
-		t.Fatalf("unexpected database name shape %q", db.Name)
-	}
-	parts[len(parts)-2] = fmt.Sprintf("%d", time.Now().Add(-2*time.Hour).Unix())
-	stale := strings.Join(parts, "_")
+	// A stale database whose package part is already at the 40-character cap.
+	stale := syntheticName(t, "it_"+strings.Repeat("a", 40), time.Now().Add(-2*time.Hour))
 	t.Cleanup(func() {
 		_, _ = admin.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{stale}.Sanitize()+" WITH (FORCE)")
 	})
