@@ -15,7 +15,7 @@ var (
 	createTable      = regexp.MustCompile(`(?i)^CREATE (?:(?:GLOBAL |LOCAL )?(?:TEMPORARY |TEMP )|UNLOGGED )?TABLE (?:IF NOT EXISTS )?(` + qualified + `)`)
 	selectStart      = regexp.MustCompile(`(?i)^(?:SELECT|WITH)\b`)
 	intoTarget       = regexp.MustCompile(`(?i)\bINTO (?:(?:TEMPORARY |TEMP |UNLOGGED ))?(?:TABLE )?(` + qualified + `)`)
-	insertBefore     = regexp.MustCompile(`(?i)\b(?:INSERT|MERGE) $`)
+	insertBefore     = regexp.MustCompile(`(?i)\( ?(?:INSERT|MERGE) $`)
 	alterTable       = regexp.MustCompile(`(?i)^ALTER TABLE (?:IF EXISTS )?(?:ONLY )?(` + qualified + `)`)
 	createIndex      = regexp.MustCompile(`(?i)^CREATE (?:UNIQUE )?INDEX (?:CONCURRENTLY )?(?:IF NOT EXISTS )?(?:` + nameToken + ` )?ON (?:ONLY )?(` + qualified + `)`)
 	references       = regexp.MustCompile(`(?i)\bREFERENCES\b ?(` + qualified + `)`)
