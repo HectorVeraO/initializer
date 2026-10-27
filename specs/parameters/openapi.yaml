@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Gatbase parameters
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Typed global parameters with per-tenant overrides. Operators define parameters;
     admins of a tenant override their values. Every /api/v1 body is the envelope of
