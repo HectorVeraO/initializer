@@ -125,7 +125,7 @@ which becomes mandatory.
 - Keep v1 answering 410 with a link to the migration guide.
 
 BREAKING CHANGE: the shape of `/api/v1/register` changed. Consumers
-must move to `/api/v2/register` and send the `mfa` block.
+  must move to `/api/v2/register` and send the `mfa` block.
 Declared-change: api-contract
 Refs: #2
 Refs: #3
