@@ -80,10 +80,13 @@ func (t *trackedWriter) Unwrap() http.ResponseWriter {
 	return t.ResponseWriter
 }
 
-// recoverPanics is chain step 3.
+// recoverPanics is chain step 3: it installs the request-info holder the
+// guard fills (accessLog reuses it) so panic_recovered logs the resolved caller.
 func recoverPanics(logger *slog.Logger, writer *api.Writer, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tracked := &trackedWriter{ResponseWriter: w}
+		info := &ctxkey.RequestInfo{}
+		r = r.WithContext(ctxkey.WithRequestInfo(r.Context(), info))
 		defer func() {
 			recovered := recover()
 			if recovered == nil {
@@ -92,9 +95,17 @@ func recoverPanics(logger *slog.Logger, writer *api.Writer, next http.Handler) h
 			if recovered == http.ErrAbortHandler {
 				panic(recovered)
 			}
-			logger.ErrorContext(r.Context(), "panic_recovered",
+			attrs := []slog.Attr{
 				slog.String("panic", fmt.Sprint(recovered)),
-				slog.String("stack", string(debug.Stack())))
+				slog.String("stack", string(debug.Stack())),
+			}
+			if info.TenantID != "" {
+				attrs = append(attrs, slog.String("tenant_id", info.TenantID))
+			}
+			if info.ActorID != "" {
+				attrs = append(attrs, slog.String("actor_id", info.ActorID))
+			}
+			logger.LogAttrs(r.Context(), slog.LevelError, "panic_recovered", attrs...)
 			if tracked.wrote {
 				panic(http.ErrAbortHandler)
 			}
@@ -108,17 +119,22 @@ func recoverPanics(logger *slog.Logger, writer *api.Writer, next http.Handler) h
 	})
 }
 
-// accessLog is chain step 4: it installs the request-info holder the guard
-// fills and logs one http_request_completed per request, also when a panic
-// passes through (the recover step then answers 500).
+// accessLog is chain step 4: it reuses the request-info holder recoverPanics
+// installed (or installs one) for the guard to fill, and logs one
+// http_request_completed per request, also when a panic passes through (the
+// recover step then answers 500).
 func accessLog(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tracked, ok := w.(*trackedWriter)
 		if !ok {
 			tracked = &trackedWriter{ResponseWriter: w}
 		}
-		info := &ctxkey.RequestInfo{}
-		withInfo := r.WithContext(ctxkey.WithRequestInfo(r.Context(), info))
+		info, hasInfo := ctxkey.RequestInfoFrom(r.Context())
+		withInfo := r
+		if !hasInfo {
+			info = &ctxkey.RequestInfo{}
+			withInfo = r.WithContext(ctxkey.WithRequestInfo(r.Context(), info))
+		}
 		start := time.Now()
 		completed := false
 		defer func() {
