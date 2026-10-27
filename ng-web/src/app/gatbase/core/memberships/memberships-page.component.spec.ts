@@ -78,7 +78,7 @@ describe('MembershipsPage', () => {
   }
 
   async function pickRole(fixture: ComponentFixture<MembershipsPage>, name: string, label: string): Promise<void> {
-    (byTestId(rowOf(fixture, name), 'membership-role-select')?.querySelector('[aria-label]') as HTMLElement).click();
+    (byTestId(rowOf(fixture, name), 'membership-role-select') as HTMLElement).click();
     await settle(fixture);
 
     const option = allByTestId(document.body, 'membership-role-option').find((candidate) => textOf(candidate) === label);
