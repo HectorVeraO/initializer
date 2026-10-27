@@ -219,15 +219,24 @@ func footerValues(message string, wanted map[string]bool) []string {
 		return nil
 	}
 	var values []string
+	inBreaking := false
 	for _, line := range strings.Split(paragraphs[len(paragraphs)-1], "\n") {
 		isContinuation := strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
 		if isContinuation {
 			continue
 		}
-		if !footerLine.MatchString(line) {
+		isFooterLine := footerLine.MatchString(line)
+		// A BREAKING CHANGE value may wrap onto unindented lines that are not
+		// themselves trailers (git-conventions Example B).
+		isWrappedBreaking := inBreaking && !isFooterLine
+		if isWrappedBreaking {
+			continue
+		}
+		if !isFooterLine {
 			return nil
 		}
 		token, value, _ := strings.Cut(line, ": ")
+		inBreaking = strings.EqualFold(token, "BREAKING CHANGE") || strings.EqualFold(token, "BREAKING-CHANGE")
 		if wanted[strings.ToLower(token)] {
 			values = append(values, strings.TrimSpace(value))
 		}
