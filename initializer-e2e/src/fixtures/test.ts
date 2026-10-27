@@ -12,6 +12,8 @@ import { ExamplePage } from '../pages/ExamplePage';
 import { AcceptInvitationPage } from '../pages/gatbase/core/AcceptInvitationPage';
 import { InvitationsPage } from '../pages/gatbase/core/InvitationsPage';
 import { OneTimeSecretDialog } from '../pages/gatbase/core/OneTimeSecretDialog';
+import { MembershipsPage } from '../pages/gatbase/core/MembershipsPage';
+import { OperatorTenantsPage } from '../pages/gatbase/core/OperatorTenantsPage';
 import { LoginPage } from '../pages/gatbase/core/LoginPage';
 import { ShellPage } from '../pages/gatbase/core/ShellPage';
 
@@ -21,6 +23,8 @@ type Pages = {
   shellPage: ShellPage;
   acceptInvitationPage: AcceptInvitationPage;
   invitationsPage: InvitationsPage;
+  membershipsPage: MembershipsPage;
+  operatorTenantsPage: OperatorTenantsPage;
   secretDialog: OneTimeSecretDialog;
 };
 
@@ -46,6 +50,12 @@ export const test = base.extend<Pages & Seeds>({
   },
   invitationsPage: async ({ page }, use) => {
     await use(new InvitationsPage(page));
+  },
+  membershipsPage: async ({ page }, use) => {
+    await use(new MembershipsPage(page));
+  },
+  operatorTenantsPage: async ({ page }, use) => {
+    await use(new OperatorTenantsPage(page));
   },
   secretDialog: async ({ page }, use) => {
     await use(new OneTimeSecretDialog(page));
