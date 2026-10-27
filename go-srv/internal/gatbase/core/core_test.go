@@ -541,6 +541,12 @@ func TestFallbackAnswersEnvelopeForUnknownPathsAndWrongMethods(t *testing.T) {
 		{http.MethodGet, "/api/v1/things/extra"},
 		{http.MethodGet, "/api/v1/"},
 		{http.MethodOptions, "/api/v1/things"},
+		{http.MethodGet, "/api/v1"},
+		{http.MethodGet, "/api/v1//route-that-does-not-exist"},
+		{http.MethodGet, "/api/v1/./route-that-does-not-exist"},
+		{http.MethodGet, "/api/v1/x/../route-that-does-not-exist"},
+		{http.MethodPost, "/api/v1//things"},
+		{http.MethodGet, "/api/v1/x/%2E%2E/route-that-does-not-exist"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.method+" "+tc.target, func(t *testing.T) {
@@ -553,6 +559,17 @@ func TestFallbackAnswersEnvelopeForUnknownPathsAndWrongMethods(t *testing.T) {
 	}
 	if rec := do(app, http.MethodGet, "/api/v1/things", nil); rec.Body.String() != "things" {
 		t.Fatalf("the mounted route no longer answers: %q", rec.Body.String())
+	}
+}
+
+func TestCleanTrailingSlashSubtreeRouteIsNotRejectedAsUnclean(t *testing.T) {
+	app, _ := startApp(t, core.Options{}, mounting("tree", func(h *core.Host) {
+		h.Handle("GET /api/v1/tree/", auth.Public, okHandler("tree"))
+	}))
+	for _, target := range []string{"/api/v1/tree/", "/api/v1/tree/leaf", "/api/v1/tree/leaf/"} {
+		if rec := do(app, http.MethodGet, target, nil); rec.Body.String() != "tree" {
+			t.Fatalf("GET %s = %d %q, want the mounted subtree handler", target, rec.Code, rec.Body.String())
+		}
 	}
 }
 
@@ -1123,14 +1140,12 @@ func FuzzFallbackAlwaysAnswersAnEnvelope(f *testing.F) {
 			t.Skip()
 		}
 		method := methods[int(methodIndex)%len(methods)]
-		req := httptest.NewRequest(method, "http://example.com"+target, nil)
+		req := httptest.NewRequest(method, "http://example.com/", nil)
+		req.URL = parsed.URL
+		req.RequestURI = target
 		rec := httptest.NewRecorder()
 		app.Handler().ServeHTTP(rec, req)
 
-		isRedirect := rec.Code >= 300 && rec.Code < 400 && rec.Header().Get("Location") != ""
-		if isRedirect {
-			return
-		}
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("%s %q answered %d", method, target, rec.Code)
 		}
