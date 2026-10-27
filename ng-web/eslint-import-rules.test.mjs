@@ -3,7 +3,8 @@
 // does not ship the module folders and would stop compiling.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
@@ -80,3 +81,30 @@ for (const [name, file, code] of allowed) {
     );
   });
 }
+
+// A module folder created after the config was first loaded must be covered too: the config reads the tree
+// at load time, so a fresh process lints against a tree that holds a folder no list ever named.
+test('rejects: a module folder that exists only for this run', () => {
+  const probeFolder = 'zz-probe-module';
+  const probeDir = path.join(cwd, 'src/app/gatbase', probeFolder);
+  const script = `
+    import { ESLint } from 'eslint';
+    const eslint = new ESLint({ cwd: process.argv[1] });
+    const code = "import { m } from '../../${probeFolder}/module'; export const x = m;";
+    const [result] = await eslint.lintText(code, { filePath: process.argv[1] + '/src/app/gatbase/core/login/repro.ts' });
+    console.log(JSON.stringify(result.messages.filter((message) => message.ruleId === 'no-restricted-imports').map((message) => message.message)));
+  `;
+
+  mkdirSync(probeDir, { recursive: true });
+  try {
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', script, cwd], { cwd, encoding: 'utf8' });
+    const messages = JSON.parse(output);
+
+    assert.ok(
+      messages.some((message) => message.includes('The core module never imports another')),
+      `a new module folder was not rejected; got: ${output}`
+    );
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true });
+  }
+});
