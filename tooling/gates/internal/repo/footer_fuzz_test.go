@@ -6,7 +6,7 @@ import (
 )
 
 // FuzzFooterValues checks that footer parsing never panics and only returns
-// values taken from the message.
+// single-line, trimmed values taken from the message.
 func FuzzFooterValues(f *testing.F) {
 	f.Add("subject\n\nbody\n\nBREAKING CHANGE: a\nb\nRefs: #1")
 	f.Add("x")
@@ -16,6 +16,9 @@ func FuzzFooterValues(f *testing.F) {
 		for _, value := range footerValues(message, wanted) {
 			if !strings.Contains(message, value) {
 				t.Fatalf("value %q not in message", value)
+			}
+			if strings.ContainsAny(value, "\n") || value != strings.TrimSpace(value) {
+				t.Fatalf("value %q is not a single trimmed line", value)
 			}
 		}
 	})
