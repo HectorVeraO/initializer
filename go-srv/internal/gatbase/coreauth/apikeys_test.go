@@ -243,6 +243,8 @@ func TestCreateAPIKeyValidationAccumulates(t *testing.T) {
 			[]wantIssue{{"name", "FIELD_TYPE_INVALID"}, {"scopes", "FIELD_TYPE_INVALID"}, {"expiresAt", "FIELD_INVALID_FORMAT"}}},
 		{"expiresAt not a string", `{"name":"a","scopes":["tenant:read"],"expiresAt":5}`,
 			[]wantIssue{{"expiresAt", "FIELD_TYPE_INVALID"}}},
+		{"NUL in name", `{"name":"billing\u0000sync","scopes":["tenant:read"]}`,
+			[]wantIssue{{"name", "FIELD_INVALID_FORMAT"}}},
 		{"too long", `{"name":"` + strings.Repeat("a", 101) + `","scopes":["tenant:read"]}`,
 			[]wantIssue{{"name", "FIELD_TOO_LONG"}}},
 		// A non-string entry is a shape error: it stops scope-name checks, so only it is reported.
