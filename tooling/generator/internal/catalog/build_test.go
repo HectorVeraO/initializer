@@ -480,3 +480,13 @@ func TestExplicitClaimOfTheWholeFolderWithoutManifestIsDelivered(t *testing.T) {
 	}
 	t.Fatalf("ng-web/parameters does not deliver %s", claimed)
 }
+
+func TestConflictInsideFolderWithoutManifestIsOnlyAConflict(t *testing.T) {
+	repo := cleanRepo(t)
+	put(repo, "go-srv/internal/gatbase/billing/billing.go", "// Package billing is a module folder whose manifest was forgotten.\npackage billing\n")
+	edit(t, repo, paramsManifest, `["go-srv/internal/gatbase/parameters/"]`, `["go-srv/internal/gatbase/billing/", "go-srv/internal/gatbase/parameters/"]`)
+	edit(t, repo, flagsManifest, "\"go-srv/internal/gatbase/featureflags/\"\n  ],", "\"go-srv/internal/gatbase/billing/\",\n    \"go-srv/internal/gatbase/featureflags/\"\n  ],")
+
+	_, issues := buildRepo(t, repo)
+	assertCodes(t, issues, "FILE_OWNERSHIP_CONFLICT")
+}
