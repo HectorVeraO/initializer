@@ -37,7 +37,7 @@
   <div class="layout-submenu-container" [class.layout-submenu-expanded]="submenuExpanded">
     <ul>
       @for (child of item.items; track child; let i = $index) {
-      <li app-menuitem [item]="child" [index]="i" [parentKey]="key" [class]="child['badgeClass']"></li>
+      <li app-menuitem [item]="child" [index]="i" [parentKey]="key" [class]="child['badgeClass']" [attr.data-testid]="child.id ?? null"></li>
       }
     </ul>
   </div>

@@ -8,6 +8,8 @@ import { appRoutes } from './app.routes';
 import { ConfirmationService, MessageService } from '@openng/optimus-ui/api';
 import { GlobalErrorHandler } from '@/core/handler/global-error.handler';
 import { provideApiHttpClient } from '@/core/interceptors/api-http.providers';
+import { gatbaseSessionInterceptor, provideGatbase } from '@/gatbase/core';
+import { gatbaseModules } from '@/gatbase/modules';
 import { provideRuntimeConfigInit } from '@/core/config/runtime-config.initializer';
 import { provideTransloco } from '@jsverse/transloco';
 import { TranslocoHttpLoader } from './transloco-loader';
@@ -17,7 +19,8 @@ import { AppPreset } from './app-theme.preset';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(appRoutes, withInMemoryScrolling({ anchorScrolling: 'enabled', scrollPositionRestoration: 'enabled' }), withEnabledBlockingInitialNavigation(), withRouterConfig({ onSameUrlNavigation: 'reload' })),
-    provideApiHttpClient(),
+    provideApiHttpClient([gatbaseSessionInterceptor]),
+    provideGatbase(gatbaseModules),
     provideOptimus({
       theme: { preset: AppPreset, options: { darkModeSelector: '.app-dark' } }
     }),
