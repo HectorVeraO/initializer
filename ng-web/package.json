@@ -8,7 +8,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "lint": "eslint . --max-warnings=0",
+    "lint": "eslint . --max-warnings=0 && node --test eslint-import-rules.test.mjs",
     "format:check": "prettier --check \"src/**/*.{ts,html,scss,json}\""
   },
   "private": true,
