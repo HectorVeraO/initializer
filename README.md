@@ -4,7 +4,9 @@ initializer is a deterministic project generator in the spirit of Spring Initial
 
 ## Status
 
-Pre-alpha. The first catalog modules are in design; nothing is generated yet.
+Pre-alpha. The first catalog modules (`core`, `core-auth`, `parameters`, `feature-flags`) are on `main` for both stacks, and the generator writes go-srv and ng-web projects that pass their module TCKs in CI.
+
+Terms (TCK, catalog, selection, active tenant and the rest): `GLOSSARY.md`.
 
 ## Layout
 
@@ -14,6 +16,8 @@ Pre-alpha. The first catalog modules are in design; nothing is generated yet.
 | `go-srv/` | Go stack: one package tree per module under `internal/gatbase/<module>/`. |
 | `ng-web/` | Angular stack: one folder per module under `src/app/gatbase/<module>/`. |
 | `initializer-e2e/` | Playwright UI suite, independent of the frontend stack. |
+| `tooling/generator/` | The `initializer` CLI: catalog build, project generation and verification. |
+| `tooling/gates/` | Repo checks for `flags.yaml`, migrations, contracts and versions. |
 | `.deploy/local/` | Local Docker Compose stack and port map. |
 
 ## Develop
