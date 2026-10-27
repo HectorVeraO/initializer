@@ -3,5 +3,15 @@
     "target": "http://localhost:10100",
     "secure": false,
     "changeOrigin": false
+  },
+  "/kratos": {
+    "target": "http://localhost:10100",
+    "secure": false,
+    "changeOrigin": false
+  },
+  "/health": {
+    "target": "http://localhost:10100",
+    "secure": false,
+    "changeOrigin": false
   }
 }

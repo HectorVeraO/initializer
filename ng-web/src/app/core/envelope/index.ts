@@ -1,2 +1,3 @@
 export type { ApiEnvelope, ApiErrorBody, ApiIssue, Meta } from './envelope.types';
-export { isApiEnvelope } from './envelope.utils';
+export type { ApiPage } from './page.types';
+export { UnexpectedResponseError, isApiEnvelope, unwrapData } from './envelope.utils';

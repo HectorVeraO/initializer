@@ -44,11 +44,11 @@ describe('RuntimeConfigService', () => {
     expect(service.isApiUrl('https://elsewhere.test/api/v1/x')).toBe(false);
   });
 
-  it('prefixes API paths with a configured apiUrl and trims its trailing slash', async () => {
-    await loadWith({ ...VALID_CONFIG, apiUrl: 'https://api.test/' });
+  it('rejects an absolute apiUrl: the API shares the origin of the app', async () => {
+    await loadWith({ apiUrl: 'https://api.test/' });
 
-    expect(service.apiPath('/api/v1/x')).toBe('https://api.test/api/v1/x');
-    expect(service.isApiUrl('https://api.test/api/v1/x')).toBe(true);
+    expect(service.failure()).toEqual({ kind: 'invalid', missingFields: ['apiUrl'] });
+    expect(service.config()).toBeNull();
   });
 
   it('reports a missing apiUrl', async () => {
