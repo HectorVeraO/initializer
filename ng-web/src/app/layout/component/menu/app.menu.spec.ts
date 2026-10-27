@@ -5,6 +5,7 @@ import es from '../../../../assets/i18n/es.json';
 import { environment } from '../../../../environments/environment';
 import { buildAppRoutes } from '../../../../app.routes';
 import { DEV_ROUTES } from '@/dev/dev.routes.prod';
+import { byTestId, textOf } from '@/core/testing/ui-testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MessageService } from '@openng/optimus-ui/api';
@@ -113,15 +114,11 @@ describe('AppMenu', () => {
       return fixture.nativeElement as HTMLElement;
     }
 
-    function labelOf(root: HTMLElement, testId: string): string | undefined {
-      return root.querySelector(`[data-testid="${testId}"]`)?.textContent?.trim();
-    }
-
     it('lists the entries the session meets, labelled through the module scope', async () => {
       const root = await renderWithSession(200, okEnvelope(sessionView()));
 
-      expect(labelOf(root, 'nav-members')).toBe('Miembros');
-      expect(labelOf(root, 'nav-admins')).toBe('Solo admins');
+      expect(textOf(byTestId(root, 'nav-members'))).toBe('Miembros');
+      expect(textOf(byTestId(root, 'nav-admins'))).toBe('Solo admins');
     });
 
     it('hides an entry whose role requirement the session misses', async () => {
@@ -129,14 +126,14 @@ describe('AppMenu', () => {
 
       const root = await renderWithSession(200, okEnvelope(sessionView({ account })));
 
-      expect(labelOf(root, 'nav-members')).toBe('Miembros');
+      expect(textOf(byTestId(root, 'nav-members'))).toBe('Miembros');
       expect(root.querySelector('[data-testid="nav-admins"]')).toBeNull();
     });
 
     it('titles the module section through the module scope', async () => {
       const root = await renderWithSession(200, okEnvelope(sessionView()));
 
-      expect(labelOf(root, 'menu-module-reports')).toContain('Informes');
+      expect(textOf(byTestId(root, 'menu-module-reports'))).toContain('Informes');
     });
 
     it('shows no Gatbase section while anonymous', async () => {

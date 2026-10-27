@@ -1,6 +1,5 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { TranslocoTestingModule } from '@jsverse/transloco';
@@ -14,9 +13,7 @@ import { SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel 
 import { BROWSER_LOCATION } from './browser-location';
 import { gatbaseSessionInterceptor } from './session.interceptor';
 import { SessionStore } from './session-store.service';
-
-@Component({ selector: 'p-blank', template: '' })
-class BlankComponent {}
+import { BlankComponent } from '@/core/testing/ui-testing';
 
 const REFRESH_URL = '/api/v1/auth/refresh';
 

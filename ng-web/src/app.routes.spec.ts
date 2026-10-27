@@ -1,17 +1,17 @@
 import { HttpTestingController } from '@angular/common/http/testing';
-import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, Routes } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
-import { configureFeatureTest } from '@/core/testing/ui-testing';
-import { coreModule } from '@/gatbase/core';
+import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
+import { GatbaseWebModule, anonymousGuard, coreModule } from '@/gatbase/core';
+import { errorEnvelope } from './testing/fixtures/api-envelope';
 import { okEnvelope, sessionView } from './testing/fixtures/session-view';
 import { buildAppRoutes } from './app.routes';
 
-@Component({ selector: 'p-blank', template: '' })
-class BlankComponent {}
-
 const CONFIG_URL = '/assets/config/runtime-config.json';
+
+// The core module ships no login page yet; the stub gives the anonymous redirect a target.
+const APP_MODULE: GatbaseWebModule = { ...coreModule, publicRoutes: [{ path: 'login', canMatch: [anonymousGuard], component: BlankComponent }] };
 
 const DEV_STUB: Routes = [{ path: 'probe', component: BlankComponent }];
 
@@ -22,7 +22,7 @@ describe('app routes', () => {
 
   beforeEach(() => {
     vi.stubGlobal('BroadcastChannel', undefined);
-    configureFeatureTest(buildAppRoutes(DEV_STUB, [coreModule]), [{ provide: MessageService, useValue: { add: vi.fn() } }]);
+    configureFeatureTest(buildAppRoutes(DEV_STUB, [APP_MODULE]), [{ provide: MessageService, useValue: { add: vi.fn() } }]);
     http = TestBed.inject(HttpTestingController);
     router = TestBed.inject(Router);
   });
@@ -59,6 +59,16 @@ describe('app routes', () => {
     await navigation;
 
     expect(router.url).toBe(url);
+  });
+
+  it('sends an anonymous visitor from /home to /login', async () => {
+    const navigation = router.navigateByUrl('/home');
+
+    await vi.waitFor(() => http.expectOne(CONFIG_URL).flush({ apiUrl: '' }));
+    await vi.waitFor(() => http.expectOne('/api/v1/auth/session').flush(errorEnvelope('SESSION_INVALID'), { status: 401, statusText: 'Unauthorized' }));
+    await navigation;
+
+    expect(router.url).toBe('/login?returnUrl=%2Fhome');
   });
 
   it('redirects the empty path to /home', async () => {

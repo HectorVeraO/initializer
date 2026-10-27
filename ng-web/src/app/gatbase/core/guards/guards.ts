@@ -61,8 +61,12 @@ export function requireSession(requirement: SessionRequirement): CanMatchFn {
 
     const session = store.session();
 
-    if (auth !== true || session === null) {
+    if (auth !== true) {
       return auth;
+    }
+
+    if (session === null) {
+      return router.createUrlTree(['/error-page']);
     }
 
     const unmet = firstUnmetRequirement(session, requirement);

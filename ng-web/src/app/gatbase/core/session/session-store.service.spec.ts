@@ -1,18 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
-import { configureFeatureTest } from '@/core/testing/ui-testing';
+import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
 import { CONFIG_URL, FakeBroadcastChannel, SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
 import { BROWSER_LOCATION } from './browser-location';
 import { SessionStore } from './session-store.service';
-
-@Component({ selector: 'p-blank', template: '' })
-class BlankComponent {}
 
 const SECOND_TENANT = { id: '44444444-4444-4444-8444-444444444444', slug: 'tenant-b', name: 'Tenant B', status: 'active' };
 

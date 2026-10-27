@@ -1,11 +1,8 @@
-import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { Route } from '@angular/router';
 import { GATBASE_MODULES, GatbaseWebModule, gatbaseRoutes, provideGatbase } from './web-module';
 import { coreModule } from '../module';
-
-@Component({ selector: 'p-blank', template: '' })
-class BlankComponent {}
+import { BlankComponent } from '@/core/testing/ui-testing';
 
 function moduleWith(id: string, shell: Route[] = [], publicRoutes: Route[] = []): GatbaseWebModule {
   return { ...coreModule, id, shellRoutes: shell, publicRoutes };

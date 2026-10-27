@@ -1,6 +1,6 @@
 import { HttpClient, HttpContext, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { ApplicationRef, Component } from '@angular/core';
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { TranslocoTestingModule } from '@jsverse/transloco';
@@ -8,9 +8,7 @@ import { MessageService } from '@openng/optimus-ui/api';
 import es from '../../../assets/i18n/es.json';
 import { SKIP_ERROR_TOAST } from '@/core/api/api-http-context';
 import { apiErrorInterceptor } from './api-error.interceptor';
-
-@Component({ selector: 'p-blank', template: '' })
-class BlankComponent {}
+import { BlankComponent } from '@/core/testing/ui-testing';
 
 function apiError(code: string): object {
   return { data: null, meta: { traceId: 'abc', timestamp: '2026-01-01T00:00:00Z' }, error: { code, message: 'text', issues: [] } };

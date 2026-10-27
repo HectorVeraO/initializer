@@ -1,23 +1,19 @@
 import { HttpTestingController } from '@angular/common/http/testing';
-import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
-import { configureFeatureTest } from '@/core/testing/ui-testing';
+import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
 import { CONFIG_URL, SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
 import { BROWSER_LOCATION } from '../session/browser-location';
 import { anonymousGuard, authGuard, flagGuard, requireSession } from './guards';
 
-@Component({ selector: 'p-blank', template: '' })
-class BlankComponent {}
-
 const OPERATOR = { id: 'a', email: 'op@example.com', fullName: null, role: null, isPlatformOperator: true };
 
 const VIEWER = { id: 'a', email: 'viewer@example.com', fullName: null, role: 'viewer', isPlatformOperator: false };
 
-type SessionAnswer = object | 'anonymous' | 'locked' | 'server-error' | 'config-error' | 'foreign-api-url';
+type SessionAnswer = object | 'anonymous' | 'locked' | 'server-error' | 'empty-session' | 'config-error' | 'foreign-api-url';
 
 describe('session guards', () => {
   let http: HttpTestingController;
@@ -75,6 +71,8 @@ describe('session guards', () => {
         request.flush(errorEnvelope('SESSION_INVALID'), { status: 401, statusText: 'Unauthorized' });
       } else if (answer === 'locked') {
         request.flush(errorEnvelope('ACCOUNT_LOCKED_OR_DISABLED'), { status: 403, statusText: 'Forbidden' });
+      } else if (answer === 'empty-session') {
+        request.flush(okEnvelope(null));
       } else if (answer === 'server-error') {
         request.flush(errorEnvelope('INTERNAL_ERROR'), { status: 500, statusText: 'Server Error' });
       } else {
@@ -200,6 +198,10 @@ describe('session guards', () => {
 
     it('sends the person to the error page when the session cannot be loaded', async () => {
       expect(await go('/admin-page', 'server-error')).toBe('/error-page');
+    });
+
+    it('sends the person to the error page when the API answers 200 without a session', async () => {
+      expect(await go('/admin-page', 'empty-session')).toBe('/error-page');
     });
   });
 
