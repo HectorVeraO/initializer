@@ -92,6 +92,28 @@ describe('app routes', () => {
     expect(await resolve('/no-such-page')).toBe('/notfound');
   });
 
+  it('keeps /invitations in the guarded shell: an anonymous visitor is sent to /login', async () => {
+    const navigation = router.navigateByUrl('/invitations');
+
+    await vi.waitFor(() => http.expectOne(CONFIG_URL).flush({ apiUrl: '' }));
+    await vi.waitFor(() => http.expectOne('/api/v1/auth/session').flush(errorEnvelope('SESSION_INVALID'), { status: 401, statusText: 'Unauthorized' }));
+    await navigation;
+
+    expect(router.url).toBe('/login?returnUrl=%2Finvitations');
+  });
+
+  it('sends a signed-in member without the admin role from /invitations to /forbidden', async () => {
+    const member = { id: 'a', email: 'member@example.com', fullName: null, role: 'member', isPlatformOperator: false };
+
+    const navigation = router.navigateByUrl('/invitations');
+
+    await vi.waitFor(() => http.expectOne(CONFIG_URL).flush({ apiUrl: '' }));
+    await vi.waitFor(() => http.expectOne('/api/v1/auth/session').flush(okEnvelope(sessionView({ account: member }))));
+    await navigation;
+
+    expect(router.url).toBe('/forbidden');
+  });
+
   it('mounts a multi-segment public route outside the shell', async () => {
     await router.navigateByUrl('/invitations/accept');
 

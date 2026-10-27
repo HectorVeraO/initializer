@@ -1,0 +1,8 @@
+@if (isConfirming()) {
+  <span class="inline-flex items-center gap-2">
+    <button pButton type="button" size="small" severity="danger" [disabled]="disabled()" [attr.data-testid]="testId() + '-confirm'" (click)="confirm()">{{ 'gatbaseCore.confirm.confirm' | transloco }}</button>
+    <button pButton type="button" size="small" severity="secondary" [outlined]="true" [attr.data-testid]="testId() + '-cancel'" (click)="cancel()">{{ 'gatbaseCore.confirm.cancel' | transloco }}</button>
+  </span>
+} @else {
+  <button pButton type="button" size="small" severity="danger" [outlined]="true" [disabled]="disabled()" [attr.data-testid]="testId()" (click)="ask()">{{ labelKey() | transloco }}</button>
+}

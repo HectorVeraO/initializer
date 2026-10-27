@@ -27,7 +27,8 @@
       "4000006": "The email or the password is not valid."
     },
     "notices": {
-      "invitationAccepted": "Your invitation was accepted. Sign in to continue."
+      "invitationAccepted": "Your invitation was accepted. Sign in to continue.",
+      "accountCreated": "Your account was created. Sign in to continue."
     }
   },
   "noTenant": {
@@ -42,6 +43,61 @@
     "TENANT_SUSPENDED": "That tenant is suspended.",
     "MEMBERSHIP_REVOKED": "Your membership in that tenant was revoked.",
     "ACCOUNT_LOCKED_OR_DISABLED": "This account is locked or disabled. Contact an administrator.",
-    "switchFailed": "The active tenant could not be changed. Try again."
+    "switchFailed": "The active tenant could not be changed. Try again.",
+    "rowGone": "That item no longer exists or changed. The list was refreshed."
+  },
+  "nav": {
+    "invitations": "Invitations"
+  },
+  "secret": {
+    "once": "This value is shown once. Store it now.",
+    "copy": "Copy",
+    "close": "Close"
+  },
+  "confirm": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "issues": {
+    "PASSWORD_REJECTED": "The password was rejected by the password policy. Choose another one."
+  },
+  "invitations": {
+    "title": "Invitations",
+    "inviteTitle": "Invite a member",
+    "email": "Email",
+    "role": "Role",
+    "submit": "Invite member",
+    "section": "invitations",
+    "empty": "There are no pending invitations.",
+    "status": "Status",
+    "expires": "Expires",
+    "revoke": "Revoke",
+    "linkTitle": "Invitation link",
+    "truncated": "Showing the first {{shown}} of {{total}}",
+    "statuses": {
+      "pending": "Pending",
+      "accepted": "Accepted",
+      "revoked": "Revoked",
+      "expired": "Expired"
+    }
+  },
+  "accept": {
+    "title": "Accept invitation",
+    "loading": "Loading",
+    "invalid": "This invitation link is invalid, expired, revoked or already used.",
+    "goHome": "Go to the home page",
+    "alreadyMember": "You are already a member of this tenant.",
+    "asEmail": "Accept the invitation as",
+    "submit": "Accept invitation",
+    "haveAccount": "I already have an account",
+    "newAccount": "Create your account",
+    "fullName": "Full name",
+    "password": "Password",
+    "passwordConfirm": "Confirm password",
+    "passwordMismatch": "The passwords do not match.",
+    "createAccount": "Create account and accept",
+    "accountExists": "An account with this email already exists. Sign in to accept the invitation.",
+    "emailMismatch": "This invitation is for another email address. Sign out and open the link again with the invited account.",
+    "accepted": "Invitation accepted."
   }
 }
