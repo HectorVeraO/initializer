@@ -1,0 +1,7 @@
+<ul class="layout-menu">
+  @for (item of model(); track item.id ?? item.label; let i = $index) { @if (!item.separator) {
+  <li app-menuitem [item]="item" [index]="i" [root]="true" [attr.data-testid]="item.id ? 'menu-' + item.id : null"></li>
+  } @if (item.separator) {
+  <li class="menu-separator"></li>
+  } }
+</ul>

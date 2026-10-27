@@ -1,0 +1,188 @@
+html {
+  height: 100%;
+  font-size: 14px;
+}
+
+body {
+  font-family:
+    'Rubik',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  color: var(--text-color);
+  background-color: var(--surface-ground);
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.2;
+}
+
+a {
+  text-decoration: none;
+}
+
+.layout-wrapper {
+  min-height: 100vh;
+}
+
+.p-datatable {
+  border: 1px solid var(--p-surface-200);
+  border-radius: var(--p-content-border-radius);
+  overflow: hidden;
+}
+
+// A header cell with no filter (no column-filter button) is visually
+// shorter than one with a filter, and a size-variant table (e.g.
+// p-datatable-sm) shrinks both rows below the app's standard height.
+// `min-height` on the `<th>`/`<td>` itself is not reliable here: table
+// cells size to content in the automatic table layout algorithm and most
+// browsers do not treat a table-cell's `min-height` as a hard floor the
+// way they do for a block element. Every header/body cell across the app
+// wraps its content in a flex `<div>` (the data-table cookbook's own
+// convention), so the fix targets that block-level wrapper instead, where
+// `min-height` reliably applies.
+//
+// A non-sortable `<th>` (no `pSortableColumn`, so no
+// `.p-datatable-sortable-column` class) also loses Optimus UI's default
+// header-cell padding, so it's pinned explicitly here too.
+.p-datatable-thead > tr > th {
+  padding: 0.75rem 1rem !important;
+}
+
+.p-datatable-thead > tr > th > div,
+.p-datatable-tbody > tr > td > div {
+  min-height: 36px;
+}
+
+.p-button:disabled:not(.p-button-outlined):not(.p-button-text),
+.p-button.p-disabled:not(.p-button-outlined):not(.p-button-text) {
+  opacity: 1 !important;
+  background: var(--grayscale-300) !important;
+  border-color: var(--grayscale-300) !important;
+  color: var(--p-surface-0, #ffffff) !important;
+}
+
+// Every secondary button (outlined or filled) reads as a white pill with a
+// light gray border, regardless of Optimus UI's own surface-tinted defaults.
+// Text-variant buttons (icon-only row actions, the table column-filter
+// trigger) are excluded: those are meant to stay borderless and blend into
+// whatever background they sit on (table header, row), not read as a pill.
+.p-button-secondary:not(.p-button-text) {
+  background: var(--p-surface-0, #ffffff) !important;
+  border: 1px solid var(--grayscale-300) !important;
+  border-radius: 8px !important;
+}
+
+// Optimus UI's DataTable column-filter menu hardcodes its "Add Rule" button to
+// severity="info" internally (not something the app's templates configure),
+// which renders in the theme's info blue instead of the app's brand primary.
+.p-datatable-filter-add-rule-button {
+  color: var(--p-primary-color) !important;
+
+  &:not(:disabled):hover {
+    background: var(--p-primary-50) !important;
+    color: var(--p-primary-color) !important;
+  }
+}
+
+[data-pc-name='pcfiltercontainer'] {
+  .p-select-filter {
+    padding-inline-start: 2.5rem;
+    padding-inline-end: 0.75rem;
+  }
+
+  .p-inputicon {
+    inset-inline-start: 0.75rem;
+    inset-inline-end: auto;
+  }
+}
+
+:root {
+  --tag-success-border: var(--success-200);
+  --tag-danger-border: var(--error-200);
+  --tag-secondary-border: var(--grayscale-200);
+  --tag-info-border: var(--info-200);
+  --tag-warn-border: var(--orange-200);
+}
+
+.p-tag {
+  border: 1px solid transparent;
+  height: 24px;
+  padding: 0 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &.p-tag-success {
+    border-color: var(--tag-success-border);
+  }
+
+  &.p-tag-danger {
+    border-color: var(--tag-danger-border);
+  }
+
+  &.p-tag-secondary {
+    border-color: var(--tag-secondary-border);
+  }
+
+  &.p-tag-info {
+    border-color: var(--tag-info-border);
+  }
+
+  &.p-tag-warn {
+    border-color: var(--tag-warn-border);
+  }
+}
+
+.p-paginator {
+  .p-paginator-first,
+  .p-paginator-last {
+    display: none;
+  }
+
+  .p-paginator-current {
+    margin-right: 20px;
+    order: 1;
+    color: var(--grayscale-600);
+  }
+
+  .p-paginator-rpp-dropdown {
+    order: 2;
+    margin-inline-end: auto;
+
+    .p-select-label {
+      color: var(--grayscale-700);
+    }
+  }
+
+  .p-paginator-prev,
+  .p-paginator-next {
+    order: 3;
+    border: 1px solid var(--p-surface-300);
+    border-radius: var(--p-content-border-radius);
+    padding: 0.5rem 0.875rem;
+    background: var(--p-surface-0);
+    color: var(--p-surface-700);
+    font-weight: 500;
+  }
+
+  .p-paginator-pages {
+    order: 4;
+  }
+
+  .p-paginator-page {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.375rem;
+  }
+
+  .p-paginator-next {
+    order: 5;
+  }
+}

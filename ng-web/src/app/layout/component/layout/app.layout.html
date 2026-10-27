@@ -1,0 +1,17 @@
+<div class="layout-wrapper" [ngClass]="containerClass">
+  <p-topbar></p-topbar>
+  <p-sidebar></p-sidebar>
+  <div class="layout-main-container">
+    <div class="layout-main">
+      <router-outlet></router-outlet>
+    </div>
+    <p-footer></p-footer>
+  </div>
+  <div class="layout-mask animate-fadein"></div>
+</div>
+<p-confirm-name-dialog />
+<p-confirmdialog>
+  <ng-template #message let-confirmation>
+    <div data-testid="confirm-message">{{ confirmation.message }}</div>
+  </ng-template>
+</p-confirmdialog>

@@ -1,0 +1,20 @@
+@let section = sectionKey() | transloco;
+@if (loading()) {
+  <div class="flex justify-center p-4" [attr.data-testid]="feature() + '-loading'">
+    <p-progress-spinner strokeWidth="4" styleClass="w-8 h-8" />
+  </div>
+} @else if (loadFailed()) {
+  <div class="flex flex-col gap-2 items-start" [attr.data-testid]="feature() + '-load-error'">
+    <p-message severity="error">{{ 'states.loadFailed' | transloco: { section: section } }}</p-message>
+    <button type="button" class="p-button p-component" (click)="retry.emit()">{{ 'errors.siteUnavailable.retry' | transloco }}</button>
+  </div>
+} @else if (notFound()) {
+  <div class="flex flex-col gap-2 items-start" [attr.data-testid]="feature() + '-not-found'">
+    <p>{{ notFoundKey() | transloco }}</p>
+    <a [routerLink]="backPath()">{{ 'states.backToList' | transloco }}</a>
+  </div>
+} @else if (empty()) {
+  <p [attr.data-testid]="feature() + '-empty'">{{ emptyKey() | transloco }}</p>
+} @else {
+  <ng-content />
+}
