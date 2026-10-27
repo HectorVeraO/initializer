@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/repo"
@@ -188,6 +189,53 @@ func TestTrailerValuesAcceptsIndentedContinuationLines(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "a wire change" {
 		t.Fatalf("got %v", got)
+	}
+}
+
+func TestTrailerValuesAcceptsUnindentedWrapOfBreakingChange(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, filepath.Join(dir, "specs", "a", "f.txt"), "1\n")
+	runGit(t, dir, "add", "-A")
+	message := "feature(a): Break a\n\nWhy.\n\nBREAKING CHANGE: a wire change\nthat spans two lines\nRefs: #1\nRefs: #2"
+	runGit(t, dir, "commit", "-m", message)
+	got, err := repo.TrailerValues(dir, "main", "HEAD", "specs/a/", []string{"BREAKING CHANGE", "Refs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"a wire change", "#1", "#2"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestTrailerValuesAcceptsUnindentedWrapOfHyphenatedBreakingChange(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, filepath.Join(dir, "specs", "a", "f.txt"), "1\n")
+	runGit(t, dir, "add", "-A")
+	message := "feature(a): Break a\n\nWhy.\n\nBREAKING-CHANGE: a wire change\nthat spans two lines\nRefs: #1"
+	runGit(t, dir, "commit", "-m", message)
+	got, err := repo.TrailerValues(dir, "main", "HEAD", "specs/a/", []string{"BREAKING-CHANGE", "Refs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"a wire change", "#1"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestTrailerValuesDoesNotWrapOtherTrailers(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, filepath.Join(dir, "specs", "a", "f.txt"), "1\n")
+	runGit(t, dir, "add", "-A")
+	message := "feature(a): Break a\n\nWhy.\n\nRefs: #1\nstray prose\nBREAKING CHANGE: a wire change"
+	runGit(t, dir, "commit", "-m", message)
+	got, err := repo.TrailerValues(dir, "main", "HEAD", "specs/a/", []string{"BREAKING CHANGE"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("prose after a non-breaking trailer made the footer valid: %v", got)
 	}
 }
 
