@@ -47,7 +47,9 @@
     "rowGone": "Ese elemento ya no existe o cambió. Se actualizó la lista."
   },
   "nav": {
-    "invitations": "Invitaciones"
+    "invitations": "Invitaciones",
+    "memberships": "Miembros",
+    "operatorTenants": "Tenants"
   },
   "secret": {
     "once": "Este valor se muestra una sola vez. Guárdalo ahora.",
@@ -99,5 +101,45 @@
     "accountExists": "Ya existe una cuenta con este correo. Inicia sesión para aceptar la invitación.",
     "emailMismatch": "Esta invitación es para otro correo. Cierra sesión y abre el enlace de nuevo con la cuenta invitada.",
     "accepted": "Invitación aceptada."
+  },
+  "memberships": {
+    "title": "Miembros",
+    "section": "los miembros",
+    "empty": "Este tenant no tiene miembros.",
+    "email": "Correo electrónico",
+    "name": "Nombre",
+    "role": "Rol",
+    "status": "Estado",
+    "suspend": "Suspender",
+    "reactivate": "Reactivar",
+    "revoke": "Revocar",
+    "lastAdmin": "Un tenant necesita al menos un administrador activo.",
+    "truncated": "Mostrando los primeros {{shown}} de {{total}}",
+    "statuses": {
+      "active": "Activo",
+      "suspended": "Suspendido",
+      "revoked": "Revocado"
+    }
+  },
+  "tenants": {
+    "title": "Tenants",
+    "createTitle": "Crear tenant",
+    "slug": "Slug",
+    "name": "Nombre",
+    "adminEmail": "Correo del primer administrador",
+    "submit": "Crear tenant",
+    "section": "los tenants",
+    "empty": "No hay tenants.",
+    "status": "Estado",
+    "created": "Creado",
+    "suspend": "Suspender",
+    "activate": "Activar",
+    "adminLinkTitle": "Enlace de invitación del primer administrador",
+    "suspensionNote": "Las API keys de un tenant suspendido dejan de funcionar de inmediato; sus usuarios, en su próxima renovación de sesión o cambio de tenant.",
+    "truncated": "Mostrando los primeros {{shown}} de {{total}}",
+    "statuses": {
+      "active": "Activo",
+      "suspended": "Suspendido"
+    }
   }
 }

@@ -2,6 +2,18 @@ export type MembershipRole = 'admin' | 'member' | 'viewer';
 export type TenantStatus = 'active' | 'suspended';
 export type MembershipStatus = 'active' | 'suspended' | 'revoked';
 
+/** One invitation as the API lists it (`InvitationView`). The token never appears here. */
+export interface InvitationView {
+  readonly id: string;
+  readonly email: string;
+  readonly role: MembershipRole;
+  readonly status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  readonly expiresAt: string;
+  readonly createdAt: string;
+  readonly acceptedAt: string | null;
+  readonly revokedAt: string | null;
+}
+
 export interface TenantSummary {
   readonly id: string;
   readonly slug: string;

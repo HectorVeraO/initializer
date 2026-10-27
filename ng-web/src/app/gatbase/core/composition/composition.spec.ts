@@ -19,7 +19,7 @@ describe('Gatbase composition', () => {
     it('holds the core routes only for the core-only list', () => {
       const routes = gatbaseRoutes([coreModule]);
 
-      expect(routes.shell.map((route) => route.path)).toEqual(['no-tenant', 'invitations']);
+      expect(routes.shell.map((route) => route.path)).toEqual(['no-tenant', 'memberships', 'invitations', 'operator/tenants']);
       expect(routes.public.map((route) => route.path)).toEqual(['login', 'invitations/accept']);
     });
 

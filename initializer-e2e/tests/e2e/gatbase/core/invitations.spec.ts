@@ -18,7 +18,6 @@ const env = assertGatbaseEnv();
 test.skip(!env.ok, env.ok ? '' : `missing env: ${env.missing.join(', ')}`);
 
 test.describe('Gatbase core: invitations', () => {
-  // The designed final check on /memberships belongs to the member screens.
   test(
     'invites a member, shows the link once and lets the invitee create an account',
     { tag: ['@e2e', '@core-auth'] },
@@ -29,6 +28,7 @@ test.describe('Gatbase core: invitations', () => {
         loginPage,
         shellPage,
         invitationsPage,
+        membershipsPage,
         secretDialog,
         newTenantAdmin,
       },
@@ -88,6 +88,11 @@ test.describe('Gatbase core: invitations', () => {
       } finally {
         await closeAndAttachVideo(context, 'invitee');
       }
+
+      await page.goto('/memberships');
+      await page.reload();
+      await expect(membershipsPage.role(`jane.${id}`)).toHaveText('Miembro');
+      await expect(membershipsPage.status(`jane.${id}`)).toHaveText('Activo');
     },
   );
 });

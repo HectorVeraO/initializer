@@ -182,6 +182,21 @@ export class GatbaseApi {
     return GatbaseApi.tokenOf(data.invitationUrl);
   }
 
+  /** POST /api/v1/invitations/accept (the signed-in user accepts a token) -> id of the tenant of the membership. */
+  async accept(token: string): Promise<string> {
+    const data = await this.post<{ membership: { tenant: { id: string } } }>(
+      '/api/v1/invitations/accept',
+      { token },
+      200,
+    );
+    return data.membership.tenant.id;
+  }
+
+  /** POST /api/v1/auth/switch-tenant: the session now acts in `tenantId`. */
+  async switchTenant(tenantId: string): Promise<void> {
+    await this.post<unknown>('/api/v1/auth/switch-tenant', { tenantId }, 200);
+  }
+
   /** GET /api/v1/auth/session -> data. */
   async session(): Promise<SessionView> {
     const response = await this.request.get(SESSION_PATH);
