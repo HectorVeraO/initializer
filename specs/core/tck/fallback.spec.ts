@@ -11,3 +11,13 @@ test('DELETE of an unknown API route answers an envelope 404 ROUTE_NOT_FOUND, ne
   expect(response.headers()['content-type']).toContain('application/json');
   await expectEnvelope(response, { status: 404, code: 'ROUTE_NOT_FOUND' });
 });
+
+const UNCLEAN_PATHS = ['/api/v1', '/api/v1//route-that-does-not-exist'];
+
+for (const path of UNCLEAN_PATHS) {
+  test(`GET ${path} answers an envelope 404 ROUTE_NOT_FOUND, never an HTML redirect`, { tag: '@core' }, async ({ request }) => {
+    const response = await request.get(path, { maxRedirects: 0 });
+    expect(response.headers()['content-type']).toContain('application/json');
+    await expectEnvelope(response, { status: 404, code: 'ROUTE_NOT_FOUND' });
+  });
+}

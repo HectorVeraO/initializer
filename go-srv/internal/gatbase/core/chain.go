@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	pathpkg "path"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -30,7 +31,7 @@ func buildChain(a *assembly, writer *api.Writer) (http.Handler, error) {
 	}))
 
 	routed := routeCapture(a.mux)
-	apiStack := apiHeaders(drainGate(a, writer, cop.Handler(routed)))
+	apiStack := apiHeaders(drainGate(a, writer, cop.Handler(rejectUncleanPath(writer, routed))))
 	dispatch := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isAPIPath(r.URL.Path) {
 			apiStack.ServeHTTP(w, r)
@@ -40,6 +41,31 @@ func buildChain(a *assembly, writer *api.Writer) (http.Handler, error) {
 	})
 	inner := recoverPanics(a.logger, writer, accessLog(a.logger, dispatch))
 	return a.telemetry.Middleware(inner), nil
+}
+
+// rejectUncleanPath answers the route-not-found envelope for an API path the
+// mux would redirect (bare /api/v1, empty or dot segments), so no API answer
+// is an HTML redirect.
+func rejectUncleanPath(writer *api.Writer, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isUncleanAPIPath(r.URL.EscapedPath()) {
+			writer.Fail(w, r, api.NewError(http.StatusNotFound, api.CodeRouteNotFound, "Route not found"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// isUncleanAPIPath reports whether the mux would redirect the escaped path to another one.
+func isUncleanAPIPath(path string) bool {
+	if path == apiRoot {
+		return true
+	}
+	cleaned := pathpkg.Clean(path)
+	if strings.HasSuffix(path, "/") && cleaned != "/" {
+		cleaned += "/"
+	}
+	return cleaned != path
 }
 
 // trackedWriter records whether and with which status the response started.
