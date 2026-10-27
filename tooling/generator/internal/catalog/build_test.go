@@ -490,3 +490,11 @@ func TestConflictInsideFolderWithoutManifestIsOnlyAConflict(t *testing.T) {
 	_, issues := buildRepo(t, repo)
 	assertCodes(t, issues, "FILE_OWNERSHIP_CONFLICT")
 }
+
+func TestUnlistedFileInFolderWithManifestIsNotUnowned(t *testing.T) {
+	repo := cleanRepo(t)
+	put(repo, "go-srv/internal/gatbase/parameters/unlisted.go", "package parameters\n")
+
+	_, issues := buildRepo(t, repo)
+	assertCodes(t, issues)
+}
