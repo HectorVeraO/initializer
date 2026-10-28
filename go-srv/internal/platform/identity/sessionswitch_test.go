@@ -536,9 +536,10 @@ func TestSwitchMovesTheSessionToTheTargetTenant(t *testing.T) {
 	if csrfSets != 1 || csrfMaxAge <= 0 || csrfMaxAge != sessionMaxAge {
 		t.Errorf("XSRF-TOKEN sets = %d, Max-Age = %d, want one set with the session Max-Age %d", csrfSets, csrfMaxAge, sessionMaxAge)
 	}
-	last := e.scan("SELECT last_active_tenant_id::text FROM iam_accounts WHERE id = $1::uuid", p.accountID)
+	last := e.scan(`SELECT tenant_id::text FROM ten_memberships
+WHERE account_id = $1::uuid AND last_selected_at IS NOT NULL ORDER BY last_selected_at DESC, id LIMIT 1`, p.accountID)
 	if last != target {
-		t.Errorf("last_active_tenant_id = %s, want %s", last, target)
+		t.Errorf("last selected tenant = %s, want %s", last, target)
 	}
 	if cache := rec.Header().Get("Cache-Control"); cache != "no-store" {
 		t.Errorf("Cache-Control = %q", cache)
@@ -635,8 +636,8 @@ func TestSwitchCheckAccessOrder(t *testing.T) {
 					t.Errorf("cookie %s changed on a refused switch", name)
 				}
 			}
-			last := e.scanNullable("SELECT last_active_tenant_id::text FROM iam_accounts WHERE id = $1::uuid", p.accountID)
-			if last == target {
+			remembered := e.scan("SELECT count(*)::text FROM ten_memberships WHERE account_id = $1::uuid AND tenant_id = $2::uuid AND last_selected_at IS NOT NULL", p.accountID, target)
+			if remembered != "0" {
 				t.Error("a refused switch must not record the tenant as last active")
 			}
 			if claims := c.claims(); claims.TenantID == nil || *claims.TenantID != home {
@@ -858,8 +859,8 @@ func TestSwitchSetsNoCookieWhenTheLastActiveWriteFails(t *testing.T) {
 	e.member(target, p.accountID, "member", "active", e.clock.Now())
 	e.exec(`CREATE FUNCTION it_reject_last_active() RETURNS trigger AS $$
 		BEGIN RAISE EXCEPTION 'last active write rejected'; END; $$ LANGUAGE plpgsql`)
-	e.exec(`CREATE TRIGGER it_reject_last_active BEFORE UPDATE OF last_active_tenant_id
-		ON iam_accounts FOR EACH ROW EXECUTE FUNCTION it_reject_last_active()`)
+	e.exec(`CREATE TRIGGER it_reject_last_active BEFORE UPDATE OF last_selected_at
+		ON ten_memberships FOR EACH ROW EXECUTE FUNCTION it_reject_last_active()`)
 
 	rec := c.switchTo(target)
 

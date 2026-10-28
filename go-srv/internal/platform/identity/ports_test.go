@@ -93,22 +93,100 @@ func TestSelectUnknownOrMemberlessAccountIsNil(t *testing.T) {
 	}
 }
 
-func TestRememberStampsUpdatedAtFromTheClock(t *testing.T) {
+func TestRememberStampsLastSelectedAtAndUpdatedAtFromTheClock(t *testing.T) {
 	env := newAccessEnv(t)
 	later := accessNow.Add(time.Hour)
 	ta := identity.NewTenantAccess(env.pool, clock.Fixed(later))
 	account := env.account()
 	tenantID := env.tenant("acme", "active")
+	env.member(tenantID, account.ID, "member", "active", accessNow)
 
 	err := ta.Remember(context.Background(), accountID(account.ID), reqctx.TenantID(tenantID))
 
 	if err != nil {
 		t.Fatalf("remember: %v", err)
 	}
-	updatedAt := env.scanString("SELECT updated_at::text FROM iam_accounts WHERE id = $1::uuid", account.ID)
 	want := env.scanString("SELECT $1::timestamptz::text", later)
-	if updatedAt != want {
-		t.Fatalf("updated_at = %s, want %s", updatedAt, want)
+	for _, column := range []string{"updated_at", "last_selected_at"} {
+		got := env.scanString("SELECT "+column+"::text FROM ten_memberships WHERE account_id = $1::uuid", account.ID)
+		if got != want {
+			t.Fatalf("%s = %s, want %s", column, got, want)
+		}
+	}
+}
+
+func TestRememberWithoutAMembershipIsAnOperationalError(t *testing.T) {
+	env := newAccessEnv(t)
+	ta := identity.NewTenantAccess(env.pool, clock.Fixed(accessNow))
+	account := env.account()
+	tenantID := env.tenant("acme", "active")
+
+	err := ta.Remember(context.Background(), accountID(account.ID), reqctx.TenantID(tenantID))
+
+	var apiErr *api.Error
+	if err == nil || errors.As(err, &apiErr) {
+		t.Fatalf("err = %v, want a non-API operational error", err)
+	}
+}
+
+func TestSelectFollowsTheLatestRememberedTenant(t *testing.T) {
+	env := newAccessEnv(t)
+	ctx := context.Background()
+	account := env.account()
+	first := env.tenant("tenant-a", "active")
+	second := env.tenant("tenant-b", "active")
+	env.member(first, account.ID, "member", "active", accessNow)
+	env.member(second, account.ID, "member", "active", accessNow.Add(time.Minute))
+	steps := []struct {
+		remember string
+		at       time.Time
+	}{{second, accessNow.Add(time.Hour)}, {first, accessNow.Add(2 * time.Hour)}, {second, accessNow.Add(3 * time.Hour)}}
+	for _, step := range steps {
+		ta := identity.NewTenantAccess(env.pool, clock.Fixed(step.at))
+		err := ta.Remember(ctx, accountID(account.ID), reqctx.TenantID(step.remember))
+		if err != nil {
+			t.Fatalf("remember: %v", err)
+		}
+
+		got, err := ta.Select(ctx, accountID(account.ID))
+
+		if err != nil || got == nil || string(got.Tenant.ID) != step.remember {
+			t.Fatalf("after remembering %s: got %+v err=%v", step.remember, got, err)
+		}
+	}
+}
+
+func TestSelectSkipsARememberedTenantTheAccountCannotEnter(t *testing.T) {
+	cases := map[string]func(env *accessEnv, tenantID, accountID string){
+		"suspended tenant": func(env *accessEnv, tenantID, _ string) {
+			env.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", tenantID)
+		},
+		"revoked membership": func(env *accessEnv, tenantID, accountID string) {
+			env.exec("UPDATE ten_memberships SET status = 'revoked' WHERE tenant_id = $1::uuid AND account_id = $2::uuid", tenantID, accountID)
+		},
+	}
+	for name, degrade := range cases {
+		t.Run(name, func(t *testing.T) {
+			env := newAccessEnv(t)
+			ctx := context.Background()
+			ta := identity.NewTenantAccess(env.pool, clock.Fixed(accessNow))
+			account := env.account()
+			remembered := env.tenant("tenant-a", "active")
+			fallback := env.tenant("tenant-b", "active")
+			env.member(remembered, account.ID, "member", "active", accessNow.Add(time.Minute))
+			env.member(fallback, account.ID, "viewer", "active", accessNow)
+			err := ta.Remember(ctx, accountID(account.ID), reqctx.TenantID(remembered))
+			if err != nil {
+				t.Fatalf("remember: %v", err)
+			}
+			degrade(env, remembered, account.ID)
+
+			got, err := ta.Select(ctx, accountID(account.ID))
+
+			if err != nil || got == nil || string(got.Tenant.ID) != fallback {
+				t.Fatalf("got %+v err=%v, want the fallback tenant and no rejection", got, err)
+			}
+		})
 	}
 }
 

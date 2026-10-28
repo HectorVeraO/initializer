@@ -357,9 +357,9 @@ func TestListMembershipsShowsActiveAndSuspendedMembersOfTheActiveTenantOnly(t *t
 	if page.TotalItems != 2 || len(page.Items) != 2 {
 		t.Fatalf("page = %+v", page)
 	}
-	first, second := page.Items[0], page.Items[1]
+	second, first := page.Items[0], page.Items[1]
 	if first.Account.Email != "bob@example.com" || second.Account.Email != "carol@example.com" {
-		t.Fatalf("order = %s, %s", first.Account.Email, second.Account.Email)
+		t.Fatalf("order = %s, %s, want the oldest membership first", page.Items[0].Account.Email, page.Items[1].Account.Email)
 	}
 	wantTenant := tenantSummary{ID: tenant, Slug: "tenant-a", Name: "tenant-a", Status: "active"}
 	if second.Tenant != wantTenant || second.Role != "admin" || second.Status != "active" {
@@ -398,16 +398,15 @@ func TestListMembershipsFiltersSortsAndPages(t *testing.T) {
 		want  string
 		total int64
 	}{
-		{"", "a@example.com,c@example.com,d@example.com", 3},
-		{"?sort=-email", "d@example.com,c@example.com,a@example.com", 3},
+		{"", "c@example.com,a@example.com,d@example.com", 3},
 		{"?sort=createdAt", "c@example.com,a@example.com,d@example.com", 3},
 		{"?sort=-createdAt", "d@example.com,a@example.com,c@example.com", 3},
 		{"?status=revoked", "b@example.com", 1},
-		{"?status=active", "a@example.com,c@example.com", 2},
+		{"?status=active", "c@example.com,a@example.com", 2},
 		{"?status=suspended&role=viewer", "d@example.com", 1},
 		{"?role=viewer", "a@example.com,d@example.com", 2},
 		{"?role=admin&status=revoked", "", 0},
-		{"?size=1&page=2", "c@example.com", 3},
+		{"?size=1&page=2", "a@example.com", 3},
 		{"?size=2&page=2", "d@example.com", 3},
 	}
 	for _, tc := range cases {
@@ -440,6 +439,8 @@ func TestListMembershipsValidatesTheQuery(t *testing.T) {
 		{"page=x", []wantIssue{{"page", "FIELD_TYPE_INVALID"}}},
 		{"sort=unknown", []wantIssue{{"sort", "FIELD_NOT_ALLOWED"}}},
 		{"sort=slug", []wantIssue{{"sort", "FIELD_NOT_ALLOWED"}}},
+		{"sort=email", []wantIssue{{"sort", "FIELD_NOT_ALLOWED"}}},
+		{"sort=-email", []wantIssue{{"sort", "FIELD_NOT_ALLOWED"}}},
 		{"status=pending", []wantIssue{{"status", "FIELD_NOT_ALLOWED"}}},
 		{"role=owner", []wantIssue{{"role", "FIELD_NOT_ALLOWED"}}},
 		{"status=pending&role=owner&page=0&sort=x", []wantIssue{

@@ -334,20 +334,16 @@ func TestTenantAccessRemember(t *testing.T) {
 	ta := newTenantAccess(e.pool, e.clock)
 	tenant := e.tenant("tenant-a")
 	account := e.account("member@example.com")
+	older := e.tenant("tenant-older")
+	olderMembership := e.member(older.ID, account.ID, "member", statusActive)
 	e.member(tenant.ID, account.ID, "member", statusActive)
+	// The fallback picks the oldest membership, so Select returning tenant-a proves Remember ran.
+	e.exec("UPDATE ten_memberships SET created_at = created_at - interval '1 day' WHERE id = $1::uuid", olderMembership.ID)
 
 	err := ta.Remember(ctx, reqctx.AccountID(account.ID), reqctx.TenantID(tenant.ID))
 
 	if err != nil {
 		t.Fatalf("remember: %v", err)
-	}
-	var remembered string
-	err = e.pool.QueryRow(ctx, "SELECT last_active_tenant_id::text FROM iam_accounts WHERE id = $1::uuid", account.ID).Scan(&remembered)
-	if err != nil {
-		t.Fatalf("read last active tenant: %v", err)
-	}
-	if remembered != tenant.ID {
-		t.Fatalf("last active tenant = %q, want %q", remembered, tenant.ID)
 	}
 	grant, err := ta.Select(ctx, reqctx.AccountID(account.ID))
 	if err != nil || grant == nil || string(grant.Tenant.ID) != tenant.ID {
