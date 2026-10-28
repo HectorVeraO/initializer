@@ -54,6 +54,8 @@ type fakeKratos struct {
 	hideFirstFind bool
 	// nextID, when set, is the id the next create assigns.
 	nextID string
+	// failDelete makes every identity delete answer 500.
+	failDelete bool
 }
 
 func newFakeKratos(t testing.TB) *fakeKratos {
@@ -78,6 +80,10 @@ func (f *fakeKratos) serve(w http.ResponseWriter, r *http.Request) {
 	})
 	if f.rejectStatus != 0 && r.Method == http.MethodPost {
 		w.WriteHeader(f.rejectStatus)
+		return
+	}
+	if f.failDelete && r.Method == http.MethodDelete {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if f.failures > 0 {

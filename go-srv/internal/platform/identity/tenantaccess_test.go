@@ -181,6 +181,21 @@ func TestAccountProvision(t *testing.T) {
 		}
 	})
 
+	t.Run("account insert conflict with a failed identity delete is operational", func(t *testing.T) {
+		e := newTenEnv(t)
+		dir := newProvisioner(t, e)
+		taken := e.account("taken@example.com")
+		e.kratos.nextID = taken.KratosIdentityID
+		e.kratos.failDelete = true
+
+		_, err := dir.Provision(ctx, accounts.NewAccount{Email: janeEmail, Password: randomPassword(t), FullName: "Jane Doe"})
+
+		var apiErr *api.Error
+		if err == nil || errors.As(err, &apiErr) {
+			t.Fatalf("err = %v, want an operational error, not an API rejection", err)
+		}
+	})
+
 	t.Run("rejected password is a 422 password issue", func(t *testing.T) {
 		e := newTenEnv(t)
 		dir := newProvisioner(t, e)
