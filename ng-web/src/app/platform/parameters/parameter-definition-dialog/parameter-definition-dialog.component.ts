@@ -13,7 +13,7 @@ import { errorMessage } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
 import { jsonText, parseJsonText } from '../json-value';
-import { PLATFORM_PARAMETERS_I18N } from '../module';
+import { PLATFORM_PARAMETERS_I18N } from '../i18n/scope';
 import { ParametersApi } from '../parameters-api.service';
 import type { ParameterReplace, ParameterValueType, ParameterView } from '../parameters.types';
 

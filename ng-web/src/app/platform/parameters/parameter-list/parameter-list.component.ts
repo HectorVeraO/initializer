@@ -12,7 +12,7 @@ import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 import { InlineConfirmComponent, SessionStore } from '@/platform/core';
 import { displayValue, jsonText } from '../json-value';
-import { PLATFORM_PARAMETERS_I18N } from '../module';
+import { PLATFORM_PARAMETERS_I18N } from '../i18n/scope';
 import { ParameterDefinitionDialog } from '../parameter-definition-dialog/parameter-definition-dialog.component';
 import { ParameterOverrideDialog } from '../parameter-override-dialog/parameter-override-dialog.component';
 import { ParametersApi } from '../parameters-api.service';

@@ -3,14 +3,15 @@ import { RouterLink } from '@angular/router';
 import { TranslocoModule, provideTranslocoScope } from '@jsverse/transloco';
 import { ButtonModule } from '@openng/optimus-ui/button';
 import { PLATFORM_MODULES } from '../composition/web-module';
-import { PLATFORM_CORE_I18N } from '../module';
+import { IDENTITY_I18N } from '../i18n/identity/scope';
+import { TENANCY_I18N } from '../i18n/tenancy/scope';
 import { SessionStore } from '../session/session-store.service';
 
 /** Shown to an authenticated person without an active tenant. */
 @Component({
   selector: 'app-no-tenant-page',
   imports: [RouterLink, ButtonModule, TranslocoModule],
-  providers: [provideTranslocoScope(PLATFORM_CORE_I18N)],
+  providers: [provideTranslocoScope(TENANCY_I18N, IDENTITY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './no-tenant-page.component.html'
 })

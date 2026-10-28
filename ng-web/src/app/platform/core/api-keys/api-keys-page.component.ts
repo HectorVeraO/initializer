@@ -15,7 +15,7 @@ import { SantiagoDatePipe } from '@/core/format/santiago-date.pipe';
 import { FormSectionComponent } from '@/core/ui/form-section/form-section.component';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
-import { PLATFORM_CORE_I18N } from '../module';
+import { API_KEYS_I18N } from '../i18n/api-keys/scope';
 import { SessionStore } from '../session/session-store.service';
 import { InlineConfirmComponent } from '../ui/inline-confirm.component';
 import { fieldIssueMessages, unmatchedIssueMessages } from '../ui/issue-message';
@@ -23,7 +23,7 @@ import { OneTimeSecretDialogComponent } from '../ui/one-time-secret-dialog.compo
 import { ApiKeysApi } from './api-keys-api.service';
 import type { ApiKeyScope, ApiKeyView } from './api-keys-api.service';
 
-const SCOPE_ALIAS = PLATFORM_CORE_I18N.alias as string;
+const SCOPE_ALIAS = API_KEYS_I18N.alias as string;
 
 const FORM_FIELDS: readonly string[] = ['name', 'scopes', 'expiresAt'];
 
@@ -60,7 +60,7 @@ export function endOfDayUtc(day: Date): string {
     InlineConfirmComponent,
     OneTimeSecretDialogComponent
   ],
-  providers: [provideTranslocoScope(PLATFORM_CORE_I18N)],
+  providers: [provideTranslocoScope(API_KEYS_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './api-keys-page.component.html'
 })
@@ -205,7 +205,7 @@ export class ApiKeysPage {
 
     const isGone = failure.status() === 404;
 
-    const summary = isGone ? this.transloco.translate('core.errors.rowGone') : errorMessage(this.transloco, error);
+    const summary = isGone ? this.transloco.translate('apiKeys.errors.rowGone') : errorMessage(this.transloco, error);
 
     this.messages.add({ severity: 'warn', summary });
   }

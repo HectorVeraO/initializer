@@ -1,0 +1,27 @@
+{
+  "errors": {
+    "rowGone": "Ese elemento ya no existe o cambió. Se actualizó la lista."
+  },
+  "title": "Claves de API",
+  "createTitle": "Crear clave de API",
+  "name": "Nombre",
+  "expiresAt": "Vence el (opcional)",
+  "scopes": "Permisos",
+  "noScopes": "No hay permisos disponibles para otorgar.",
+  "scopesLoadFailed": "No se pudieron cargar los permisos.",
+  "scopesRetry": "Reintentar",
+  "submit": "Crear clave de API",
+  "section": "las claves de API",
+  "empty": "No hay claves de API.",
+  "prefix": "Prefijo",
+  "expires": "Vence",
+  "status": "Estado",
+  "revoke": "Revocar",
+  "secretTitle": "Nueva clave de API",
+  "truncated": "Mostrando las primeras {{shown}} de {{total}}",
+  "statuses": {
+    "active": "Activa",
+    "expired": "Vencida",
+    "revoked": "Revocada"
+  }
+}

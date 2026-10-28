@@ -2,11 +2,11 @@
   <div class="flex items-center gap-3">
     <span class="text-sm" data-testid="session-account-email">{{ account.email }}</span>
     @if (account.isPlatformOperator) {
-      <span class="text-xs font-semibold px-2 py-1 rounded bg-primary text-primary-contrast" data-testid="session-operator">{{ 'core.shell.operator' | transloco }}</span>
+      <span class="text-xs font-semibold px-2 py-1 rounded bg-primary text-primary-contrast" data-testid="session-operator">{{ 'identity.shell.operator' | transloco }}</span>
     }
     @if (account.role) {
-      <span class="text-xs font-semibold px-2 py-1 rounded bg-surface-200 dark:bg-surface-700" data-testid="session-role" [attr.data-value]="account.role">{{ 'core.shell.roles.' + account.role | transloco }}</span>
+      <span class="text-xs font-semibold px-2 py-1 rounded bg-surface-200 dark:bg-surface-700" data-testid="session-role" [attr.data-value]="account.role">{{ 'identity.shell.roles.' + account.role | transloco }}</span>
     }
-    <button pButton type="button" severity="secondary" size="small" data-testid="sign-out" (click)="signOut()">{{ 'core.shell.signOut' | transloco }}</button>
+    <button pButton type="button" severity="secondary" size="small" data-testid="sign-out" (click)="signOut()">{{ 'identity.shell.signOut' | transloco }}</button>
   </div>
 }

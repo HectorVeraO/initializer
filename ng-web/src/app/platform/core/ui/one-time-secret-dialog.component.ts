@@ -3,7 +3,7 @@ import { TranslocoModule, provideTranslocoScope } from '@jsverse/transloco';
 import { ButtonModule } from '@openng/optimus-ui/button';
 import { DialogModule } from '@openng/optimus-ui/dialog';
 import { InputTextModule } from '@openng/optimus-ui/inputtext';
-import { PLATFORM_CORE_I18N } from '../module';
+import { PLATFORM_CORE_I18N } from '../i18n/scope';
 
 /**
  * Shows a secret once (API key, invitation link) in a modal dialog that a click on the mask does not close.
@@ -17,7 +17,7 @@ import { PLATFORM_CORE_I18N } from '../module';
   templateUrl: './one-time-secret-dialog.component.html'
 })
 export class OneTimeSecretDialogComponent {
-  /** Full translation key of the dialog title, such as `core.invitations.linkTitle`. */
+  /** Full translation key of the dialog title, such as `tenancy.invitations.linkTitle`. */
   readonly titleKey = input.required<string>();
   /** The secret to show; null hides the dialog. */
   readonly secret = input.required<string | null>();
