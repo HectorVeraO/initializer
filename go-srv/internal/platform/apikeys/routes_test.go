@@ -376,12 +376,16 @@ func TestListAPIKeyScopesIsOrderedByNameAndCarriesTheLevel(t *testing.T) {
 		if scope.Description == "" {
 			t.Fatalf("scope %q has no description", scope.Name)
 		}
-		if scope.Level != "tenant" {
-			t.Fatalf("scope %q has level %q, want tenant", scope.Name, scope.Level)
+		wantLevel := "tenant"
+		if scope.Name == whoamiScope {
+			wantLevel = "any"
+		}
+		if scope.Level != wantLevel {
+			t.Fatalf("scope %q has level %q, want %s", scope.Name, scope.Level, wantLevel)
 		}
 		names = append(names, scope.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"api-keys:read", "tenant:read"}) {
+	if !reflect.DeepEqual(names, []string{"api-keys:read", whoamiScope, "tenant:read"}) {
 		t.Fatalf("scopes = %v", names)
 	}
 }

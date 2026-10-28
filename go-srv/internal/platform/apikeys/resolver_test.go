@@ -1,9 +1,7 @@
 package apikeys
 
 import (
-	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -12,7 +10,6 @@ import (
 	"time"
 
 	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 )
 
@@ -146,96 +143,72 @@ func TestAPIKeyTenantRefIsCheckedAgainstTheKeysTenant(t *testing.T) {
 	expectError(t, e.withKey("/api/v1/tenant?tenantId=tenant-b", key), http.StatusForbidden, "TENANT_MISMATCH")
 }
 
-// resolverFixture is the resolver over a real database with a directory fake.
-type resolverFixture struct {
-	resolver  *apiKeyResolver
-	directory *tenantDir
-	e         *env
-	logs      *logSink
-}
-
-func newResolverFixture(t *testing.T) *resolverFixture {
-	t.Helper()
-	e := newEnv(t)
-	scopes := coreaccess.NewScopeRegistry()
-	for _, name := range []string{"tenant:read", "api-keys:read"} {
-		err := scopes.Register(name, "synthetic", coreaccess.ScopeTenant)
-		if err != nil {
-			t.Fatalf("register %s: %v", name, err)
-		}
-	}
-	logs := &logSink{}
-	logger := slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	resolver := newAPIKeyResolver(e.pool, e.clock, scopes, logger)
-	resolver.tenants = e.tenants
-	return &resolverFixture{resolver: resolver, directory: e.tenants, e: e, logs: logs}
-}
-
-func keyRequest(key string) *http.Request {
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/api-keys", nil)
-	req.Header.Set(apiKeyHeader, key)
-	return req
+// whoami is the principal a key resolved to, as the probe route echoes it.
+type whoami struct {
+	Kind               string   `json:"kind"`
+	ActorID            string   `json:"actorId"`
+	TenantID           string   `json:"tenantId"`
+	TenantSlug         string   `json:"tenantSlug"`
+	AccountID          string   `json:"accountId"`
+	Role               string   `json:"role"`
+	IsPlatformOperator bool     `json:"isPlatformOperator"`
+	Scopes             []string `json:"scopes"`
 }
 
 func TestResolverGivesAKeyWithoutATenantAPrincipalWithoutOne(t *testing.T) {
-	f := newResolverFixture(t)
-	key := f.e.apiKey("", []string{"tenant:read", "removed:scope"}, nil)
+	e := newEnv(t)
+	key := e.apiKey("", []string{whoamiScope, "tenant:read", "removed:scope"}, nil)
 	prefix, _, _ := splitAPIKey(key)
 
-	principal, err := f.resolver.Resolve(context.Background(), keyRequest(key))
+	rec := e.withKey(whoamiPath, key)
 
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("whoami answered %d: %s", rec.Code, rec.Body.String())
 	}
-	if principal.Kind != reqctx.ActorAPIKey || principal.ActorID != "apikey:"+prefix ||
-		principal.TenantID != nil || principal.TenantSlug != "" || principal.AccountID != "" ||
-		principal.Role != "" || principal.IsPlatformOperator ||
-		!reflect.DeepEqual(principal.Scopes, []string{"tenant:read"}) {
-		t.Fatalf("principal = %+v", principal)
+	principal := decodeData[whoami](t, rec)
+	want := whoami{Kind: string(reqctx.ActorAPIKey), ActorID: "apikey:" + prefix, Scopes: []string{whoamiScope, "tenant:read"}}
+	if !reflect.DeepEqual(principal, want) {
+		t.Fatalf("principal = %+v, want %+v", principal, want)
 	}
 }
 
 func TestResolverReadsTheTenantOfAKeyThroughTheDirectory(t *testing.T) {
-	f := newResolverFixture(t)
-	tenantID := f.e.tenant("acme", "active")
-	key := f.e.apiKey(tenantID, []string{"tenant:read"}, nil)
+	e := newEnv(t)
+	tenantID := e.tenant("acme", "active")
+	key := e.apiKey(tenantID, []string{whoamiScope}, nil)
 
-	principal, err := f.resolver.Resolve(context.Background(), keyRequest(key))
+	rec := e.withKey(whoamiPath, key)
 
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("whoami answered %d: %s", rec.Code, rec.Body.String())
 	}
-	if principal.TenantID == nil || string(*principal.TenantID) != tenantID || principal.TenantSlug != "acme" ||
-		!reflect.DeepEqual(principal.Scopes, []string{"tenant:read"}) {
+	principal := decodeData[whoami](t, rec)
+	if principal.TenantID != tenantID || principal.TenantSlug != "acme" || !reflect.DeepEqual(principal.Scopes, []string{whoamiScope}) {
 		t.Fatalf("principal = %+v", principal)
 	}
 }
 
 func TestResolverAnswersTheSame401ForAnUnknownTenantAndASuspendedOneOnlyAfterTheSecret(t *testing.T) {
-	f := newResolverFixture(t)
-	suspended := f.e.tenant("gone", "suspended")
-	unknownTenantKey := f.e.apiKey(randomUUID(t), []string{"tenant:read"}, nil)
-	suspendedKey := f.e.apiKey(suspended, []string{"tenant:read"}, nil)
+	e := newEnv(t)
+	suspended := e.tenant("gone", "suspended")
+	unknownTenantKey := e.apiKey(randomUUID(t), []string{whoamiScope}, nil)
+	suspendedKey := e.apiKey(suspended, []string{whoamiScope}, nil)
 	other, _ := newAPIKey()
 	_, wrongSecret, _ := splitAPIKey(other)
 	suspendedPrefix, _, _ := splitAPIKey(suspendedKey)
 	suspendedWrongSecret := suspendedPrefix + "_" + wrongSecret
 
-	_, unknownErr := f.resolver.Resolve(context.Background(), keyRequest(unknownTenantKey))
-	_, suspendedErr := f.resolver.Resolve(context.Background(), keyRequest(suspendedKey))
-	_, wrongSecretErr := f.resolver.Resolve(context.Background(), keyRequest(suspendedWrongSecret))
+	unknownRec := e.withKey(whoamiPath, unknownTenantKey)
+	suspendedRec := e.withKey(whoamiPath, suspendedKey)
+	wrongSecretRec := e.withKey(whoamiPath, suspendedWrongSecret)
 
-	var unknown, suspendedAPI, wrong *api.Error
-	if !errors.As(unknownErr, &unknown) || unknown.Status != http.StatusUnauthorized || unknown.Code != api.CodeAPIKeyInvalidOrRevoked {
-		t.Fatalf("unknown tenant: %v", unknownErr)
+	expectError(t, unknownRec, http.StatusUnauthorized, "API_KEY_INVALID_OR_REVOKED")
+	expectError(t, suspendedRec, http.StatusForbidden, "TENANT_SUSPENDED")
+	expectError(t, wrongSecretRec, http.StatusUnauthorized, "API_KEY_INVALID_OR_REVOKED")
+	if errorJSON(t, wrongSecretRec) != errorJSON(t, unknownRec) {
+		t.Fatalf("wrong secret error = %s, want %s", errorJSON(t, wrongSecretRec), errorJSON(t, unknownRec))
 	}
-	if !errors.As(suspendedErr, &suspendedAPI) || suspendedAPI.Status != http.StatusForbidden || suspendedAPI.Code != api.CodeTenantSuspended {
-		t.Fatalf("suspended tenant: %v", suspendedErr)
-	}
-	if !errors.As(wrongSecretErr, &wrong) || wrong.Status != http.StatusUnauthorized || wrong.Code != api.CodeAPIKeyInvalidOrRevoked || wrong.Message != unknown.Message {
-		t.Fatalf("wrong secret of a suspended tenant's key: %v", wrongSecretErr)
-	}
-	logged := f.logs.String()
+	logged := e.logs.String()
 	if !strings.Contains(logged, `"reason":"tenant_unknown"`) || !strings.Contains(logged, `"reason":"tenant_suspended"`) {
 		t.Fatalf("rejection reasons are not logged: %s", logged)
 	}
@@ -245,16 +218,14 @@ func TestResolverAnswersTheSame401ForAnUnknownTenantAndASuspendedOneOnlyAfterThe
 }
 
 func TestResolverFailsOperationallyWhenTheDirectoryFails(t *testing.T) {
-	f := newResolverFixture(t)
-	tenantID := f.e.tenant("acme", "active")
-	key := f.e.apiKey(tenantID, []string{"tenant:read"}, nil)
+	e := newEnv(t)
+	tenantID := e.tenant("acme", "active")
+	key := e.apiKey(tenantID, []string{whoamiScope}, nil)
 
-	f.directory.fail(errors.New("directory down"))
-	_, err := f.resolver.Resolve(context.Background(), keyRequest(key))
-	var apiErr *api.Error
-	if err == nil || errors.As(err, &apiErr) {
-		t.Fatalf("a failing directory must be operational, got %v", err)
-	}
+	e.tenants.fail(errors.New("directory down"))
+	rec := e.withKey(whoamiPath, key)
+
+	expectError(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR")
 }
 
 func TestWithoutTenancyAGlobalKeyResolvesAndATenantKeyIsRejected(t *testing.T) {

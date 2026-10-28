@@ -35,6 +35,8 @@ const (
 	csrfValue   = "ok"
 	sessionName = "app_session"
 	publicBase  = "http://localhost:10120"
+	whoamiPath  = "/api/v1/whoami"
+	whoamiScope = "probe:whoami"
 )
 
 // randomUUID returns a random version 4 UUID in canonical text.
@@ -212,7 +214,11 @@ func probeModule() core.Module {
 	return core.Module{
 		ID: "key-probe",
 		Provide: func(_ context.Context, b *core.Builder) error {
-			return b.Scopes().Register("tenant:read", "Read the key's own tenant", coreaccess.ScopeTenant)
+			err := b.Scopes().Register("tenant:read", "Read the key's own tenant", coreaccess.ScopeTenant)
+			if err != nil {
+				return err
+			}
+			return b.Scopes().Register(whoamiScope, "Read the key's own principal", coreaccess.ScopeAny)
 		},
 		Mount: func(_ context.Context, h *core.Host) error {
 			tenantRoute := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +233,19 @@ func probeModule() core.Module {
 			probe := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				h.API().Data(w, r, http.StatusOK, map[string]any{"ok": true})
 			})
+			whoami := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				principal, _ := reqctx.PrincipalFrom(r.Context())
+				body := map[string]any{
+					"kind": principal.Kind, "actorId": principal.ActorID, "tenantSlug": principal.TenantSlug,
+					"accountId": principal.AccountID, "role": principal.Role,
+					"isPlatformOperator": principal.IsPlatformOperator, "scopes": principal.Scopes,
+				}
+				if principal.TenantID != nil {
+					body["tenantId"] = string(*principal.TenantID)
+				}
+				h.API().Data(w, r, http.StatusOK, body)
+			})
+			h.Handle("GET "+whoamiPath, coreaccess.Policy{Kind: coreaccess.KindAPIKey, Scope: whoamiScope}, whoami)
 			h.Handle("GET /api/v1/tenant",
 				coreaccess.Policy{Kind: coreaccess.KindSessionOrAPIKey, Scope: "tenant:read", MinRole: reqctx.RoleViewer}, tenantRoute)
 			h.Handle("GET /api/v1/probe", coreaccess.Policy{Kind: coreaccess.KindSession}, probe)
