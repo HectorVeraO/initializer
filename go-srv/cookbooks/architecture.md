@@ -8,13 +8,13 @@ Read before adding or changing a module, route, handler or error response. Canon
 |---|---|
 | `cmd/server/main.go` | Fixed: `os.Exit(core.Main(installedModules()))`. `cmd/server/modules.go` is generated and lists the installed modules. No business logic. |
 | `internal/platform/core/` | The always-installed foundation: module seam (`Module`, `Builder`, `Host`, `Build`, `Run`), request chain, `api`, `access`, `reqctx`, `featureflag`, `config`, `telemetry`, `db`, `migrate`, `health`, `clock`, `coretest`. |
-| `internal/platform/<module>/` | One package tree per catalog module (`identity`, `parameters`, `featureflags`). |
+| `internal/platform/<module>/` | One package tree per catalog module (`identity`, `tenancy`, `apikeys`, `parameters`, `featureflags`). |
 | `specs/<module>/openapi.yaml` (repo root) | The module's HTTP contract. The Go code implements it; it never defines it. |
 
-- Import rules, enforced by `internal/platform/core/boundary_test.go`: a package under `core/` imports no other `internal/platform/<x>`; a module imports from this Go module only `core/...` and its own subtree; `cmd/server` imports only `core` and the module root packages named in `modules.go`; core subpackages never import the `core` root (`core/coretest` is the one exception); the Go module path appears only in `go.mod` and import specs, in an import group of its own.
-- Ports (session resolver, API key resolver, tenant directory, flag evaluator) are declared in core only; a module publishes one with `Builder.Provide*` in `Provide`, once, and reads it from `Host` in `Mount`.
+- Import rules, enforced by `internal/platform/core/boundary_test.go`: a package under `core/` imports no other `internal/platform/<x>`; a module imports from this Go module only `core/...` and its own subtree; `cmd/server` imports only `core` and the module root packages named in `modules.go`; core subpackages never import the `core` root (`core/coretest` is the one exception); the Go module path appears only in `go.mod` and import specs, in an import group of its own; no Go file of a module names a table whose prefix another module claims (rule 6).
+- Ports are declared in core only: `access.SessionResolver`, `access.APIKeyResolver`, `access.TenantAccess`, `access.TenantDirectory`, `accounts.Directory`, `accounts.Provisioner`, `featureflag.Evaluator`. A module publishes one with `Builder.Provide*` in `Provide`, once, and reads it from `Host` in `Mount`, `Start` or a handler. Each has a fail-closed default (`access.NoTenantAccess`, `accounts.NoDirectory`, `featureflag.Disabled{}`, ...); a module never branches on which other modules are installed. Full list: `.claude/references/architecture.md` -> "Modules and core ports".
 - One module owns its routes, its handlers, its persistence prefix and its tests. Nothing outside the module reads its tables.
-- Modules talk to each other through exported Go functions or interfaces of the other module's package, never through its tables.
+- Modules talk to each other only through core ports, never through another module's package or tables; a column that holds another module's id has no foreign key. Account data reaches tenancy through `accounts.Directory` and `accounts.Provisioner`; tenant data reaches identity and api-keys through `access.TenantAccess` and `access.TenantDirectory`.
 - Module paths are stable: the generator copies `internal/platform/<module>/` into generated projects at the same path, and each records its version in `initializer.lock.json` (copy-and-own). Do not move a module directory.
 - No package-level mutable state. Dependencies (logger, pool, clock, config) arrive as constructor parameters.
 - No reserved empty interfaces for modules that do not exist yet.
@@ -56,6 +56,7 @@ Every /api/v1 response body is one JSON object:
 - The active tenant comes from the request context, resolved from the stateless session token or from the API key. Handlers never read a tenant id from the body to decide access.
 - Every lookup by `:id` filters by the active tenant. A resource of another tenant answers `404`, never `403`: the response must not reveal that it exists.
 - An optional `tenantId` in an M2M payload accepts the tenant UUID or slug and must match the API key's tenant, else `403 TENANT_MISMATCH`.
+- The tenancy `Start` hook stops the process when `APP_BOOTSTRAP_TENANT_SLUG` is set, no tenant exists and no account has `APP_BOOTSTRAP_ADMIN_EMAIL`. Without tenancy every principal and row is in the one global scope; with it, a NULL `tenant_id` (a global API key) is operator-only.
 
 ## Implementation checklist
 

@@ -228,11 +228,52 @@ Agent rules:
 - The active tenant is resolved from the stateless session token (human) or the API key (machine), never from a request body.
 - Every operation by `:id` filters by the active tenant and answers `404` for another tenant's resource, so the response never reveals that it exists.
 - An optional `tenantId` in an M2M payload accepts the tenant UUID or slug and must match the API key's tenant (`403 TENANT_MISMATCH`).
+- Without the tenancy module every principal and every row is in the one global scope. With tenancy, a row whose `tenant_id` is NULL (a global API key) is operator-only.
+
+### Modules and core ports
+
+Backend rules (R1-R6), the same in every selection:
+
+1. **Imports.** A module imports only core (`core/...`, never `core/internal`) and its own subtree (`go-srv/internal/platform/core/boundary_test.go` rule 2).
+2. **Cooperation only through core ports.** A module publishes a port with `Builder.Provide*` in `Provide` and reads it from `Host` in `Mount`, `Start` or a handler. A module never branches on which other modules are installed. The `No*` default answers "absent" and fails closed (no tenant, access denied, not found), never a panic.
+3. **No SQL crosses a module.** A module's SQL names only tables with its own prefixes (boundary test rule 6). Account data reaches tenancy only through `accounts.Directory` and `accounts.Provisioner`; tenant data reaches identity and api-keys only through `access.TenantAccess` and `access.TenantDirectory`.
+4. **No cross-module foreign key.** A column that holds another module's id is a plain `uuid` with no `REFERENCES`.
+5. **Spec paths never depend on the selection.** Every module mounts the same routes in every selection; the answers change.
+6. **Check order across the session port is pinned.** Identity raises `ACCOUNT_LOCKED_OR_DISABLED` before it calls `TenantAccess`; tenancy raises `TENANT_ACCESS_DENIED`, `TENANT_SUSPENDED`, `MEMBERSHIP_REVOKED` in that order.
+
+Hard edges, identical in both stacks: `tenancy -> identity`, `api-keys -> identity`, `parameters -> identity`, `feature-flags -> identity`. Identity requires nothing; `core` is implied. Table prefixes: `iam_` identity, `ten_` tenancy, `apk_` api-keys (`go-srv/cookbooks/data-migrations.md`).
+
+Go core ports (`go-srv/internal/platform/core/`):
+
+| Port | Methods | Default (fails closed) |
+|---|---|---|
+| `access.SessionResolver` | `Present`, `Resolve` | `access.NoSessions` |
+| `access.APIKeyResolver` | `Present`, `Resolve` | `access.NoAPIKeys` |
+| `access.TenantAccess` | `Select`, `Grant`, `Remember`, `Memberships` | `access.NoTenantAccess` |
+| `access.TenantDirectory` | `TenantExists`, `Tenant` | `access.NoTenants` |
+| `accounts.Directory` | `Get`, `ByEmail` | `accounts.NoDirectory` |
+| `accounts.Provisioner` | `Provision`, `GrantsOperator` | `accounts.NoProvisioner` |
+| `featureflag.Evaluator` | `Enabled`, `Snapshot` | `featureflag.Disabled{}` |
+
+`access.Policy.TenantlessOperator` lets a platform operator with no active tenant pass a `MinRole` route; a session with an active tenant is still held to `MinRole`, and an API key never passes it. Scope levels of an API key scope: `access.ScopeTenant` (only a tenant-bound key may hold it) and `access.ScopeAny`.
+
+The tenancy `Start` hook stops the process when `APP_BOOTSTRAP_TENANT_SLUG` is set, no tenant exists and no account has `APP_BOOTSTRAP_ADMIN_EMAIL`.
+
+Web shell (`ng-web/src/app/platform/`): `core` holds the shell contract and the ports; each module folder (`identity`, `tenancy`, `api-keys`, `parameters`, `feature-flags`) exports a `WebModule`; `modules.ts` is the only generated file. A module imports core only through `@/platform/core` and never another module (`ng-web/eslint.config.js`); it reaches another module only through a port. The `WebModule` fields and the topbar slots are in `ng-web/cookbooks/new-feature.md` -> "Platform modules".
+
+| Port (core barrel) | Provided by | Consumed by | Default |
+|---|---|---|---|
+| `ACCESS_PROVIDER` | identity (`SessionAccess`) | `requireAccess`, menu, topbar items, tenancy (switcher, no-tenant, accept, pages), api-keys page, parameters list | `OPEN_ACCESS` |
+| `FLAG_SOURCE` | identity (`SessionAccess`, reads `SessionView.flags`) | `flagGuard`, the `flag` clause | `NO_FLAGS` |
+| `TENANT_DIRECTORY` | tenancy (`TenantsApi`) | feature-flags flag-detail | `null` |
+| `TENANT_SELECTION` | tenancy (`TenancySelection`) | `requireAccess`, menu, identity's session interceptor (403 navigation) | `null` (single-tenant console) |
+
+At most one installed module binds a port, else `PLATFORM_DUPLICATE_PORT:<port>:<id>,<id>`.
 
 ### Copy-and-own and `initializer.lock.json`
 
 - A generated project owns the code the generator copied into it and may change it; this repository never ships empty interfaces reserved for modules that do not exist yet.
-- Module paths are stable: `go-srv/internal/platform/<module>/` (Go), `ng-web/src/app/platform/<module>/` (Angular), and the module's migrations `<timestamp>_<prefix>_<name>.sql`.
+- Module paths are stable: `go-srv/internal/platform/{core,identity,tenancy,apikeys,parameters,featureflags}/` (Go), `ng-web/src/app/platform/{core,identity,tenancy,api-keys,parameters,feature-flags}/` (Angular), and the module's migrations `<timestamp>_<prefix>_<name>.sql`.
 - A generated project records, per module, the base version it copied and the SHA-256 hash of every delivered file in `initializer.lock.json`. An agent upgrading a module compares the project against that file, keeps the local changes, and runs the module's TCK.
 
 ### Trace correlation
