@@ -278,28 +278,33 @@ test('loadManifests reads cooperatesWith and defaults it to an empty list', () =
   assert.deepEqual(core.cooperatesWith, []);
 });
 
-test('loadManifests rejects a non-array, malformed or own cooperatesWith tag with exit code 2', () => {
-  const cases = [
-    { cooperatesWith: '@beta', message: /cooperatesWith must be an array.*bad/ },
-    { cooperatesWith: ['Beta'], message: /invalid cooperatesWith tag "Beta".*bad/ },
-    { cooperatesWith: ['@bad'], message: /cooperatesWith tag @bad is one of the own tckTags of spec bad/ },
-  ];
-  for (const { cooperatesWith, message } of cases) {
-    const root = mkdtempSync(join(tmpdir(), 'tck-coop-'));
-    try {
-      mkdirSync(join(root, 'bad'));
-      writeFileSync(
-        join(root, 'bad', 'spec.manifest.json'),
-        JSON.stringify({ spec: 'bad', tckTags: ['@bad'], cooperatesWith }),
-      );
-      assert.throws(
-        () => loadManifests(root),
-        (error) => error instanceof TckError && error.exitCode === 2 && message.test(error.message),
-      );
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+function assertCooperatesWithRejected(cooperatesWith, message) {
+  const root = mkdtempSync(join(tmpdir(), 'tck-coop-'));
+  try {
+    mkdirSync(join(root, 'bad'));
+    writeFileSync(
+      join(root, 'bad', 'spec.manifest.json'),
+      JSON.stringify({ spec: 'bad', tckTags: ['@bad'], cooperatesWith }),
+    );
+    assert.throws(
+      () => loadManifests(root),
+      (error) => error instanceof TckError && error.exitCode === 2 && message.test(error.message),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
+}
+
+test('loadManifests rejects a non-array cooperatesWith with exit code 2', () => {
+  assertCooperatesWithRejected('@beta', /cooperatesWith must be an array.*bad/);
+});
+
+test('loadManifests rejects a malformed cooperatesWith tag with exit code 2', () => {
+  assertCooperatesWithRejected(['Beta'], /invalid cooperatesWith tag "Beta".*bad/);
+});
+
+test('loadManifests rejects a cooperatesWith tag that is an own tckTag with exit code 2', () => {
+  assertCooperatesWithRejected(['@bad'], /cooperatesWith tag @bad is one of the own tckTags of spec bad/);
 });
 
 test('collectInvertTags returns the uninstalled cooperating tags, sorted and unique', () => {
