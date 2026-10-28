@@ -7,6 +7,8 @@ export class ApiKeysPage {
   readonly submit: Locator;
   readonly owner: Locator;
   readonly scopesError: Locator;
+  readonly scopesEmpty: Locator;
+  readonly scopeBoxes: Locator;
   readonly rows: Locator;
   readonly secretDialog: Locator;
   readonly secretValue: Locator;
@@ -16,6 +18,8 @@ export class ApiKeysPage {
     this.submit = page.getByTestId('api-key-submit');
     this.owner = page.getByTestId('api-keys-owner');
     this.scopesError = page.getByTestId('api-key-scopes-error');
+    this.scopesEmpty = page.getByTestId('api-key-scopes-empty');
+    this.scopeBoxes = page.getByTestId('api-key-scope');
     this.rows = page.getByTestId('api-keys-row');
     this.secretDialog = page.getByTestId('one-time-secret-dialog');
     this.secretValue = page.getByTestId('one-time-secret-value');

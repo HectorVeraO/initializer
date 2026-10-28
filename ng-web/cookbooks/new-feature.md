@@ -30,6 +30,7 @@ The file map lives in `AGENTS.md` -> "File map for a new feature"; this fragment
 | `TENANT_DIRECTORY` | tenancy (`TenantsApi`) | feature-flags flag-detail | `null` |
 | `TENANT_SELECTION` | tenancy (`TenancySelection`) | `requireAccess`, menu, identity's session interceptor (403 navigation) | `null` (single-tenant console) |
 
+- **api-keys scope list**: without an active tenant (global keys) the key form offers only scopes of level `any`; with none, it shows the empty state and keeps the create button disabled.
 - **Topbar slots**: `context` items render before `account` items; within a slot, module order then array order. The wrapper test id is `topbar-<id>`; the component takes no required inputs and decides on its own whether to render.
 - **`AccessRequirement`**: `tenant?: 'required' | 'required-unless-operator'`, `roles?`, `platformOperator?: true`, `flag?`, `orTenantlessOperator?: true`. Clauses are checked in the order tenant, platformOperator, roles, flag; a null context fails every declared clause. This is navigation UX only: the backend enforces every rule.
 - **Single-tenant rule**: with no tenancy module (`TENANT_SELECTION` is `null`), `tenant: 'required-unless-operator'` is met. `required` and `roles` stay unmet for everyone except a tenantless operator on an `orTenantlessOperator` requirement, and an unmet tenant clause redirects to `/forbidden`, not to the no-tenant page.

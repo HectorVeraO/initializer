@@ -379,11 +379,36 @@ func TestStep7TenantAndRole(t *testing.T) {
 func TestStep7cScopes(t *testing.T) {
 	for name, scopes := range map[string][]string{"empty": {}, "nil": nil, "other": {"api-keys:read"}} {
 		t.Run(name, func(t *testing.T) {
-			key := reqctx.Principal{Kind: reqctx.ActorAPIKey, ActorID: "apikey:abc", Scopes: scopes}
+			key := reqctx.Principal{Kind: reqctx.ActorAPIKey, ActorID: "apikey:abc", TenantID: tenantPtr(tenantA), Scopes: scopes}
 			h := newHarness(t, &fakeSession{}, &fakeKey{present: true, principal: key})
 			h.expect(t, h.do(eitherPolicy, http.MethodGet, nil), 403, api.CodeInsufficientScope)
 		})
 	}
+}
+
+func TestStep7cTenantRequirementAnswersBeforeScope(t *testing.T) {
+	anyScopeKeyPolicy := access.Policy{Kind: access.KindAPIKey, Scope: "platform:read"}
+	cases := map[string]struct {
+		policy access.Policy
+		scopes []string
+		want   api.Code
+	}{
+		"global key lacking the scope on a tenant-scoped route": {eitherPolicy, []string{"platform:read"}, api.CodeActiveTenantRequired},
+		"global key with no scope on a tenant-scoped route":     {eitherPolicy, nil, api.CodeActiveTenantRequired},
+		"global key lacking the scope on a tenant-level scope":  {keyPolicy, []string{"platform:read"}, api.CodeActiveTenantRequired},
+		"global key lacking the scope on an any-level route":    {anyScopeKeyPolicy, []string{"tenant:read"}, api.CodeInsufficientScope},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, &fakeSession{}, tenantlessKey(c.scopes...))
+			h.expect(t, h.do(c.policy, http.MethodGet, nil), 403, c.want)
+		})
+	}
+}
+
+func TestStep3bResolutionFailureAnswersBeforeTheTenantRequirement(t *testing.T) {
+	h := newHarness(t, &fakeSession{}, &fakeKey{present: true, err: api.NewError(http.StatusUnauthorized, api.CodeAPIKeyInvalidOrRevoked, "revoked")})
+	h.expect(t, h.do(eitherPolicy, http.MethodGet, nil), 401, api.CodeAPIKeyInvalidOrRevoked)
 }
 
 func TestAPIKeySkipsRoleChecks(t *testing.T) {

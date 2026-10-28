@@ -75,7 +75,7 @@ export class ApiKeysPage {
     expiresAt: new FormControl<Date | null>(null)
   });
 
-  protected readonly availableScopes = signal<readonly ApiKeyScope[]>([]);
+  private readonly serverScopes = signal<readonly ApiKeyScope[]>([]);
   protected readonly selectedScopes = signal<readonly string[]>([]);
   protected readonly scopesFailed = signal(false);
 
@@ -97,7 +97,19 @@ export class ApiKeysPage {
 
   protected readonly isEmpty = computed(() => !this.isLoading() && !this.loadFailed() && this.rows().length === 0);
   protected readonly isTruncated = computed(() => this.totalItems() > this.rows().length);
+  /** Every scope with an active tenant; without one (global keys) only the scopes of level `any`. */
+  protected readonly availableScopes = computed(() => {
+    const all = this.serverScopes();
+
+    const hasTenant = this.activeTenantId() !== null;
+
+    const offered = hasTenant ? all : all.filter((scope) => scope.level === 'any');
+
+    return offered;
+  });
+
   protected readonly hasNoScopes = computed(() => this.availableScopes().length === 0);
+  protected readonly isGlobalOwner = computed(() => this.activeTenantId() === null);
   protected readonly isScopesEmpty = computed(() => this.hasNoScopes() && !this.scopesFailed());
 
   protected readonly nameMessages = computed(() => fieldIssueMessages(this.transloco, SCOPE_ALIAS, this.submitErrors.issues(), 'name'));
@@ -219,11 +231,14 @@ export class ApiKeysPage {
     try {
       const scopes = await firstValueFrom(this.api.scopes());
 
-      this.availableScopes.set(scopes);
-      this.selectedScopes.set(this.selectedScopes().filter((name) => scopes.some((scope) => scope.name === name)));
+      this.serverScopes.set(scopes);
+
+      const offered = this.availableScopes();
+
+      this.selectedScopes.set(this.selectedScopes().filter((name) => offered.some((scope) => scope.name === name)));
     } catch {
       this.scopesFailed.set(true);
-      this.availableScopes.set([]);
+      this.serverScopes.set([]);
       this.selectedScopes.set([]);
     }
   }

@@ -208,12 +208,12 @@ Agent rules:
 ### Pre-release and the first release
 
 - `versioning.json` at the repo root is `{ "schema": 1, "preRelease": <bool> }`; a missing file means `false`. `tooling/gates` reads it from the `--root` working tree in `gates versions`, `gates contracts`, `gates migrations` and `gates tags`; a malformed file exits 2.
-- While `preRelease` is `true`: every manifest `version` and `implementsSpec` value is `0.1.0`, every range `^0.1.0`; no PR bumps a version; `VERSION_NOT_BUMPED`, `VERSION_DECREASED`, `CONTRACT_BREAKING_NOT_MAJOR`, `MIGRATION_MODIFIED` and `MIGRATION_OUT_OF_ORDER` are not reported; `gates tags` prints nothing, so `tags.yml` pushes no tag.
+- While `preRelease` is `true`: every manifest `version` and `implementsSpec` value is `0.1.0`, every range `^0.1.0`; no PR bumps a version; `VERSION_NOT_BUMPED`, `VERSION_DECREASED`, `CONTRACT_BREAKING_NOT_MAJOR`, `MIGRATION_MODIFIED` and `MIGRATION_OUT_OF_ORDER` are not reported; `gates tags` prints no tag name, so `tags.yml` pushes no tag. No component tag exists while `preRelease` is `true`; `gates tags` exits 1 with `TAG_CONTENT_MISMATCH` for a tag `<component>-v<version>` of a component's current version whose commit holds other content of that component (the check runs with `preRelease` on or off).
 - The first release happens only when the repository owner names it, in one PR on its own:
   1. `versioning.json` becomes `{ "schema": 1, "preRelease": false }`.
   2. Every module and spec manifest `version`, every `info.version` in `specs/*/openapi.yaml` and every `implementsSpec` value becomes `1.0.0`; every `requiresCore` and `requiresModules` range becomes `^1.0.0`. Nothing else changes in that PR, no migration included.
-  3. Before the merge, the owner runs the script that moves every existing remote tag named `<component>-v1.0.0` to `pre-release/<component>-v1.0.0`; `tags.yml` skips a name that already exists.
-  4. After the merge, every `<component>-v1.0.0` tag points at the merge commit.
+  3. Before the merge, the release PR passes `gates tags` (CI job `gates` runs it): a remote tag named `<component>-v1.0.0` whose commit holds other content fails it, so the owner deletes any such tag first.
+  4. After the merge, `tags.yml` pushes every missing `<component>-v1.0.0` tag at the merge commit.
 - From then on the bump, MAJOR and migration-immutability rules apply.
 
 ### Wire format
