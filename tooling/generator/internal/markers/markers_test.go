@@ -182,6 +182,7 @@ func TestSyntaxForCoversTheMarkerKinds(t *testing.T) {
 		"ng-web/proxy.conf.json":           "// initializer:module a",
 		".deploy/local/README.md":          "<!-- initializer:module a -->",
 		"x/y.sh":                           "# initializer:module a",
+		"go-srv/go.mod":                    "// initializer:module a",
 	}
 	for p, want := range cases {
 		syntax, ok := markers.SyntaxFor(p)

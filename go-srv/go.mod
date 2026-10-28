@@ -9,7 +9,6 @@ require (
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
-	go.yaml.in/yaml/v3 v3.0.5
 )
 
 require (
@@ -31,3 +30,7 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )
+
+// initializer:module feature-flags
+require go.yaml.in/yaml/v3 v3.0.5
+// initializer:end feature-flags

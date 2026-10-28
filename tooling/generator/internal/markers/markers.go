@@ -72,6 +72,8 @@ func SyntaxFor(p string) (Syntax, bool) {
 		return newSyntax("# ", ""), true
 	case ".md":
 		return newSyntax("<!-- ", " -->"), true
+	case ".mod":
+		return newSyntax("// ", ""), true
 	}
 	return Syntax{}, false
 }
