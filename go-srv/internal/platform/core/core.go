@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
@@ -71,10 +72,13 @@ type Options struct {
 	Pool *pgxpool.Pool
 	// Ports pre-provided before phase 1 (test fakes); a module providing the
 	// same port fails startup.
-	SessionResolver access.SessionResolver
-	APIKeyResolver  access.APIKeyResolver
-	TenantDirectory access.TenantDirectory
-	FlagEvaluator   featureflag.Evaluator
+	SessionResolver    access.SessionResolver
+	APIKeyResolver     access.APIKeyResolver
+	TenantDirectory    access.TenantDirectory
+	FlagEvaluator      featureflag.Evaluator
+	TenantAccess       access.TenantAccess
+	AccountDirectory   accounts.Directory
+	AccountProvisioner accounts.Provisioner
 }
 
 // App is an assembled server that is not listening yet.
@@ -269,21 +273,24 @@ func newAssembly(opts Options, logger *slog.Logger, reader *config.Reader, cc co
 		clk = clock.System{}
 	}
 	a := &assembly{
-		phase:     phaseProvide,
-		logger:    logger,
-		cfg:       reader,
-		pool:      opts.Pool,
-		clock:     clk,
-		telemetry: tel,
-		baseURL:   cc.publicURL,
-		scopes:    access.NewScopeRegistry(),
-		readiness: health.NewReadiness(),
-		mux:       http.NewServeMux(),
-		sessions:  access.NoSessions,
-		keys:      access.NoAPIKeys,
-		tenants:   access.NoTenants,
-		flags:     featureflag.Disabled{},
-		provided:  map[string]bool{},
+		phase:        phaseProvide,
+		logger:       logger,
+		cfg:          reader,
+		pool:         opts.Pool,
+		clock:        clk,
+		telemetry:    tel,
+		baseURL:      cc.publicURL,
+		scopes:       access.NewScopeRegistry(),
+		readiness:    health.NewReadiness(),
+		mux:          http.NewServeMux(),
+		sessions:     access.NoSessions,
+		keys:         access.NoAPIKeys,
+		tenants:      access.NoTenants,
+		tenantAccess: access.NoTenantAccess,
+		accountDir:   accounts.NoDirectory,
+		provisioner:  accounts.NoProvisioner,
+		flags:        featureflag.Disabled{},
+		provided:     map[string]bool{},
 	}
 	if opts.SessionResolver != nil {
 		a.sessions = opts.SessionResolver
@@ -296,6 +303,18 @@ func newAssembly(opts Options, logger *slog.Logger, reader *config.Reader, cc co
 	if opts.TenantDirectory != nil {
 		a.tenants = opts.TenantDirectory
 		a.provided["tenant directory"] = true
+	}
+	if opts.TenantAccess != nil {
+		a.tenantAccess = opts.TenantAccess
+		a.provided["tenant access"] = true
+	}
+	if opts.AccountDirectory != nil {
+		a.accountDir = opts.AccountDirectory
+		a.provided["account directory"] = true
+	}
+	if opts.AccountProvisioner != nil {
+		a.provisioner = opts.AccountProvisioner
+		a.provided["account provisioner"] = true
 	}
 	if opts.FlagEvaluator != nil {
 		a.flags = opts.FlagEvaluator

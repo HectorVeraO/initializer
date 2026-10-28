@@ -41,6 +41,7 @@ func (g *Guard) Require(p Policy, h http.Handler) http.Handler {
 	if err := p.Validate(g.scopes); err != nil {
 		panic(err)
 	}
+	keyNeedsTenant := g.keyNeedsTenant(p)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		span := trace.SpanFromContext(r.Context())
 		span.SetAttributes(attribute.String("http.route", r.Pattern))
@@ -48,7 +49,7 @@ func (g *Guard) Require(p Policy, h http.Handler) http.Handler {
 			h.ServeHTTP(w, r)
 			return
 		}
-		principal, err := g.authorize(p, r)
+		principal, err := g.authorize(p, keyNeedsTenant, r)
 		if err != nil {
 			g.writer.Fail(w, r, err)
 			return
@@ -77,8 +78,20 @@ func isSafeMethod(method string) bool {
 	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
 }
 
+// keyNeedsTenant reports whether a route requires a tenant from an API key: a
+// minimum role, or a scope of level ScopeTenant. The registry is frozen
+// before NewGuard, so the answer holds for the life of the route.
+func (g *Guard) keyNeedsTenant(p Policy) bool {
+	if p.MinRole != "" {
+		return true
+	}
+	level, known := g.scopes.Level(p.Scope)
+	isTenantScope := known && level == ScopeTenant
+	return isTenantScope
+}
+
 // authorize runs steps 1 to 7 of the evaluation order.
-func (g *Guard) authorize(p Policy, r *http.Request) (reqctx.Principal, error) {
+func (g *Guard) authorize(p Policy, keyNeedsTenant bool, r *http.Request) (reqctx.Principal, error) {
 	var zero reqctx.Principal
 	acceptsSession := p.Kind != KindAPIKey
 	acceptsKey := p.Kind.needsScope()
@@ -96,12 +109,12 @@ func (g *Guard) authorize(p Policy, r *http.Request) (reqctx.Principal, error) {
 	}
 
 	if hasKey {
-		return g.authorizeKey(p, r)
+		return g.authorizeKey(p, keyNeedsTenant, r)
 	}
 	return g.authorizeSession(p, r)
 }
 
-func (g *Guard) authorizeKey(p Policy, r *http.Request) (reqctx.Principal, error) {
+func (g *Guard) authorizeKey(p Policy, keyNeedsTenant bool, r *http.Request) (reqctx.Principal, error) {
 	var zero reqctx.Principal
 	principal, err := g.keys.Resolve(r.Context(), r)
 	if err != nil {
@@ -109,6 +122,10 @@ func (g *Guard) authorizeKey(p Policy, r *http.Request) (reqctx.Principal, error
 	}
 	if !holdsScope(principal.Scopes, p.Scope) {
 		return zero, wireError(http.StatusForbidden, api.CodeInsufficientScope, "API key lacks the required scope")
+	}
+	// TenantlessOperator never relaxes this: a key is never a platform operator.
+	if keyNeedsTenant && principal.TenantID == nil {
+		return zero, wireError(http.StatusForbidden, api.CodeActiveTenantRequired, "An active tenant is required")
 	}
 	return principal, nil
 }
@@ -166,10 +183,13 @@ func (g *Guard) authorizeSession(p Policy, r *http.Request) (reqctx.Principal, e
 		return zero, wireError(http.StatusForbidden, api.CodePlatformOperatorNeeded, "Platform operator required")
 	}
 	if p.MinRole != "" {
-		if principal.TenantID == nil {
+		hasTenant := principal.TenantID != nil
+		operatorWithoutTenant := !hasTenant && p.TenantlessOperator && principal.IsPlatformOperator
+		switch {
+		case operatorWithoutTenant:
+		case !hasTenant:
 			return zero, wireError(http.StatusForbidden, api.CodeActiveTenantRequired, "An active tenant is required")
-		}
-		if !principal.Role.AtLeast(p.MinRole) {
+		case !principal.Role.AtLeast(p.MinRole):
 			return zero, wireError(http.StatusForbidden, api.CodeInsufficientRole, "Insufficient role")
 		}
 	}

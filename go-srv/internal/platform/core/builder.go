@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
@@ -59,10 +60,13 @@ type assembly struct {
 	mux       *http.ServeMux
 	guard     *access.Guard
 
-	sessions access.SessionResolver
-	keys     access.APIKeyResolver
-	tenants  access.TenantDirectory
-	flags    featureflag.Evaluator
+	sessions     access.SessionResolver
+	keys         access.APIKeyResolver
+	tenants      access.TenantDirectory
+	tenantAccess access.TenantAccess
+	accountDir   accounts.Directory
+	provisioner  accounts.Provisioner
+	flags        featureflag.Evaluator
 
 	// provided names the ports already provided (by Options or by a module).
 	provided map[string]bool
@@ -114,6 +118,21 @@ func (b *Builder) ProvideAPIKeyResolver(r access.APIKeyResolver) error {
 // ProvideTenantDirectory publishes the tenant directory port; see ProvideSessionResolver.
 func (b *Builder) ProvideTenantDirectory(d access.TenantDirectory) error {
 	return b.provide("tenant directory", d == nil, func() { b.a.tenants = d })
+}
+
+// ProvideTenantAccess publishes the tenant access port; see ProvideSessionResolver.
+func (b *Builder) ProvideTenantAccess(t access.TenantAccess) error {
+	return b.provide("tenant access", t == nil, func() { b.a.tenantAccess = t })
+}
+
+// ProvideAccountDirectory publishes the account directory port; see ProvideSessionResolver.
+func (b *Builder) ProvideAccountDirectory(d accounts.Directory) error {
+	return b.provide("account directory", d == nil, func() { b.a.accountDir = d })
+}
+
+// ProvideAccountProvisioner publishes the account provisioner port; see ProvideSessionResolver.
+func (b *Builder) ProvideAccountProvisioner(p accounts.Provisioner) error {
+	return b.provide("account provisioner", p == nil, func() { b.a.provisioner = p })
 }
 
 // ProvideFlagEvaluator publishes the flag evaluator port; see ProvideSessionResolver.
@@ -194,6 +213,15 @@ func (h *Host) APIKeyResolver() access.APIKeyResolver { return h.a.keys }
 
 // TenantDirectory is the provided port, else access.NoTenants.
 func (h *Host) TenantDirectory() access.TenantDirectory { return h.a.tenants }
+
+// TenantAccess is the provided port, else access.NoTenantAccess.
+func (h *Host) TenantAccess() access.TenantAccess { return h.a.tenantAccess }
+
+// AccountDirectory is the provided port, else accounts.NoDirectory.
+func (h *Host) AccountDirectory() accounts.Directory { return h.a.accountDir }
+
+// AccountProvisioner is the provided port, else accounts.NoProvisioner.
+func (h *Host) AccountProvisioner() accounts.Provisioner { return h.a.provisioner }
 
 // FlagEvaluator is the provided port, else featureflag.Disabled{}.
 func (h *Host) FlagEvaluator() featureflag.Evaluator { return h.a.flags }

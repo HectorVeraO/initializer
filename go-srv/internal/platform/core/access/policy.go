@@ -33,13 +33,22 @@ type Policy struct {
 	// Scope is required for KindAPIKey and KindSessionOrAPIKey and must be
 	// registered in the ScopeRegistry; empty for every other kind.
 	Scope string
-	// MinRole, when set, requires an active tenant and, for a session, a role at
-	// least MinRole. API keys are checked by Scope instead. Not allowed with
-	// KindNone, KindAPIKey or KindSessionAllowExpired.
+	// MinRole, when set, is a tenant requirement for every credential: the
+	// principal needs an active tenant, else 403 ACTIVE_TENANT_REQUIRED. A
+	// session principal with a tenant also needs a role at least MinRole (403
+	// INSUFFICIENT_ROLE); an API key with a tenant passes on Scope (keys carry
+	// no role). Not allowed with KindNone, KindAPIKey or KindSessionAllowExpired.
 	MinRole reqctx.Role
 	// PlatformOperator requires a platform operator's session. Allowed only with
 	// KindSession and an empty MinRole; it ignores tenant and role.
 	PlatformOperator bool
+	// TenantlessOperator relaxes MinRole's tenant requirement for one
+	// principal: a session of a platform operator with no active tenant
+	// passes. A session with an active tenant is still held to MinRole, an
+	// operator included. An API key never passes it: a tenantless key still
+	// fails with 403 ACTIVE_TENANT_REQUIRED. Allowed only with MinRole set and
+	// KindSession or KindSessionOrAPIKey.
+	TenantlessOperator bool
 }
 
 // Public is the policy of a route that reads no credentials.
@@ -80,6 +89,14 @@ func (p Policy) Validate(scopes *ScopeRegistry) error {
 		}
 		if p.MinRole != "" {
 			problems = append(problems, errors.New("access: platform operator excludes min role"))
+		}
+	}
+	if p.TenantlessOperator {
+		if p.MinRole == "" {
+			problems = append(problems, errors.New("access: tenantless operator requires min role"))
+		}
+		if p.Kind != KindSession && p.Kind != KindSessionOrAPIKey {
+			problems = append(problems, errors.New("access: tenantless operator requires KindSession or KindSessionOrAPIKey"))
 		}
 	}
 	return errors.Join(problems...)

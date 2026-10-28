@@ -24,8 +24,10 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/health"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/internal/testpg"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
@@ -365,9 +367,16 @@ func (tenantDirectory) TenantExists(context.Context, reqctx.TenantID) (bool, err
 	return true, nil
 }
 
+func (tenantDirectory) Tenant(context.Context, reqctx.TenantID) (access.TenantRef, bool, error) {
+	return access.TenantRef{}, true, nil
+}
+
 func TestHostDefaultsWhenNoModuleProvidesPorts(t *testing.T) {
-	var sessions, keys, tenants, flags bool
+	var sessions, keys, tenants, flags, tenantAccess, accountDir, provisioner bool
 	module := mounting("defaults", func(h *core.Host) {
+		tenantAccess = h.TenantAccess() == access.NoTenantAccess
+		accountDir = h.AccountDirectory() == accounts.NoDirectory
+		provisioner = h.AccountProvisioner() == accounts.NoProvisioner
 		sessions = h.SessionResolver() == access.NoSessions
 		keys = h.APIKeyResolver() == access.NoAPIKeys
 		tenants = h.TenantDirectory() == access.NoTenants
@@ -378,6 +387,38 @@ func TestHostDefaultsWhenNoModuleProvidesPorts(t *testing.T) {
 
 	if !sessions || !keys || !tenants || !flags {
 		t.Fatalf("defaults: sessions=%v keys=%v tenants=%v flags=%v", sessions, keys, tenants, flags)
+	}
+	if !tenantAccess || !accountDir || !provisioner {
+		t.Fatalf("defaults: tenantAccess=%v accountDir=%v provisioner=%v", tenantAccess, accountDir, provisioner)
+	}
+}
+
+func TestProvidedAccessPortsReachTheHostInMount(t *testing.T) {
+	tenantBook := coretest.NewTenantBook()
+	accountBook := coretest.NewAccountBook(nil)
+	var gotTenantAccess access.TenantAccess
+	var gotDirectory accounts.Directory
+	var gotProvisioner accounts.Provisioner
+	provider := core.Module{ID: "provider", Provide: func(_ context.Context, b *core.Builder) error {
+		return errors.Join(
+			b.ProvideTenantAccess(tenantBook),
+			b.ProvideAccountDirectory(accountBook),
+			b.ProvideAccountProvisioner(accountBook),
+		)
+	}}
+	consumer := mounting("consumer", func(h *core.Host) {
+		gotTenantAccess = h.TenantAccess()
+		gotDirectory = h.AccountDirectory()
+		gotProvisioner = h.AccountProvisioner()
+	})
+
+	startApp(t, core.Options{}, provider, consumer)
+
+	if gotTenantAccess != access.TenantAccess(tenantBook) {
+		t.Fatal("Host.TenantAccess is not the provided port")
+	}
+	if gotDirectory != accounts.Directory(accountBook) || gotProvisioner != accounts.Provisioner(accountBook) {
+		t.Fatal("Host account ports are not the provided ports")
 	}
 }
 
@@ -418,6 +459,62 @@ func TestPortsAreProvidedOnce(t *testing.T) {
 		}}
 		expectBuildError(t, core.Options{}, "is nil", module)
 	})
+}
+
+func TestAccessPortsAreProvidedOnce(t *testing.T) {
+	tenantBook := coretest.NewTenantBook()
+	accountBook := coretest.NewAccountBook(nil)
+	ports := []struct {
+		name       string
+		provide    func(b *core.Builder) error
+		provideNil func(b *core.Builder) error
+		preProvide core.Options
+	}{
+		{
+			name:       "tenant access",
+			provide:    func(b *core.Builder) error { return b.ProvideTenantAccess(tenantBook) },
+			provideNil: func(b *core.Builder) error { return b.ProvideTenantAccess(nil) },
+			preProvide: core.Options{TenantAccess: tenantBook},
+		},
+		{
+			name:       "account directory",
+			provide:    func(b *core.Builder) error { return b.ProvideAccountDirectory(accountBook) },
+			provideNil: func(b *core.Builder) error { return b.ProvideAccountDirectory(nil) },
+			preProvide: core.Options{AccountDirectory: accountBook},
+		},
+		{
+			name:       "account provisioner",
+			provide:    func(b *core.Builder) error { return b.ProvideAccountProvisioner(accountBook) },
+			provideNil: func(b *core.Builder) error { return b.ProvideAccountProvisioner(nil) },
+			preProvide: core.Options{AccountProvisioner: accountBook},
+		},
+	}
+	for _, port := range ports {
+		provider := func(id string) core.Module {
+			return core.Module{ID: id, Provide: func(_ context.Context, b *core.Builder) error { return port.provide(b) }}
+		}
+		t.Run(port.name+"/two modules", func(t *testing.T) {
+			expectBuildError(t, core.Options{}, port.name+" is already provided", provider("one"), provider("two"))
+		})
+		t.Run(port.name+"/pre-provided by options", func(t *testing.T) {
+			expectBuildError(t, port.preProvide, port.name+" is already provided", provider("late"))
+		})
+		t.Run(port.name+"/nil", func(t *testing.T) {
+			module := core.Module{ID: "nilport", Provide: func(_ context.Context, b *core.Builder) error {
+				return port.provideNil(b)
+			}}
+			expectBuildError(t, core.Options{}, port.name+" is nil", module)
+		})
+		t.Run(port.name+"/outside phase one", func(t *testing.T) {
+			var builder *core.Builder
+			module := core.Module{
+				ID:      "late",
+				Provide: func(_ context.Context, b *core.Builder) error { builder = b; return nil },
+				Mount:   func(context.Context, *core.Host) error { return port.provide(builder) },
+			}
+			expectBuildError(t, core.Options{}, port.name+" provided in Mount", module)
+		})
+	}
 }
 
 func expectBuildError(t *testing.T, opts core.Options, want string, modules ...core.Module) {
@@ -878,7 +975,7 @@ func TestBuilderAndHostExposeSharedServices(t *testing.T) {
 			providedURL = b.PublicBaseURL().String()
 			b.PublicBaseURL().Host = "mutated.example.com"
 			b.Logger().Info("provide_probe")
-			return b.Scopes().Register("svc:read", "Read svc")
+			return b.Scopes().Register("svc:read", "Read svc", access.ScopeAny)
 		},
 		Mount: func(_ context.Context, h *core.Host) error {
 			mountedURL = h.PublicBaseURL().String()
@@ -917,7 +1014,7 @@ func TestRegisteringAScopeAfterProvideFails(t *testing.T) {
 		ID:      "late-scope",
 		Provide: func(_ context.Context, b *core.Builder) error { scopes = b.Scopes(); return nil },
 		Mount: func(context.Context, *core.Host) error {
-			lateErr = scopes.Register("late:read", "too late")
+			lateErr = scopes.Register("late:read", "too late", access.ScopeAny)
 			return nil
 		},
 	}

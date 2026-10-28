@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "generator": "0.1.0",
-  "catalogSha256": "64517f95dbc17157b7004838a084eda9bacc4e1a693fe9bf1198d0f092bdb693",
+  "catalogSha256": "bea57937f3f040ffbd753715e4bf200db5094ae7001173fa8312c5bc0746f7c3",
   "selection": {
     "schema": 1,
     "project": {
@@ -81,9 +81,19 @@
       },
       "files": [
         {
+          "path": ".deploy/local/.example.env",
+          "sha256": "20ca4ef1d3d415344a32e65f01fb6a61cd42f4df518ee44d0055c3db2b45be17",
+          "sourceSha256": "12bc56b0f0ae61e92d65ed8a37f39b8607c343eba87e41b7a3762dd91a28e7b1"
+        },
+        {
+          "path": ".deploy/local/README.md",
+          "sha256": "9e4d9a501bb91327777322c78c39c2223427fbbe764750ea638916cd3c99bb97",
+          "sourceSha256": "059aa9b09efee040687aab13095e59d947db81cbbea63d2a1a56de0073b285c5"
+        },
+        {
           "path": ".deploy/local/docker-compose.yml",
-          "sha256": "a87f2699110456df393415c395e7eab006c8406a50dba3485163dd25cb4174e3",
-          "sourceSha256": "b6d6f3ffc20b36e3878696fafac499bc39151bab9ea7c19e5cb6f532bb1ac517"
+          "sha256": "ec017e374449c009b35d996c371b02636cc766280c85b769f748755b42ef6f9c",
+          "sourceSha256": "b6f07b65a18479374ef1cff295630f1fb55b69e417f12286b795e7331f716adf"
         },
         {
           "path": ".gitattributes",
@@ -138,13 +148,17 @@
           "sha256": "da22cf00112181c10aca161583da518c2e392f615f40c9f0a7e0b598dd24e73b"
         },
         {
+          "path": ".deploy/local/postgres-init/10-init.sh",
+          "sha256": "1e9c8c43fc85e1f59d6b98c99d6428b3511e67762e5998effa4745524e934d69"
+        },
+        {
           "path": "go-srv/internal/platform/identity/identity.go",
           "sha256": "9b4a9a65e77a07a5e088e9d17a41c299e32e53254b90c93e304427af0e324a20",
           "sourceSha256": "37c8753a4b6dee9d1c2a0e43d36fd874ab3dbc945ed48c985c1dfa75de5ad057"
         },
         {
           "path": "go-srv/internal/platform/identity/module.manifest.json",
-          "sha256": "545e96bc2989396075f18c3c5bb68579024cabd3d1f0f62e03c1ce4c84da973b"
+          "sha256": "20c3341abe1e5135e3c5b77e124d1b10227e1b4607a09fedfc9354b7dbec9713"
         }
       ]
     },

@@ -97,7 +97,7 @@ func (a *access) checkAccess(ctx context.Context, accountID string, tenantID *st
 // tenantGrant is steps 3 to 6 of checkAccess: one query joins the membership
 // to its tenant, so a non-member learns nothing about the tenant.
 func (a *access) tenantGrant(ctx context.Context, accountID, tenantID string, platformOperator bool) (Grant, error) {
-	denied := forbidden(CodeTenantAccessDenied, "The account has no access to this tenant.")
+	denied := forbidden(api.CodeTenantAccessDenied, "The account has no access to this tenant.")
 	tenant, tenantOK := canonicalID(tenantID)
 	account, accountOK := canonicalID(accountID)
 	if !tenantOK || !accountOK {
@@ -115,14 +115,14 @@ JOIN ten_memberships m ON m.tenant_id = t.id AND m.account_id = $2::uuid WHERE t
 		return Grant{}, fmt.Errorf("identity: read membership: %w", err)
 	}
 	if tenantStatus == statusSuspended {
-		return Grant{}, forbidden(CodeTenantSuspended, "The tenant is suspended.")
+		return Grant{}, forbidden(api.CodeTenantSuspended, "The tenant is suspended.")
 	}
 	if membershipStatus != statusActive {
 		message := "The membership was revoked."
 		if membershipStatus == statusSuspended {
 			message = "The membership is suspended."
 		}
-		return Grant{}, forbidden(CodeMembershipRevoked, message)
+		return Grant{}, forbidden(api.CodeMembershipRevoked, message)
 	}
 	return Grant{Role: reqctx.Role(role), PlatformOperator: platformOperator, TenantSlug: slug}, nil
 }

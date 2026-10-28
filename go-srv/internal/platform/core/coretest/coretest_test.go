@@ -21,6 +21,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
@@ -175,23 +176,45 @@ type tenantFake struct{}
 
 func (tenantFake) TenantExists(context.Context, reqctx.TenantID) (bool, error) { return true, nil }
 
+func (tenantFake) Tenant(context.Context, reqctx.TenantID) (access.TenantRef, bool, error) {
+	return access.TenantRef{}, true, nil
+}
+
 func TestNewHandsTheFakesToModules(t *testing.T) {
 	var flags featureflag.Evaluator
 	var keys access.APIKeyResolver
 	var tenants access.TenantDirectory
 	var sessions access.SessionResolver
+	var tenantAccess access.TenantAccess
+	var accountDir accounts.Directory
+	var provisioner accounts.Provisioner
 	module := mounting("alpha", func(h *core.Host) {
+		tenantAccess = h.TenantAccess()
+		accountDir = h.AccountDirectory()
+		provisioner = h.AccountProvisioner()
 		flags = h.FlagEvaluator()
 		keys = h.APIKeyResolver()
 		tenants = h.TenantDirectory()
 		sessions = h.SessionResolver()
 	})
+	tenantBook := coretest.NewTenantBook()
+	accountBook := coretest.NewAccountBook(nil)
 	coretest.New(t, []core.Module{module}, coretest.Options{
 		FlagEvaluator:   allFlags{},
 		SessionResolver: coretest.Session(reqctx.Principal{Kind: reqctx.ActorAccount, ActorID: testActor}),
 		APIKeyResolver:  keyFake{},
 		TenantDirectory: tenantFake{},
+
+		TenantAccess:       tenantBook,
+		AccountDirectory:   accountBook,
+		AccountProvisioner: accountBook,
 	})
+	if tenantAccess != access.TenantAccess(tenantBook) {
+		t.Fatalf("the module must see the supplied tenant access")
+	}
+	if accountDir != accounts.Directory(accountBook) || provisioner != accounts.Provisioner(accountBook) {
+		t.Fatalf("the module must see the supplied account ports")
+	}
 	if !flags.Enabled(context.Background(), "x") {
 		t.Fatalf("the module must see the supplied flag evaluator")
 	}

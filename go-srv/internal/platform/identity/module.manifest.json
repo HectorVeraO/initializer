@@ -10,6 +10,7 @@
   "tablePrefixes": ["iam", "ten"],
   "files": [
     ".deploy/local/kratos/",
+    ".deploy/local/postgres-init/",
     "go-srv/internal/platform/identity/"
   ],
   "exclude": []

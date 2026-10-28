@@ -1,0 +1,11 @@
+server {
+    location /api/ {
+        proxy_pass http://go-srv;
+    }
+
+    # initializer:module identity
+    location /kratos/ {
+        proxy_pass http://go-srv;
+    }
+    # initializer:end identity
+}
