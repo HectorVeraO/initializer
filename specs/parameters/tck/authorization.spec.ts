@@ -1,5 +1,6 @@
 import { test } from '@playwright/test';
-import { bootstrapOperator, expectError, mutate, seedTenant } from '../../tck-support/actors';
+import { bootstrapOperator, expectError, mutate } from '../../tck-support/actors';
+import { seedTenant } from '../../tck-support/actors/tenants';
 import { defineParameter, overridePath, paramKey } from './support';
 
 test('P10 roles gate overrides and only operators define parameters', { tag: '@parameters' }, async ({ playwright }) => {

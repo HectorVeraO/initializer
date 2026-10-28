@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { bootstrapOperator, expectError, mutate, seedTenant } from '../../tck-support/actors';
+import { bootstrapOperator, expectError, mutate } from '../../tck-support/actors';
+import { seedTenant } from '../../tck-support/actors/tenants';
 
 test('CA-12 tenant creation refuses a taken slug and accumulates validation issues', { tag: '@identity' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);

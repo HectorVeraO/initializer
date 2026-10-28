@@ -2,17 +2,19 @@ import { strict as assert } from 'node:assert';
 import { expect, test } from '@playwright/test';
 import type { APIRequestContext, APIResponse } from '@playwright/test';
 import {
-  SEEDED_PASSWORD,
   bootstrapOperator,
   expectData,
   expectError,
-  invite,
   login,
   mutate,
   runSuffix,
+} from '../../tck-support/actors';
+import {
+  SEEDED_PASSWORD,
+  invite,
   seedTenant,
   tokenFromInvitationUrl,
-} from '../../tck-support/actors';
+} from '../../tck-support/actors/tenants';
 import type { Actor } from '../../tck-support/actors';
 
 interface InvitationItem {

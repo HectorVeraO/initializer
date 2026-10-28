@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { bootstrapOperator, mutate, seedTenant } from '../../tck-support/actors';
-import type { Actor, SeededTenant } from '../../tck-support/actors';
+import { bootstrapOperator, mutate } from '../../tck-support/actors';
+import { seedTenant } from '../../tck-support/actors/tenants';
+import type { Actor } from '../../tck-support/actors';
+import type { SeededTenant } from '../../tck-support/actors/tenants';
 import { defineParameter, expectView, overridePath, paramKey, readParameter } from './support';
 
 test.describe('parameters precedence', () => {
