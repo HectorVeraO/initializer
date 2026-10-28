@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "stack": "go-srv",
+  "module": "core",
+  "version": "0.1.18",
+  "implied": true,
+  "implementsSpec": { "core": "1.1.1" },
+  "requiresModules": [],
+  "tablePrefixes": ["cor"],
+  "files": [
+    ".deploy/local/",
+    ".gitattributes",
+    ".gitignore",
+    "go-srv/",
+    "mise.toml",
+    "specs/.gitignore",
+    "specs/package-lock.json",
+    "specs/package.json",
+    "specs/playwright.config.ts",
+    "specs/scripts/",
+    "specs/tck-support/",
+    "specs/tsconfig.json"
+  ],
+  "exclude": [
+    "go-srv/AGENTS.md",
+    "go-srv/cookbooks/"
+  ]
+}

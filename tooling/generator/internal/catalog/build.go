@@ -72,15 +72,15 @@ type stackInfo struct {
 
 // stackTable is the built-in stack table, sorted by stack name.
 var stackTable = []stackInfo{
-	{name: manifest.StackGoSrv, root: "go-srv/", modulesRoot: "go-srv/internal/gatbase/", compositionRoot: "go-srv/cmd/server/modules.go"},
-	{name: manifest.StackNgWeb, root: "ng-web/", modulesRoot: "ng-web/src/app/gatbase/", compositionRoot: "ng-web/src/app/gatbase/modules.ts"},
+	{name: manifest.StackGoSrv, root: "go-srv/", modulesRoot: "go-srv/internal/platform/", compositionRoot: "go-srv/cmd/server/modules.go"},
+	{name: manifest.StackNgWeb, root: "ng-web/", modulesRoot: "ng-web/src/app/platform/", compositionRoot: "ng-web/src/app/platform/modules.ts"},
 }
 
 // staticRoots are the managed roots that do not depend on a stack manifest.
-var staticRoots = []string{"specs/", ".deploy/local/", ".gatbase/"}
+var staticRoots = []string{"specs/", ".deploy/local/", ".initializer/"}
 
 // renderedFiles are project-level files the generator renders; no copy may land on them.
-var renderedFiles = []string{"README.md", "gatbase.selection.json", "gatbase.lock.json"}
+var renderedFiles = []string{"README.md", "initializer.selection.json", "initializer.lock.json"}
 
 type moduleDoc struct {
 	path      string

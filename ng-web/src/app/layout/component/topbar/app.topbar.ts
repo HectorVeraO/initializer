@@ -2,7 +2,7 @@ import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@a
 import { RouterModule } from '@angular/router';
 import { SelectModule } from '@openng/optimus-ui/select';
 import { FormsModule } from '@angular/forms';
-import { AccountMenu, TenantSwitcher } from '@/gatbase/core';
+import { AccountMenu, TenantSwitcher } from '@/platform/core';
 import { LayoutService } from '../../service/layout.service';
 import { TranslocoModule, TranslocoService } from '@jsverse/transloco';
 

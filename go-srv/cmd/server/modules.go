@@ -3,16 +3,16 @@
 package main
 
 import (
-	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core"
-	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/coreauth"
-	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/featureflags"
-	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/parameters"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/featureflags"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/parameters"
 )
 
 // installedModules returns the catalog modules of this project in catalog order.
 func installedModules() []core.Module {
 	return []core.Module{
-		coreauth.Module(),
+		identity.Module(),
 		featureflags.Module(),
 		parameters.Module(),
 	}

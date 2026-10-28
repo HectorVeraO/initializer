@@ -1,0 +1,66 @@
+<p-page-header [title]="'core.memberships.title' | transloco" />
+
+<div class="card">
+  <p-list-state feature="memberships" [loading]="isLoading()" [loadFailed]="loadFailed()" [empty]="isEmpty()" sectionKey="core.memberships.section" emptyKey="core.memberships.empty" (retry)="reload()">
+    <p-table [value]="rows()" dataKey="id">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>{{ 'core.memberships.email' | transloco }}</th>
+          <th>{{ 'core.memberships.name' | transloco }}</th>
+          <th>{{ 'core.memberships.role' | transloco }}</th>
+          <th>{{ 'core.memberships.status' | transloco }}</th>
+          @if (canWrite()) {
+            <th></th>
+          }
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr data-testid="memberships-row" [attr.data-key]="row.account.email">
+          <td data-testid="memberships-cell-email">{{ row.account.email }}</td>
+          <td data-testid="memberships-cell-name">{{ row.account.fullName }}</td>
+          <td data-testid="memberships-cell-role" [attr.data-value]="row.role">
+            @if (canWrite()) {
+              <p-select
+                data-testid="membership-role-select"
+                [ngModel]="roleOf(row)"
+                (onChange)="changeRole(row, $event.value)"
+                [options]="roleOptions"
+                optionValue="value"
+                appendTo="body"
+                size="small"
+                [ariaLabel]="'core.memberships.role' | transloco"
+              >
+                <ng-template #selectedItem let-option>{{ option.labelKey | transloco }}</ng-template>
+                <ng-template #item let-option>
+                  <span data-testid="membership-role-option" [attr.data-key]="option.value">{{ option.labelKey | transloco }}</span>
+                </ng-template>
+              </p-select>
+            } @else {
+              {{ 'core.shell.roles.' + row.role | transloco }}
+            }
+          </td>
+          <td data-testid="memberships-cell-status" [attr.data-value]="row.status">{{ 'core.memberships.statuses.' + row.status | transloco }}</td>
+          @if (canWrite()) {
+            <td class="text-right">
+              <span class="inline-flex items-center gap-2">
+                @if (row.status === 'active') {
+                  <app-inline-confirm labelKey="core.memberships.suspend" testId="membership-suspend" (confirmed)="setStatus(row, 'suspended')" />
+                }
+                @if (row.status === 'suspended') {
+                  <button pButton type="button" size="small" severity="secondary" [outlined]="true" data-testid="membership-reactivate" (click)="setStatus(row, 'active')">{{ 'core.memberships.reactivate' | transloco }}</button>
+                }
+                <app-inline-confirm labelKey="core.memberships.revoke" testId="membership-revoke" (confirmed)="setStatus(row, 'revoked')" />
+              </span>
+              @if (rowErrors()[row.id]; as rowError) {
+                <p-message class="mt-1" severity="error" variant="simple" size="small" role="alert" data-testid="memberships-row-error">{{ rowError }}</p-message>
+              }
+            </td>
+          }
+        </tr>
+      </ng-template>
+    </p-table>
+    @if (isTruncated()) {
+      <p class="mt-2 mb-0 text-sm" data-testid="memberships-truncated">{{ 'core.memberships.truncated' | transloco: { shown: rows().length, total: totalItems() } }}</p>
+    }
+  </p-list-state>
+</div>

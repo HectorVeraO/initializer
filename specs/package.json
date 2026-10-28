@@ -1,7 +1,7 @@
 {
-  "name": "gatbase-tck",
+  "name": "tck",
   "version": "0.0.1",
-  "description": "Shared TCK runner for the Gatbase module contracts",
+  "description": "Shared TCK runner for the module contracts",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",

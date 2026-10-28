@@ -124,7 +124,7 @@ func TestGenerateFromTheRecordedSelectionReproducesTheProject(t *testing.T) {
 	}
 	second := first
 	second.out = filepath.Join(filepath.Dir(first.out), "again")
-	recorded := filepath.Join(first.out, "gatbase.selection.json")
+	recorded := filepath.Join(first.out, "initializer.selection.json")
 	if code, _, stderr := execute(t, second.args("--selection", recorded)...); code != exitOK {
 		t.Fatalf("second: %d %s", code, stderr)
 	}
@@ -320,14 +320,14 @@ func TestVerifyExitCodes(t *testing.T) {
 		t.Fatalf("fresh project: exit %d, stdout %q, stderr %s", code, stdout, stderr)
 	}
 
-	edited := filepath.Join(e.out, "go-srv", "internal", "gatbase", "core", "core.go")
+	edited := filepath.Join(e.out, "go-srv", "internal", "platform", "core", "core.go")
 	if err := os.WriteFile(edited, []byte("package core\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(filepath.Join(e.out, "go-srv", "internal", "gatbase", "parameters", "parameters.go")); err != nil {
+	if err := os.Remove(filepath.Join(e.out, "go-srv", "internal", "platform", "parameters", "parameters.go")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(e.out, "go-srv", "internal", "gatbase", "coreauth", "new.go"), []byte("package coreauth\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(e.out, "go-srv", "internal", "platform", "identity", "new.go"), []byte("package identity\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, stderr = execute(t, "verify", "--project", e.out)
@@ -341,7 +341,7 @@ func TestVerifyExitCodes(t *testing.T) {
 		t.Fatalf("no verify_failed event: %s", stderr)
 	}
 
-	if err := os.Remove(filepath.Join(e.out, "gatbase.lock.json")); err != nil {
+	if err := os.Remove(filepath.Join(e.out, "initializer.lock.json")); err != nil {
 		t.Fatal(err)
 	}
 	if code, _, _ := execute(t, "verify", "--project", e.out); code != exitInternal {

@@ -1,1 +1,0 @@
-{ "schema": 1, "spec": "core-auth", "version": "0.1.0", "tckTags": ["@core-auth"], "tckEnv": { "ALPHA_KEY": "a" } }

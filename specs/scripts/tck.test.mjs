@@ -29,19 +29,19 @@ function runNode(script, args, options = {}) {
   return result;
 }
 
-test('--tags @core matches a @core title and not a @core-auth title', () => {
+test('--tags @core matches a @core title and not a @identity title', () => {
   const [pass] = planRun({ specsDir: join(fixtures, 'manifests'), tags: '@core' });
   const grep = grepOf(pass);
   assert.match('login works @core', grep);
-  assert.doesNotMatch('login works @core-auth', grep);
+  assert.doesNotMatch('login works @identity', grep);
 });
 
-test('the default plan keeps @core-auth selectable next to @core', () => {
-  const passes = planRun({ specsDir: join(fixtures, 'manifests'), tags: '@core,@core-auth' });
+test('the default plan keeps @identity selectable next to @core', () => {
+  const passes = planRun({ specsDir: join(fixtures, 'manifests'), tags: '@core,@identity' });
   const grep = grepOf(passes[0]);
   assert.match('a @core', grep);
-  assert.match('a @core-auth', grep);
-  assert.doesNotMatch('a @core-authx', grep);
+  assert.match('a @identity', grep);
+  assert.doesNotMatch('a @identityx', grep);
 });
 
 function workersOf(pass) {
@@ -130,7 +130,7 @@ test('run-tck with no manifest exits non-zero with a clear message', () => {
 });
 
 test('tck-env prints sorted exports with escaped single quotes', () => {
-  const lines = buildExports(manifestsOf('core', 'core-auth', 'quote'));
+  const lines = buildExports(manifestsOf('core', 'identity', 'quote'));
   assert.deepEqual(lines, ["export ALPHA_KEY='a'", "export MSG='it'\\''s'", "export ZED_KEY='z'"]);
 });
 

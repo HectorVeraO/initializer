@@ -16,7 +16,7 @@ const fixtureModule = "example.com/fixture/srv"
 // symlinkMode is the file mode of a symlink in an in-memory file system.
 const symlinkMode = fs.ModeSymlink | 0o777
 
-const ngRoot = "ng-web/src/app/gatbase/"
+const ngRoot = "ng-web/src/app/platform/"
 
 // cleanRepo loads testdata/clean/repo into memory so a case can edit it.
 func cleanRepo(t *testing.T) fstest.MapFS {
@@ -137,7 +137,7 @@ func ngManifest(id string, implied bool, implements string) string {
 		impliedText = "true"
 	}
 	core := ""
-	files := `["ng-web/src/app/gatbase/` + id + `/"]`
+	files := `["ng-web/src/app/platform/` + id + `/"]`
 	if id == "core" {
 		files = `["ng-web/"]`
 	} else {

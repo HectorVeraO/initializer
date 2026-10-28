@@ -151,9 +151,9 @@ The marker syntax is described here, not quoted: `validate-artifacts.mjs` and `p
 
 <!-- Add entries below this line: moved sections, each under the root heading it came from. The skill only appends below (a new heading, skipped when it exists) and never edits existing entries. -->
 
-## Gatbase rules
+## Platform rules
 
-Full text of the root `AGENTS.md` "Gatbase rules". Root keeps the short form; this section is the reference.
+Full text of the root `AGENTS.md` "Platform rules". Root keeps the short form; this section is the reference.
 
 ### Trunk-based development
 
@@ -201,7 +201,7 @@ Agent rules:
 
 - Each module has `specs/<module>/openapi.yaml` (or `asyncapi.yaml`) and `specs/<module>/tck/`. Contract and TCK share one SemVer tag, `spec-<module>-vX.Y.Z`: MAJOR for a breaking wire change, MINOR for a backward-compatible extension, PATCH for test or text fixes.
 - A breaking wire change carries the `BREAKING CHANGE:` trailer in its commit. `gates contracts` (CI job `gates`) runs `oasdiff breaking --fail-on ERR --flatten-allof` on every `specs/<spec>/openapi.yaml` changed since `git merge-base <base-rev> HEAD` (a spec absent there is new and skipped). A breaking change fails `CONTRACT_BREAKING_UNMARKED` unless a commit touching `specs/<spec>/` carries a `BREAKING CHANGE:` footer (`feat!:` is not a marker), and `CONTRACT_BREAKING_NOT_MAJOR` unless `version` in `spec.manifest.json` has a higher MAJOR than at the merge base.
-- Every spec and module carries a manifest `version`. `gates versions` (CI job `gates`) compares HEAD with `git merge-base <base-rev> HEAD`: a component whose files changed (spec folder, or the longest-prefix `files` entry of a module manifest; `exclude` entries and the composition roots `go-srv/cmd/server/modules.go`, `ng-web/src/app/gatbase/modules.ts` belong to no component) must carry a higher `version` (`VERSION_NOT_BUMPED`), no version may drop (`VERSION_DECREASED`), versions are `X.Y.Z` (`VERSION_INVALID`) and no entry is claimed by two manifests (`COMPONENT_PATH_OVERLAP`). `gates tags` lists `<component>-v<version>` names with no git tag; `.github/workflows/tags.yml` pushes them on `main`.
+- Every spec and module carries a manifest `version`. `gates versions` (CI job `gates`) compares HEAD with `git merge-base <base-rev> HEAD`: a component whose files changed (spec folder, or the longest-prefix `files` entry of a module manifest; `exclude` entries and the composition roots `go-srv/cmd/server/modules.go`, `ng-web/src/app/platform/modules.ts` belong to no component) must carry a higher `version` (`VERSION_NOT_BUMPED`), no version may drop (`VERSION_DECREASED`), versions are `X.Y.Z` (`VERSION_INVALID`) and no entry is claimed by two manifests (`COMPONENT_PATH_OVERLAP`). `gates tags` lists `<component>-v<version>` names with no git tag; `.github/workflows/tags.yml` pushes them on `main`.
 - Implementations are versioned separately from contracts and declare the contract version they implement (`implementsSpec`) in a module manifest. Stacks may move at different speeds; each is tested against the TCK tag it declares.
 - The contract changes in the same PR as the code that implements it.
 
@@ -218,11 +218,11 @@ Agent rules:
 - Every operation by `:id` filters by the active tenant and answers `404` for another tenant's resource, so the response never reveals that it exists.
 - An optional `tenantId` in an M2M payload accepts the tenant UUID or slug and must match the API key's tenant (`403 TENANT_MISMATCH`).
 
-### Copy-and-own and `gatbase.lock.json`
+### Copy-and-own and `initializer.lock.json`
 
 - A generated project owns the code the generator copied into it and may change it; this repository never ships empty interfaces reserved for modules that do not exist yet.
-- Module paths are stable: `go-srv/internal/gatbase/<module>/` (Go), `ng-web/src/app/gatbase/<module>/` (Angular), and the module's migrations `<timestamp>_<prefix>_<name>.sql`.
-- A generated project records, per module, the base version it copied and the SHA-256 hash of every delivered file in `gatbase.lock.json`. An agent upgrading a module compares the project against that file, keeps the local changes, and runs the module's TCK.
+- Module paths are stable: `go-srv/internal/platform/<module>/` (Go), `ng-web/src/app/platform/<module>/` (Angular), and the module's migrations `<timestamp>_<prefix>_<name>.sql`.
+- A generated project records, per module, the base version it copied and the SHA-256 hash of every delivered file in `initializer.lock.json`. An agent upgrading a module compares the project against that file, keeps the local changes, and runs the module's TCK.
 
 ### Trace correlation
 

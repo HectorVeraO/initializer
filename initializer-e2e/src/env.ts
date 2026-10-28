@@ -179,8 +179,8 @@ export function buildWebLoginUrl(env: EnvShape): string {
   return new URL(env.web.loginPath || '/', env.web.baseUrl).toString();
 }
 
-/** Skip guard of every gatbase spec: INIT_USER_EMAIL, INIT_USER_PASSWORD and INIT_WEB_BASE_URL set. */
-export function assertGatbaseEnv(): EnvCheck {
+/** Skip guard of every platform spec: INIT_USER_EMAIL, INIT_USER_PASSWORD and INIT_WEB_BASE_URL set. */
+export function assertPlatformEnv(): EnvCheck {
   return checkEnvKeys([
     'INIT_USER_EMAIL',
     'INIT_USER_PASSWORD',
@@ -188,7 +188,7 @@ export function assertGatbaseEnv(): EnvCheck {
   ]);
 }
 
-export type GatbaseStack = {
+export type PlatformStack = {
   readonly start: boolean;
   readonly goSrvDir: string;
   readonly ngWebDir: string;
@@ -198,7 +198,7 @@ export type GatbaseStack = {
 
 const REPO_ROOT = path.resolve(E2E_ROOT, '..');
 
-const DEFAULT_GO_SRV_DATABASE = 'it_e2e_gatbase';
+const DEFAULT_GO_SRV_DATABASE = 'it_e2e_platform';
 
 /**
  * The go-srv database of the e2e run. It lives on the shared compose Postgres
@@ -215,7 +215,7 @@ function readGoSrvDatabase(): string {
 }
 
 /**
- * `.deploy/local/.env` with GATBASE_DATABASE_URL rebuilt for the e2e database.
+ * `.deploy/local/.env` with APP_DATABASE_URL rebuilt for the e2e database.
  * dotenv.parse does not expand `${INITIALIZER_PG_PASSWORD}`, so the URL is
  * assembled here.
  */
@@ -231,14 +231,14 @@ function readGoSrvEnv(): Record<string, string> {
   }
   const database = readGoSrvDatabase();
   const databaseUrl = `postgres://initializer:${encodeURIComponent(password)}@localhost:10132/${database}?sslmode=disable`;
-  return { ...parsed, GATBASE_DATABASE_URL: databaseUrl };
+  return { ...parsed, APP_DATABASE_URL: databaseUrl };
 }
 
 /**
  * Values the webServer entries of playwright.config.ts need. Reads
  * INIT_START_STACK; when it is not `true` nothing is read from disk.
  */
-export function gatbaseStack(): GatbaseStack {
+export function platformStack(): PlatformStack {
   const start = readString('INIT_START_STACK') === 'true';
   return {
     start,

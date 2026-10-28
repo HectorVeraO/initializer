@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/HectorVeraO/initializer/go-srv/internal/gatbase/core"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 )
 
 func main() {

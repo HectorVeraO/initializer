@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "stack": "ng-web",
+  "module": "parameters",
+  "version": "0.1.3",
+  "implied": false,
+  "implementsSpec": { "parameters": "1.0.0" },
+  "requiresCore": "^0.1.0",
+  "requiresModules": [],
+  "files": ["ng-web/src/app/platform/parameters/"],
+  "exclude": []
+}

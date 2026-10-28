@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-import c "example.com/fixture/srv/internal/gatbase/core"
+import c "example.com/fixture/srv/internal/platform/core"
 
 import (
 	"example.com/fixture/srv"

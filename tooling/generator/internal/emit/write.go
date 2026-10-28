@@ -40,7 +40,7 @@ func CheckOutput(out string) ([]issue.Issue, error) {
 }
 
 // Write writes the project under out, files 0644 and directories 0755, in
-// project order (gatbase.lock.json last). Every destination is checked to stay
+// project order (initializer.lock.json last). Every destination is checked to stay
 // under out. A failure leaves a partial directory.
 func Write(out string, project Project) error {
 	if out == "" {

@@ -1,6 +1,6 @@
 // Package gorewrite swaps a Go module path prefix in import specs.
 //
-// A generated project copies Gatbase files whose imports are fully qualified
+// A generated project copies platform module files whose imports are fully qualified
 // with the source module path S and builds them under the target module path
 // T. The swap is a byte-exact replacement of import path literals, so the
 // output of a clean input stays gofmt-clean.

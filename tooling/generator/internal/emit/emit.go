@@ -1,6 +1,6 @@
 // Package emit builds a generated project in memory and writes it: owned
 // files with their transforms, the rendered composition roots and README, the
-// recorded selection and gatbase.lock.json.
+// recorded selection and initializer.lock.json.
 package emit
 
 import (
@@ -33,7 +33,7 @@ const readmeName = "README.md"
 const goCompositionRoot = "go-srv/cmd/server/modules.go"
 
 // webCompositionRoot is the rendered composition root of the ng-web stack.
-const webCompositionRoot = "ng-web/src/app/gatbase/modules.ts"
+const webCompositionRoot = "ng-web/src/app/platform/modules.ts"
 
 // featureFlagsID is the module whose configuration core's .deploy/local files
 // carry.
@@ -64,7 +64,7 @@ type File struct {
 }
 
 // Project is the whole generated tree in write order: paths ascending, with
-// gatbase.lock.json last.
+// initializer.lock.json last.
 type Project struct {
 	Files []File
 }
@@ -257,7 +257,7 @@ func (b *builder) hasModule(id string) bool {
 }
 
 // dropFlagsConfig removes the feature-flags block of core's env template (the
-// comment lines from "# feature-flags:" through the GATBASE_FLAGS_FILE
+// comment lines from "# feature-flags:" through the APP_FLAGS_FILE
 // assignment, with the blank line before them) or of the deploy README (the
 // "## Feature flags" section). It fails when the block is absent, so a
 // reworded source cannot ship the block silently.
@@ -271,7 +271,7 @@ func dropFlagsConfig(sourcePath string, data []byte) ([]byte, error) {
 			if start < 0 && strings.HasPrefix(text, "# feature-flags:") {
 				start = i
 			}
-			if start >= 0 && strings.HasPrefix(text, "GATBASE_FLAGS_FILE=") {
+			if start >= 0 && strings.HasPrefix(text, "APP_FLAGS_FILE=") {
 				end = i + 1
 			}
 		default:

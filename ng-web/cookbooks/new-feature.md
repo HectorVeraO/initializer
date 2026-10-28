@@ -6,11 +6,11 @@ The file map lives in `AGENTS.md` -> "File map for a new feature"; this fragment
 
 ## Feature conventions
 
-- **Layout**: one folder per feature, `src/app/<feature>/`, with `<feature>.routes.ts` (default export or named `Routes`), loaded lazily from `src/app.routes.ts` with `loadChildren`. Gatbase modules live in `src/app/gatbase/<module>/`.
+- **Layout**: one folder per feature, `src/app/<feature>/`, with `<feature>.routes.ts` (default export or named `Routes`), loaded lazily from `src/app.routes.ts` with `loadChildren`. Platform modules live in `src/app/platform/<module>/`.
 - **Components**: standalone, `inject()` for dependencies, `ChangeDetectionStrategy.OnPush` for new components, selector prefix `app` or `p`. Templates use `@if` / `@for` (with `track`), never `*ngIf` / `*ngFor`.
 - **State**: signals (`signal`, `computed`, `input`, `output`); RxJS only for HTTP and event streams. Convert once at the boundary.
 - **UI**: import Optimus UI components one by one from `@openng/optimus-ui/<component>` (for example `@openng/optimus-ui/table`). Style with Tailwind 4 utilities and the theme tokens (`bg-surface-0`, `text-primary`); no hardcoded colors. Reuse `core/ui` (`page-header`, `data-table`, `list-state`, `form-section`, `confirm-delete`) before writing a new widget.
-- **Text**: every string goes through Transloco (`transloco` pipe or `TranslocoService`), keys added to BOTH `src/assets/i18n/es.json` and `en.json` (a spec fails when their keys differ). Spanish is neutral or Chilean, never voseo. Gatbase module strings go to `src/app/gatbase/<module>/i18n/{en,es}.json`, not the root files.
+- **Text**: every string goes through Transloco (`transloco` pipe or `TranslocoService`), keys added to BOTH `src/assets/i18n/es.json` and `en.json` (a spec fails when their keys differ). Spanish is neutral or Chilean, never voseo. Platform module strings go to `src/app/platform/<module>/i18n/{en,es}.json`, not the root files.
 - **HTTP**: services use `HttpClient`; paths start with the `/api/v1` prefix. The response is `ApiEnvelope<T>` (`core/envelope`): read `data`. Failures: `core/api/api-error` reads `error.code` and the `422` `error.issues[]`; `SubmitErrors` keeps them for a form; `IssueDisplayService` shows them. Pass `SKIP_ERROR_TOAST` when the view shows its own error state. Query params for lists are `page`, `size`, `sort` (`buildParams`).
 - **Forms**: reactive forms. A `422` shows every issue at once, next to its field.
 - **Config**: deployment values come from `RuntimeConfigService` (`src/assets/config/runtime-config.json`), never from constants.

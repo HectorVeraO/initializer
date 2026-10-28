@@ -1,7 +1,7 @@
 {
-  "$id": "https://schemas.gatbase.local/identity.schema.json",
+  "$id": "https://schemas.initializer.local/identity.schema.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Gatbase identity",
+  "title": "Identity",
   "type": "object",
   "properties": {
     "traits": {

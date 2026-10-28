@@ -45,7 +45,7 @@ jobs:
       run:
         working-directory: go-srv
     env:
-      GATBASE_TEST_DATABASE_URL: postgres://initializer@localhost:10132/initializer?sslmode=disable
+      APP_TEST_DATABASE_URL: postgres://initializer@localhost:10132/initializer?sslmode=disable
     services:
       postgres:
         image: postgres:18
@@ -178,7 +178,7 @@ jobs:
           while IFS= read -r file; do
             path="${file#"${ref}/"}"
             case "${path}" in
-              README.md|gatbase.selection.json|gatbase.lock.json|flags.yaml) continue ;;
+              README.md|initializer.selection.json|initializer.lock.json|flags.yaml) continue ;;
             esac
             if ! cmp -s "${file}" "${GITHUB_WORKSPACE}/${path}"; then
               echo "round-trip difference: ${path}" >&2
@@ -222,7 +222,7 @@ jobs:
             web: true
     env:
       CI: "true"
-      GATBASE_PUBLIC_BASE_URL: ${{ matrix.public_base_url }}
+      APP_PUBLIC_BASE_URL: ${{ matrix.public_base_url }}
       TCK_BASE_URL: ${{ matrix.public_base_url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -295,8 +295,8 @@ jobs:
           fi
           go vet ./...
           go build ./...
-          database_url="$(. ../.deploy/local/.env; printf '%s' "${GATBASE_DATABASE_URL}")"
-          GATBASE_TEST_DATABASE_URL="${database_url}" GATBASE_TEST_PUBLIC_BASE_URL="${GATBASE_PUBLIC_BASE_URL}" go test ./...
+          database_url="$(. ../.deploy/local/.env; printf '%s' "${APP_DATABASE_URL}")"
+          APP_TEST_DATABASE_URL="${database_url}" APP_TEST_PUBLIC_BASE_URL="${APP_PUBLIC_BASE_URL}" go test ./...
       - name: Build and start the generated go-srv
         run: |
           set -euo pipefail
@@ -306,8 +306,8 @@ jobs:
           set -a; . .deploy/local/.env; set +a
           while IFS= read -r pair; do
             export "${pair}"
-          done < <(jq -r '.tckEnv | to_entries[] | "\(.key)=\(.value)"' gatbase.lock.json)
-          export GATBASE_PUBLIC_BASE_URL="${{ matrix.public_base_url }}"
+          done < <(jq -r '.tckEnv | to_entries[] | "\(.key)=\(.value)"' initializer.lock.json)
+          export APP_PUBLIC_BASE_URL="${{ matrix.public_base_url }}"
           "${RUNNER_TEMP}/go-srv-bin" > "${RUNNER_TEMP}/go-srv.log" 2>&1 &
           echo $! > "${RUNNER_TEMP}/go-srv.pid"
           url=http://localhost:10100/health/ready
@@ -349,7 +349,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
-          locked="$(jq -r '.tckTags | join(",")' ../gatbase.lock.json)"
+          locked="$(jq -r '.tckTags | join(",")' ../initializer.lock.json)"
           installed="$(jq -rs '[.[].tckTags[]] | unique | join(",")' */spec.manifest.json)"
           if [ "${locked}" != "${installed}" ]; then
             echo "installed tags ${installed} differ from the lock ${locked}" >&2
@@ -361,11 +361,11 @@ jobs:
         run: |
           set -euo pipefail
           # The two TCK passes write one junit file, so the selected tests are counted from the lock's grep.
-          npx playwright test --list --reporter=list --grep "$(jq -r .tckGrep ../gatbase.lock.json)" > "${RUNNER_TEMP}/tck-list.txt"
+          npx playwright test --list --reporter=list --grep "$(jq -r .tckGrep ../initializer.lock.json)" > "${RUNNER_TEMP}/tck-list.txt"
           # A spec in the lock must have tests; a spec outside it must have none.
-          for spec in core core-auth parameters feature-flags; do
+          for spec in core identity parameters feature-flags; do
             count="$(grep -c " ${spec}/tck/" "${RUNNER_TEMP}/tck-list.txt" || true)"
-            locked="$(jq -r --arg spec "${spec}" '[.specs[].spec] | index($spec) != null' ../gatbase.lock.json)"
+            locked="$(jq -r --arg spec "${spec}" '[.specs[].spec] | index($spec) != null' ../initializer.lock.json)"
             echo "${spec}: ${count} tests, in lock: ${locked}"
             if [ "${locked}" = "true" ]; then
               test "${count}" -gt 0
@@ -410,7 +410,7 @@ jobs:
     timeout-minutes: 20
     env:
       CI: "true"
-      GATBASE_PUBLIC_BASE_URL: http://localhost:10100
+      APP_PUBLIC_BASE_URL: http://localhost:10100
       TCK_BASE_URL: http://localhost:10100
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -453,7 +453,7 @@ jobs:
           set -euo pipefail
           go -C go-srv build -o "${RUNNER_TEMP}/go-srv" ./cmd/server
           set -a; . .deploy/local/.env; set +a
-          export GATBASE_PUBLIC_BASE_URL=http://localhost:10100
+          export APP_PUBLIC_BASE_URL=http://localhost:10100
           eval "$(node specs/scripts/tck-env.mjs)"
           "${RUNNER_TEMP}/go-srv" > "${RUNNER_TEMP}/go-srv.log" 2>&1 &
           echo $! > "${RUNNER_TEMP}/go-srv.pid"
@@ -541,8 +541,8 @@ jobs:
       - name: CI artifact capture guard
         run: npx playwright test tests/smoke/ci-artifact-capture.spec.ts
 
-  e2e-gatbase:
-    name: e2e-gatbase
+  e2e:
+    name: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -591,10 +591,10 @@ jobs:
       - name: Create the e2e database
         run: |
           set -euo pipefail
-          docker compose -f .deploy/local/docker-compose.yml exec -T postgres psql -U initializer -d postgres -c 'CREATE DATABASE it_e2e_gatbase'
-      - name: Run the Gatbase e2e
+          docker compose -f .deploy/local/docker-compose.yml exec -T postgres psql -U initializer -d postgres -c 'CREATE DATABASE it_e2e_platform'
+      - name: Run the platform e2e
         working-directory: initializer-e2e
-        run: npx playwright test tests/e2e/gatbase
+        run: npx playwright test tests/e2e/platform
       - name: Collect logs
         if: always()
         run: |
@@ -603,7 +603,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-gatbase-${{ github.run_id }}
+          name: e2e-${{ github.run_id }}
           path: |
             initializer-e2e/playwright-report/
             initializer-e2e/test-results/

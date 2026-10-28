@@ -24,26 +24,6 @@
       ]
     },
     {
-      "spec": "core-auth",
-      "version": "1.0.0",
-      "tckTags": [
-        "@core-auth"
-      ],
-      "tckEnv": {
-        "FIXTURE_ADMIN": "admin@example.com"
-      },
-      "files": [
-        {
-          "path": "specs/core-auth/openapi.yaml",
-          "sha256": "a3a469f7ad2121a47ccef1a165f32fe0d262dc65a167a711ea08734ad1b7ac06"
-        },
-        {
-          "path": "specs/core-auth/spec.manifest.json",
-          "sha256": "b9b880065a7651867c2e64e4edf207d2646fe6641cc4772ff2b00bdd15102a70"
-        }
-      ]
-    },
-    {
       "spec": "feature-flags",
       "version": "0.1.0",
       "tckTags": [
@@ -58,6 +38,26 @@
         {
           "path": "specs/feature-flags/spec.manifest.json",
           "sha256": "59b05c7b011a4b694fe62dff968513d1c0a86e782ad7d6d0934c628fb4005708"
+        }
+      ]
+    },
+    {
+      "spec": "identity",
+      "version": "1.0.0",
+      "tckTags": [
+        "@identity"
+      ],
+      "tckEnv": {
+        "FIXTURE_ADMIN": "admin@example.com"
+      },
+      "files": [
+        {
+          "path": "specs/identity/openapi.yaml",
+          "sha256": "f714dd2e2866fc6c3cfaad43a426dad310e4502cac9f0e29945d6d4a78eaa6d9"
+        },
+        {
+          "path": "specs/identity/spec.manifest.json",
+          "sha256": "820fa24ed1f586b8bf4ff7005502baba22749350bc9441c09ae005741da86245"
         }
       ]
     },
@@ -111,22 +111,22 @@
             },
             {
               "path": "go-srv/cmd/server/main.go",
-              "sha256": "55d4342a5756cf566507d833fa62069341b17efaa0614d0b29f81f06992fc333"
+              "sha256": "c9813d7b7f4a1d1662295ec5962aba530f8d8d5b06296797ab98d4db288f66dc"
             },
             {
               "path": "go-srv/go.mod",
               "sha256": "597fb3bb55c2b0f6092731ec09f748cdef795e166dfdbafa3718da1e47f8b5c3"
             },
             {
-              "path": "go-srv/internal/gatbase/core/core.go",
+              "path": "go-srv/internal/platform/core/core.go",
               "sha256": "b115c3aed45ee55aacd6eae3a55109823238ae84b705ca0bb6fff67c882262a8"
             },
             {
-              "path": "go-srv/internal/gatbase/core/module.manifest.json",
+              "path": "go-srv/internal/platform/core/module.manifest.json",
               "sha256": "0301655fcfab21a3a2eb517975d47e45acb257ad6b43a59fd9e593a858bb71ae"
             },
             {
-              "path": "go-srv/internal/gatbase/core/testdata/sample.go",
+              "path": "go-srv/internal/platform/core/testdata/sample.go",
               "sha256": "aac68f0046ac661942bdae56845c0b6f3400f17e5c0bfa8e8feb1fe9a31936aa"
             },
             {
@@ -136,33 +136,6 @@
             {
               "path": "specs/tck-support/index.ts",
               "sha256": "81442353d956688286a71320ea1452a102b080989da743313f6e7483c7bb0c52"
-            }
-          ]
-        },
-        {
-          "module": "core-auth",
-          "version": "0.1.0",
-          "implied": true,
-          "implementsSpec": {
-            "core-auth": "1.0.0"
-          },
-          "requiresCore": "^0.1.0",
-          "requiresModules": [],
-          "tablePrefixes": [
-            "iam"
-          ],
-          "files": [
-            {
-              "path": ".deploy/local/kratos/kratos.yml",
-              "sha256": "da22cf00112181c10aca161583da518c2e392f615f40c9f0a7e0b598dd24e73b"
-            },
-            {
-              "path": "go-srv/internal/gatbase/coreauth/coreauth.go",
-              "sha256": "406d84ffd657a95167da1b8c57e7a8bca549a27bd00967a29818a0986b614335"
-            },
-            {
-              "path": "go-srv/internal/gatbase/coreauth/module.manifest.json",
-              "sha256": "21425ea25685c46bc99d57de37c884a3e9ebdf07293e69443b4574e69fe10958"
             }
           ]
         },
@@ -180,17 +153,44 @@
           ],
           "files": [
             {
-              "path": ".gatbase/project/flags.yaml",
+              "path": ".initializer/project/flags.yaml",
               "sha256": "65ce740578f8afdbb2e64223f052b652e33c8073441d47fb26dd67fd4a5ddcdd",
               "target": "flags.yaml"
             },
             {
-              "path": "go-srv/internal/gatbase/featureflags/featureflags.go",
+              "path": "go-srv/internal/platform/featureflags/featureflags.go",
               "sha256": "d1e63167bd42868400aeb8f14f97d05a659646b8acf92fdc491b7da2b659334e"
             },
             {
-              "path": "go-srv/internal/gatbase/featureflags/module.manifest.json",
-              "sha256": "99f5c3cb0ca83ce97d9317ccf19561a530cece95457a408fbf076433c0748834"
+              "path": "go-srv/internal/platform/featureflags/module.manifest.json",
+              "sha256": "8361c674d15c8ac6622abf4d4d51c922de385becb5b8f73c98fe15a5895752f3"
+            }
+          ]
+        },
+        {
+          "module": "identity",
+          "version": "0.1.0",
+          "implied": true,
+          "implementsSpec": {
+            "identity": "1.0.0"
+          },
+          "requiresCore": "^0.1.0",
+          "requiresModules": [],
+          "tablePrefixes": [
+            "iam"
+          ],
+          "files": [
+            {
+              "path": ".deploy/local/kratos/kratos.yml",
+              "sha256": "da22cf00112181c10aca161583da518c2e392f615f40c9f0a7e0b598dd24e73b"
+            },
+            {
+              "path": "go-srv/internal/platform/identity/identity.go",
+              "sha256": "37c8753a4b6dee9d1c2a0e43d36fd874ab3dbc945ed48c985c1dfa75de5ad057"
+            },
+            {
+              "path": "go-srv/internal/platform/identity/module.manifest.json",
+              "sha256": "545e96bc2989396075f18c3c5bb68579024cabd3d1f0f62e03c1ce4c84da973b"
             }
           ]
         },
@@ -208,11 +208,11 @@
           ],
           "files": [
             {
-              "path": "go-srv/internal/gatbase/parameters/module.manifest.json",
-              "sha256": "2292c309ccdb2c098d0471228c97cb97586ae5558c59b12722d462e5fcf832c8"
+              "path": "go-srv/internal/platform/parameters/module.manifest.json",
+              "sha256": "d6ef5d50aaa83a1475e1a16a9cb736daf0b4701e24d4ec7999c474011d9f848b"
             },
             {
-              "path": "go-srv/internal/gatbase/parameters/parameters.go",
+              "path": "go-srv/internal/platform/parameters/parameters.go",
               "sha256": "44afce13e5d09bf2ce4bec6696bd7b12e4e4a2088ee2f3c130586dbd2377c0f7"
             }
           ]

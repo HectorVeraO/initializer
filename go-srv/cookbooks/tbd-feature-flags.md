@@ -48,7 +48,7 @@ Precedence, first match wins:
 
 An unknown key evaluates to `false` (default-closed).
 
-The port is `core/featureflag` (`Evaluator.Enabled(ctx, key)`, `Snapshot`, `Route`); the `feature-flags` module implements it and a project without that module gets `featureflag.Disabled{}`. Use only the port, read from `Host.FlagEvaluator()`; never read flag tables directly. The only evaluation calls: `featureflag.Route(eval, key, on, off)` at route registration (the one HTTP evaluation) and `Evaluator.Enabled` once per job at a job boundary; `Snapshot` belongs to core-auth session responses. The module reads the manifest from the file named by `GATBASE_FLAGS_FILE`.
+The port is `core/featureflag` (`Evaluator.Enabled(ctx, key)`, `Snapshot`, `Route`); the `feature-flags` module implements it and a project without that module gets `featureflag.Disabled{}`. Use only the port, read from `Host.FlagEvaluator()`; never read flag tables directly. The only evaluation calls: `featureflag.Route(eval, key, on, off)` at route registration (the one HTTP evaluation) and `Evaluator.Enabled` once per job at a job boundary; `Snapshot` belongs to identity session responses. The module reads the manifest from the file named by `APP_FLAGS_FILE`.
 
 ## Single seam (Branch by Abstraction)
 

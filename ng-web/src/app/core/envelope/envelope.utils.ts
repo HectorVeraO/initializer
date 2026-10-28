@@ -22,7 +22,7 @@ export function isApiEnvelope(body: unknown): body is ApiEnvelope {
 export function unwrapData<T>(): OperatorFunction<ApiEnvelope<T>, T> {
   return map((body: unknown): T => {
     if (!isApiEnvelope(body)) {
-      throw new UnexpectedResponseError('The response is not a Gatbase envelope');
+      throw new UnexpectedResponseError('The response is not an API envelope');
     }
 
     return body.data as T;

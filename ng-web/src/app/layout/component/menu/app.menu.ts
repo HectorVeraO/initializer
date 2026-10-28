@@ -7,7 +7,7 @@ import { environment } from '../../../../environments/environment';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { createDeveloperSection } from '@/dev/dev.menu';
-import { GATBASE_MODULES, SessionStore, meetsRequirement } from '@/gatbase/core';
+import { PLATFORM_MODULES, SessionStore, meetsRequirement } from '@/platform/core';
 
 const SECTION_TITLE_KEY = 'menu.title';
 
@@ -24,7 +24,7 @@ export class AppMenu implements OnInit, OnDestroy {
   private readonly transloco = inject(TranslocoService);
   private readonly destroy$ = new Subject<void>();
   private readonly sessionStore = inject(SessionStore);
-  private readonly modules = inject(GATBASE_MODULES);
+  private readonly modules = inject(PLATFORM_MODULES);
   private readonly navLabels = signal<Record<string, string>>({});
 
   private readonly translationsVersion = signal(0);
@@ -59,7 +59,7 @@ export class AppMenu implements OnInit, OnDestroy {
       items: [{ label: this.transloco.translate('menu.home'), icon: 'menu-icon menu-icon-home', routerLink: ['/home'] }]
     });
 
-    model.push(...this.buildGatbaseSections());
+    model.push(...this.buildPlatformSections());
 
     if (environment.production === false) {
       const developer = createDeveloperSection(this.transloco.translate('menu.developer'));
@@ -72,8 +72,8 @@ export class AppMenu implements OnInit, OnDestroy {
     return model;
   }
 
-  /** One section per Gatbase module with at least one entry the session meets; none while anonymous. */
-  private buildGatbaseSections(): MenuItem[] {
+  /** One section per platform module with at least one entry the session meets; none while anonymous. */
+  private buildPlatformSections(): MenuItem[] {
     const session = this.sessionStore.session();
 
     if (session === null) {

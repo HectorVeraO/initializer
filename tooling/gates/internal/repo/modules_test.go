@@ -9,7 +9,7 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/repo"
 )
 
-func TestDiscoverModulesWithoutGatbaseDir(t *testing.T) {
+func TestDiscoverModulesWithoutPlatformDir(t *testing.T) {
 	modules, err := repo.DiscoverModules(t.TempDir())
 	if err != nil || len(modules) != 0 {
 		t.Fatalf("got %v, %v", modules, err)
@@ -18,7 +18,7 @@ func TestDiscoverModulesWithoutGatbaseDir(t *testing.T) {
 
 func TestDiscoverModulesReadsOnlyModuleAndPrefixes(t *testing.T) {
 	root := t.TempDir()
-	base := filepath.Join(root, "go-srv", "internal", "gatbase")
+	base := filepath.Join(root, "go-srv", "internal", "platform")
 	writeFile(t, filepath.Join(base, "b_mod", "module.manifest.json"), `{"module":"parameters","tablePrefixes":["sys"],"files":[1,2],"x":{}}`)
 	writeFile(t, filepath.Join(base, "a_mod", "keep.go"), "package a")
 	writeFile(t, filepath.Join(base, "c_mod", "module.manifest.json"), "{")
@@ -36,7 +36,7 @@ func TestDiscoverModulesReadsOnlyModuleAndPrefixes(t *testing.T) {
 	}
 	b := modules[1]
 	if !b.HasManifest || b.Module != "parameters" || !reflect.DeepEqual(b.TablePrefixes, []string{"sys"}) ||
-		b.ManifestPath != "go-srv/internal/gatbase/b_mod/module.manifest.json" {
+		b.ManifestPath != "go-srv/internal/platform/b_mod/module.manifest.json" {
 		t.Fatalf("b_mod = %+v", b)
 	}
 	if modules[2].ManifestError == "" {

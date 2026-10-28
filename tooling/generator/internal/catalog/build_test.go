@@ -14,10 +14,10 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden catalog")
 
 const (
-	paramsManifest = "go-srv/internal/gatbase/parameters/module.manifest.json"
-	flagsManifest  = "go-srv/internal/gatbase/featureflags/module.manifest.json"
-	coreManifest   = "go-srv/internal/gatbase/core/module.manifest.json"
-	paramsFile     = "go-srv/internal/gatbase/parameters/parameters.go"
+	paramsManifest = "go-srv/internal/platform/parameters/module.manifest.json"
+	flagsManifest  = "go-srv/internal/platform/featureflags/module.manifest.json"
+	coreManifest   = "go-srv/internal/platform/core/module.manifest.json"
+	paramsFile     = "go-srv/internal/platform/parameters/parameters.go"
 )
 
 func TestCleanRepoMatchesGolden(t *testing.T) {
@@ -85,17 +85,17 @@ func TestTargetIsListedOnTheSourceEntry(t *testing.T) {
 	built, _ := buildRepo(t, cleanRepo(t))
 	flags := findModule(t, built, "go-srv", "feature-flags")
 	for _, f := range flags.Files {
-		if f.Path == ".gatbase/project/flags.yaml" && f.Target == "flags.yaml" {
+		if f.Path == ".initializer/project/flags.yaml" && f.Target == "flags.yaml" {
 			return
 		}
 	}
-	t.Fatalf("feature-flags must list .gatbase/project/flags.yaml with target flags.yaml: %+v", flags.Files)
+	t.Fatalf("feature-flags must list .initializer/project/flags.yaml with target flags.yaml: %+v", flags.Files)
 }
 
 func TestExactFileEntryBeatsDirectoryEntry(t *testing.T) {
 	repo := cleanRepo(t)
-	edit(t, repo, paramsManifest, `["go-srv/internal/gatbase/parameters/"]`,
-		`["go-srv/cmd/server/main.go", "go-srv/internal/gatbase/parameters/"]`)
+	edit(t, repo, paramsManifest, `["go-srv/internal/platform/parameters/"]`,
+		`["go-srv/cmd/server/main.go", "go-srv/internal/platform/parameters/"]`)
 	built, issues := buildRepo(t, repo)
 	assertCodes(t, issues)
 	if !hasFile(findModule(t, built, "go-srv", "parameters").Files, "go-srv/cmd/server/main.go") {
@@ -104,14 +104,14 @@ func TestExactFileEntryBeatsDirectoryEntry(t *testing.T) {
 }
 
 func TestIssueCodes(t *testing.T) {
-	const xManifest = "go-srv/internal/gatbase/extra/module.manifest.json"
+	const xManifest = "go-srv/internal/platform/extra/module.manifest.json"
 	cases := []struct {
 		name   string
 		mutate func(t *testing.T, repo fstest.MapFS)
 		want   []string
 	}{
 		{"manifest entry matches nothing", func(t *testing.T, r fstest.MapFS) {
-			edit(t, r, paramsManifest, `["go-srv/internal/gatbase/parameters/"]`, `["go-srv/internal/gatbase/parameters/", "go-srv/zzz-missing.go"]`)
+			edit(t, r, paramsManifest, `["go-srv/internal/platform/parameters/"]`, `["go-srv/internal/platform/parameters/", "go-srv/zzz-missing.go"]`)
 		}, []string{"MANIFEST_INVALID"}},
 		{"manifest has an unknown key", func(t *testing.T, r fstest.MapFS) {
 			edit(t, r, paramsManifest, `"schema": 1,`, `"schema": 1, "entrypoint": "x",`)
@@ -127,9 +127,9 @@ func TestIssueCodes(t *testing.T) {
 			edit(t, r, paramsManifest, `"module": "parameters"`, `"module": "params"`)
 		}, []string{"MODULE_DIR_MISMATCH"}},
 		{"duplicate module id", func(t *testing.T, r fstest.MapFS) {
-			put(r, "go-srv/internal/gatbase/parameters2/module.manifest.json", string(r[paramsManifest].Data))
-			edit(t, r, "go-srv/internal/gatbase/parameters2/module.manifest.json", `gatbase/parameters/`, `gatbase/parameters2/`)
-			put(r, "go-srv/internal/gatbase/parameters2/x.go", "package parameters2\n")
+			put(r, "go-srv/internal/platform/parameters2/module.manifest.json", string(r[paramsManifest].Data))
+			edit(t, r, "go-srv/internal/platform/parameters2/module.manifest.json", `platform/parameters/`, `platform/parameters2/`)
+			put(r, "go-srv/internal/platform/parameters2/x.go", "package parameters2\n")
 		}, []string{"MODULE_DUPLICATE", "MODULE_DIR_MISMATCH"}},
 		{"frontend module without backend", func(t *testing.T, r fstest.MapFS) {
 			addNgCore(r)
@@ -137,9 +137,9 @@ func TestIssueCodes(t *testing.T) {
 		}, []string{"MODULE_NOT_IN_BACKEND"}},
 		{"implied differs between stacks", func(t *testing.T, r fstest.MapFS) {
 			addNgCore(r)
-			addNgModule(r, "core-auth", false, `{"core-auth": "1.0.0"}`)
+			addNgModule(r, "identity", false, `{"identity": "1.0.0"}`)
 		}, []string{"IMPLIED_MISMATCH"}},
-		{"core-auth implied in one stack and absent in the other", func(t *testing.T, r fstest.MapFS) {
+		{"identity implied in one stack and absent in the other", func(t *testing.T, r fstest.MapFS) {
 			addNgCore(r)
 		}, nil},
 		{"implied on a module that may not be", func(t *testing.T, r fstest.MapFS) {
@@ -168,9 +168,9 @@ func TestIssueCodes(t *testing.T) {
 		{"spec implemented twice", func(t *testing.T, r fstest.MapFS) {
 			put(r, xManifest, string(r[paramsManifest].Data))
 			edit(t, r, xManifest, `"module": "parameters"`, `"module": "extra"`)
-			edit(t, r, xManifest, `gatbase/parameters/`, `gatbase/extra/`)
+			edit(t, r, xManifest, `platform/parameters/`, `platform/extra/`)
 			edit(t, r, xManifest, `"sys"`, `"xtr"`)
-			put(r, "go-srv/internal/gatbase/extra/extra.go", "package extra\n")
+			put(r, "go-srv/internal/platform/extra/extra.go", "package extra\n")
 		}, []string{"SPEC_IMPLEMENTED_TWICE"}},
 		{"spec nobody implements", func(t *testing.T, r fstest.MapFS) {
 			put(r, "specs/orphan/spec.manifest.json", `{ "schema": 1, "spec": "orphan", "version": "0.1.0", "tckTags": [], "tckEnv": {} }`+"\n")
@@ -195,12 +195,12 @@ func TestIssueCodes(t *testing.T) {
 			put(r, "specs/stray/readme.md", "stray\n")
 		}, []string{"FILE_UNOWNED"}},
 		{"file under a managed root nobody lists", func(t *testing.T, r fstest.MapFS) {
-			put(r, ".gatbase/project/other.yaml", "x: 1\n")
+			put(r, ".initializer/project/other.yaml", "x: 1\n")
 		}, []string{"FILE_UNOWNED"}},
 		{"equal entries in two manifests", func(t *testing.T, r fstest.MapFS) {
 			put(r, "go-srv/shared/x.txt", "shared\n")
-			edit(t, r, paramsManifest, `["go-srv/internal/gatbase/parameters/"]`, `["go-srv/internal/gatbase/parameters/", "go-srv/shared/"]`)
-			edit(t, r, flagsManifest, "\"go-srv/internal/gatbase/featureflags/\"\n  ],", "\"go-srv/internal/gatbase/featureflags/\",\n    \"go-srv/shared/\"\n  ],")
+			edit(t, r, paramsManifest, `["go-srv/internal/platform/parameters/"]`, `["go-srv/internal/platform/parameters/", "go-srv/shared/"]`)
+			edit(t, r, flagsManifest, "\"go-srv/internal/platform/featureflags/\"\n  ],", "\"go-srv/internal/platform/featureflags/\",\n    \"go-srv/shared/\"\n  ],")
 		}, []string{"FILE_OWNERSHIP_CONFLICT"}},
 		{"target inside another owner's folder", func(t *testing.T, r fstest.MapFS) {
 			edit(t, r, flagsManifest, `"target": "flags.yaml"`, `"target": "`+paramsFile+`"`)
@@ -213,8 +213,8 @@ func TestIssueCodes(t *testing.T) {
 		}, []string{"TARGET_CONFLICT"}},
 		{"target shared by two manifests", func(t *testing.T, r fstest.MapFS) {
 			put(r, "go-srv/shared/x.txt", "shared\n")
-			edit(t, r, paramsManifest, `["go-srv/internal/gatbase/parameters/"]`,
-				`["go-srv/internal/gatbase/parameters/", {"path": "go-srv/shared/x.txt", "target": "flags.yaml"}]`)
+			edit(t, r, paramsManifest, `["go-srv/internal/platform/parameters/"]`,
+				`["go-srv/internal/platform/parameters/", {"path": "go-srv/shared/x.txt", "target": "flags.yaml"}]`)
 		}, []string{"TARGET_CONFLICT"}},
 		{"symlink", func(t *testing.T, r fstest.MapFS) {
 			r["specs/package.json"] = &fstest.MapFile{Data: []byte("../outside"), Mode: symlinkMode}
@@ -244,31 +244,31 @@ func TestIssueCodes(t *testing.T) {
 			put(r, paramsFile, "package parameters\n\nconst Path = \""+fixtureModule+"/x\"\n")
 		}, []string{"GO_MODULE_PATH_LEAK"}},
 		{"module path in testdata", func(t *testing.T, r fstest.MapFS) {
-			put(r, "go-srv/internal/gatbase/core/testdata/note.txt", fixtureModule+"\n")
+			put(r, "go-srv/internal/platform/core/testdata/note.txt", fixtureModule+"\n")
 		}, []string{"GO_MODULE_PATH_LEAK"}},
 		{"import group mixes module and other imports", func(t *testing.T, r fstest.MapFS) {
-			put(r, paramsFile, "package parameters\n\nimport (\n\t\""+fixtureModule+"/internal/gatbase/core\"\n\t\"fmt\"\n)\n\nvar _ = fmt.Sprint\nvar _ = core.Run\n")
+			put(r, paramsFile, "package parameters\n\nimport (\n\t\""+fixtureModule+"/internal/platform/core\"\n\t\"fmt\"\n)\n\nvar _ = fmt.Sprint\nvar _ = core.Run\n")
 		}, []string{"GO_IMPORT_GROUP"}},
 		{"trailing comment on a module import", func(t *testing.T, r fstest.MapFS) {
-			put(r, paramsFile, "package parameters\n\nimport (\n\t\""+fixtureModule+"/internal/gatbase/core\" // c\n)\n\nvar _ = core.Run\n")
+			put(r, paramsFile, "package parameters\n\nimport (\n\t\""+fixtureModule+"/internal/platform/core\" // c\n)\n\nvar _ = core.Run\n")
 		}, []string{"GO_IMPORT_GROUP"}},
 		{"unparsable Go file", func(t *testing.T, r fstest.MapFS) {
 			put(r, paramsFile, "package parameters\n\nimport (\n")
 		}, []string{"GO_PARSE_FAILED"}},
 		{"unparsable Go file in testdata", func(t *testing.T, r fstest.MapFS) {
-			put(r, "go-srv/internal/gatbase/core/testdata/broken.go", "package (\n")
+			put(r, "go-srv/internal/platform/core/testdata/broken.go", "package (\n")
 		}, nil},
 		{"module imports a sibling module", func(t *testing.T, r fstest.MapFS) {
-			put(r, paramsFile, "package parameters\n\nimport (\n\t\""+fixtureModule+"/internal/gatbase/featureflags\"\n)\n\nvar _ = featureflags.Name\n")
+			put(r, paramsFile, "package parameters\n\nimport (\n\t\""+fixtureModule+"/internal/platform/featureflags\"\n)\n\nvar _ = featureflags.Name\n")
 		}, []string{"IMPORT_BOUNDARY"}},
 		{"module imports a package outside core and itself", func(t *testing.T, r fstest.MapFS) {
 			put(r, paramsFile, "package parameters\n\nimport (\n\t\""+fixtureModule+"/internal/other\"\n)\n\nvar _ = other.X\n")
 		}, []string{"IMPORT_BOUNDARY"}},
 		{"core imports a module", func(t *testing.T, r fstest.MapFS) {
-			put(r, "go-srv/internal/gatbase/core/core.go", "package core\n\nimport (\n\t\""+fixtureModule+"/internal/gatbase/parameters\"\n)\n\nvar _ = parameters.Name\n\n// Run does nothing.\nfunc Run() {}\n")
+			put(r, "go-srv/internal/platform/core/core.go", "package core\n\nimport (\n\t\""+fixtureModule+"/internal/platform/parameters\"\n)\n\nvar _ = parameters.Name\n\n// Run does nothing.\nfunc Run() {}\n")
 		}, []string{"IMPORT_BOUNDARY"}},
 		{"main imports a module", func(t *testing.T, r fstest.MapFS) {
-			put(r, "go-srv/cmd/server/main.go", "package main\n\nimport (\n\t\""+fixtureModule+"/internal/gatbase/parameters\"\n)\n\nfunc main() { _ = parameters.Name }\n")
+			put(r, "go-srv/cmd/server/main.go", "package main\n\nimport (\n\t\""+fixtureModule+"/internal/platform/parameters\"\n)\n\nfunc main() { _ = parameters.Name }\n")
 		}, []string{"IMPORT_BOUNDARY"}},
 		{"package clause differs from the folder", func(t *testing.T, r fstest.MapFS) {
 			put(r, paramsFile, "package params\n")
@@ -319,7 +319,7 @@ func TestStackRootIsManagedOnlyWithAManifest(t *testing.T) {
 	}
 
 	addNgCore(repo)
-	edit(t, repo, ngRoot+"core/module.manifest.json", `["ng-web/"]`, `["ng-web/src/app/gatbase/core/"]`)
+	edit(t, repo, ngRoot+"core/module.manifest.json", `["ng-web/"]`, `["ng-web/src/app/platform/core/"]`)
 	_, issues = buildRepo(t, repo)
 	assertCodes(t, issues, "FILE_UNOWNED")
 	for _, found := range issues {
@@ -393,8 +393,8 @@ func TestBuildDoesNotFollowASymlinkedManifest(t *testing.T) {
 func TestGoFindingsAreAllReportedTogether(t *testing.T) {
 	repo := cleanRepo(t)
 	put(repo, paramsFile, "package parameters\n\nconst Path = \""+fixtureModule+"\"\n")
-	put(repo, "go-srv/internal/gatbase/coreauth/coreauth.go", "package coreauth\n\nimport (\n\t\""+fixtureModule+"/internal/gatbase/core\"\n\t\"fmt\"\n)\n\nvar _ = fmt.Sprint\nvar _ = core.Run\n")
-	put(repo, "go-srv/internal/gatbase/featureflags/featureflags.go", "package featureflags\n\nimport (\n")
+	put(repo, "go-srv/internal/platform/identity/identity.go", "package identity\n\nimport (\n\t\""+fixtureModule+"/internal/platform/core\"\n\t\"fmt\"\n)\n\nvar _ = fmt.Sprint\nvar _ = core.Run\n")
+	put(repo, "go-srv/internal/platform/featureflags/featureflags.go", "package featureflags\n\nimport (\n")
 	_, issues := buildRepo(t, repo)
 	assertCodes(t, issues, "GO_MODULE_PATH_LEAK", "GO_IMPORT_GROUP", "GO_PARSE_FAILED")
 }
@@ -404,8 +404,8 @@ func TestModuleFolderWithoutManifestIsUnowned(t *testing.T) {
 		name string
 		path string
 	}{
-		{"go-srv folder", "go-srv/internal/gatbase/billing/billing.go"},
-		{"go-srv nested file", "go-srv/internal/gatbase/billing/internal/store.go"},
+		{"go-srv folder", "go-srv/internal/platform/billing/billing.go"},
+		{"go-srv nested file", "go-srv/internal/platform/billing/internal/store.go"},
 		{"ng-web folder", ngRoot + "billing/billing.ts"},
 	}
 	for _, tc := range cases {
@@ -483,9 +483,9 @@ func TestExplicitClaimOfTheWholeFolderWithoutManifestIsDelivered(t *testing.T) {
 
 func TestConflictInsideFolderWithoutManifestIsOnlyAConflict(t *testing.T) {
 	repo := cleanRepo(t)
-	put(repo, "go-srv/internal/gatbase/billing/billing.go", "// Package billing is a module folder whose manifest was forgotten.\npackage billing\n")
-	edit(t, repo, paramsManifest, `["go-srv/internal/gatbase/parameters/"]`, `["go-srv/internal/gatbase/billing/", "go-srv/internal/gatbase/parameters/"]`)
-	edit(t, repo, flagsManifest, "\"go-srv/internal/gatbase/featureflags/\"\n  ],", "\"go-srv/internal/gatbase/billing/\",\n    \"go-srv/internal/gatbase/featureflags/\"\n  ],")
+	put(repo, "go-srv/internal/platform/billing/billing.go", "// Package billing is a module folder whose manifest was forgotten.\npackage billing\n")
+	edit(t, repo, paramsManifest, `["go-srv/internal/platform/parameters/"]`, `["go-srv/internal/platform/billing/", "go-srv/internal/platform/parameters/"]`)
+	edit(t, repo, flagsManifest, "\"go-srv/internal/platform/featureflags/\"\n  ],", "\"go-srv/internal/platform/billing/\",\n    \"go-srv/internal/platform/featureflags/\"\n  ],")
 
 	_, issues := buildRepo(t, repo)
 	assertCodes(t, issues, "FILE_OWNERSHIP_CONFLICT")
@@ -493,7 +493,7 @@ func TestConflictInsideFolderWithoutManifestIsOnlyAConflict(t *testing.T) {
 
 func TestUnlistedFileInFolderWithManifestIsNotUnowned(t *testing.T) {
 	repo := cleanRepo(t)
-	put(repo, "go-srv/internal/gatbase/parameters/unlisted.go", "package parameters\n")
+	put(repo, "go-srv/internal/platform/parameters/unlisted.go", "package parameters\n")
 
 	_, issues := buildRepo(t, repo)
 	assertCodes(t, issues)

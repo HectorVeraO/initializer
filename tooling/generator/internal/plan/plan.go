@@ -477,8 +477,8 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 }
 
 // Grep builds the anchored Playwright --grep pattern for sorted tags. The
-// negative lookahead keeps @core from matching @core-auth. It returns "" for
-// no tags.
+// negative lookahead keeps @core from matching a longer tag such as @core-x.
+// It returns "" for no tags.
 func Grep(tags []string) string {
 	if len(tags) == 0 {
 		return ""

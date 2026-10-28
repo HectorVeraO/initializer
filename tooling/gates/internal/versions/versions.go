@@ -42,8 +42,8 @@ type Component struct {
 
 // compositionRoots wire the modules together and belong to no component.
 var compositionRoots = map[string]bool{
-	"go-srv/cmd/server/modules.go":      true,
-	"ng-web/src/app/gatbase/modules.ts": true,
+	"go-srv/cmd/server/modules.go":       true,
+	"ng-web/src/app/platform/modules.ts": true,
 }
 
 // componentName is what a spec folder or a module id must look like to be a
@@ -58,8 +58,8 @@ type location struct {
 
 var locations = []location{
 	{dir: "specs", manifestName: specManifestName},
-	{dir: "go-srv/internal/gatbase", manifestName: moduleManifestName, stack: "go-srv"},
-	{dir: "ng-web/src/app/gatbase", manifestName: moduleManifestName, stack: "ng-web"},
+	{dir: "go-srv/internal/platform", manifestName: moduleManifestName, stack: "go-srv"},
+	{dir: "ng-web/src/app/platform", manifestName: moduleManifestName, stack: "ng-web"},
 }
 
 // source reads the manifests of one repository state.

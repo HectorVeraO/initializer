@@ -48,7 +48,7 @@ func TestScanSplitsAndStrips(t *testing.T) {
 }
 
 func TestScanLinesAndContractMarker(t *testing.T) {
-	src := "-- gatbase:contract-step why\nA;\n\nB; C;\n-- gatbase:contract-step\nD;\n-- gatbase:contract-stepx why\nE;\nF -- gatbase:contract-step why\n;\n-- gatbase:contract-step ok\n/* c */ G;"
+	src := "-- initializer:contract-step why\nA;\n\nB; C;\n-- initializer:contract-step\nD;\n-- initializer:contract-stepx why\nE;\nF -- initializer:contract-step why\n;\n-- initializer:contract-step ok\n/* c */ G;"
 	got := migrationlint.Scan([]byte(src))
 	type row struct {
 		line   int

@@ -1,4 +1,4 @@
-// Package verify compares a generated project with its gatbase.lock.json.
+// Package verify compares a generated project with its initializer.lock.json.
 package verify
 
 import (

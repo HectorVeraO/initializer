@@ -16,7 +16,7 @@ import (
 
 const (
 	sysManifest = `{"module":"parameters","tablePrefixes":["sys"],"unknownKey":1}`
-	modDir      = "go-srv/internal/gatbase/parameters/"
+	modDir      = "go-srv/internal/platform/parameters/"
 	goodName    = "20260101120000_sys_create_parameters.sql"
 	upLine      = "-- +goose Up\n"
 )
@@ -241,9 +241,9 @@ func TestFileRules(t *testing.T) {
 func TestLocationRule(t *testing.T) {
 	cases := []string{
 		"go-srv/db/20260101120000_sys_a.sql",
-		"go-srv/internal/gatbase/parameters/20260101120000_sys_a.sql",
-		"go-srv/internal/gatbase/parameters/migrations/sub/20260101120000_sys_a.sql",
-		"go-srv/internal/gatbase/parameters/migrations/schema.SQL",
+		"go-srv/internal/platform/parameters/20260101120000_sys_a.sql",
+		"go-srv/internal/platform/parameters/migrations/sub/20260101120000_sys_a.sql",
+		"go-srv/internal/platform/parameters/migrations/schema.SQL",
 	}
 	for _, rel := range cases {
 		t.Run(rel, func(t *testing.T) {
@@ -271,8 +271,8 @@ func TestSQLOutsideGoSrvIsNotScanned(t *testing.T) {
 
 func TestSQLUnderTestdataIsNotScanned(t *testing.T) {
 	root := sysModule(t, goodName, upLine)
-	put(t, root, "go-srv/internal/gatbase/core/migrate/testdata/alpha/migrations/20260101120000_sys_create_examples.sql", "CREATE TABLE parameters (id int);")
-	put(t, root, "go-srv/internal/gatbase/parameters/testdata/bad.sql", "DROP TABLE sys_parameters;")
+	put(t, root, "go-srv/internal/platform/core/migrate/testdata/alpha/migrations/20260101120000_sys_create_examples.sql", "CREATE TABLE parameters (id int);")
+	put(t, root, "go-srv/internal/platform/parameters/testdata/bad.sql", "DROP TABLE sys_parameters;")
 	vs, n := lint(t, root, "")
 	expectRules(t, vs)
 	if n != 1 {
@@ -282,11 +282,11 @@ func TestSQLUnderTestdataIsNotScanned(t *testing.T) {
 
 func TestDuplicateTimestampAcrossModules(t *testing.T) {
 	root := sysModule(t, goodName, upLine)
-	put(t, root, "go-srv/internal/gatbase/flags/module.manifest.json", `{"module":"flags","tablePrefixes":["flg"]}`)
-	put(t, root, "go-srv/internal/gatbase/flags/migrations/20260101120000_flg_create.sql", upLine)
+	put(t, root, "go-srv/internal/platform/flags/module.manifest.json", `{"module":"flags","tablePrefixes":["flg"]}`)
+	put(t, root, "go-srv/internal/platform/flags/migrations/20260101120000_flg_create.sql", upLine)
 	vs, _ := lint(t, root, "")
 	expectRules(t, vs, "MIGRATION_TIMESTAMP_DUPLICATE")
-	if vs[0].Path != "go-srv/internal/gatbase/parameters/migrations/"+goodName {
+	if vs[0].Path != "go-srv/internal/platform/parameters/migrations/"+goodName {
 		t.Fatalf("%v", summary(vs))
 	}
 }
@@ -331,7 +331,7 @@ func TestEveryReservedPrefixIsRejectedEvenWithoutMigrations(t *testing.T) {
 func TestPrefixClaimedByTwoManifests(t *testing.T) {
 	root := t.TempDir()
 	put(t, root, modDir+"module.manifest.json", sysManifest)
-	put(t, root, "go-srv/internal/gatbase/other/module.manifest.json", `{"tablePrefixes":["sys"]}`)
+	put(t, root, "go-srv/internal/platform/other/module.manifest.json", `{"tablePrefixes":["sys"]}`)
 	vs, _ := lint(t, root, "")
 	expectRules(t, vs, "MIGRATION_PREFIX_RESERVED")
 	if !strings.Contains(vs[0].Path, "parameters") {
@@ -341,15 +341,15 @@ func TestPrefixClaimedByTwoManifests(t *testing.T) {
 
 func TestForeignPrefixInFileName(t *testing.T) {
 	root := sysModule(t, "20260101120000_flg_a.sql", upLine)
-	put(t, root, "go-srv/internal/gatbase/flags/module.manifest.json", `{"tablePrefixes":["flg"]}`)
+	put(t, root, "go-srv/internal/platform/flags/module.manifest.json", `{"tablePrefixes":["flg"]}`)
 	vs, _ := lint(t, root, "")
 	expectRules(t, vs, "MIGRATION_PREFIX_FOREIGN")
 }
 
-func TestGatbaseDirIsNotAFixedList(t *testing.T) {
+func TestPlatformDirIsNotAFixedList(t *testing.T) {
 	root := t.TempDir()
-	put(t, root, "go-srv/internal/gatbase/my_own/module.manifest.json", `{"tablePrefixes":["myx"]}`)
-	put(t, root, "go-srv/internal/gatbase/my_own/migrations/20260101120000_myx_a.sql", upLine+"CREATE TABLE myx_a (id int);\n")
+	put(t, root, "go-srv/internal/platform/my_own/module.manifest.json", `{"tablePrefixes":["myx"]}`)
+	put(t, root, "go-srv/internal/platform/my_own/migrations/20260101120000_myx_a.sql", upLine+"CREATE TABLE myx_a (id int);\n")
 	vs, n := lint(t, root, "")
 	expectRules(t, vs)
 	if n != 1 {
@@ -417,8 +417,8 @@ func TestBaseChecks(t *testing.T) {
 			put(t, root, prefix+"20260115120000_sys_late.sql", upLine)
 		}, []string{"MIGRATION_OUT_OF_ORDER@" + prefix + "20260115120000_sys_late.sql:0"}},
 		"first file of another module sorts earlier": {func(t *testing.T, root string) {
-			put(t, root, "go-srv/internal/gatbase/flags/module.manifest.json", `{"tablePrefixes":["flg"]}`)
-			put(t, root, "go-srv/internal/gatbase/flags/migrations/20250101120000_flg_a.sql", upLine)
+			put(t, root, "go-srv/internal/platform/flags/module.manifest.json", `{"tablePrefixes":["flg"]}`)
+			put(t, root, "go-srv/internal/platform/flags/migrations/20250101120000_flg_a.sql", upLine)
 		}, nil},
 	}
 	for name, tc := range cases {

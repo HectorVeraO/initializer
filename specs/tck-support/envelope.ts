@@ -17,7 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Asserts the Gatbase wire envelope of an `/api/v1/` response and returns it.
+ * Asserts the wire envelope of an `/api/v1/` response and returns it.
  *
  * Checks the status, the exact `data`/`meta`/`error` keys, the trace id and its
  * `X-Trace-Id` header twin, the timestamp shape, `Cache-Control: no-store`, and

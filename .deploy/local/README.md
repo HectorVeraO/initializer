@@ -28,13 +28,13 @@ docker compose -f .deploy/local/docker-compose.yml down -v
 
 ## Feature flags
 
-`GATBASE_FLAGS_FILE` is the path of the `flags.yaml` manifest, required when the `feature-flags` module is installed (`../flags.yaml` from `go-srv/`). A relative path resolves against the process working directory. A missing, unreadable or invalid file stops startup with exit `1` and every problem listed. A local go-srv started from `go-srv/` now needs it: an existing `.deploy/local/.env` that predates the module lacks the key, so re-copy it from `.example.env`.
+`APP_FLAGS_FILE` is the path of the `flags.yaml` manifest, required when the `feature-flags` module is installed (`../flags.yaml` from `go-srv/`). A relative path resolves against the process working directory. A missing, unreadable or invalid file stops startup with exit `1` and every problem listed. A local go-srv started from `go-srv/` now needs it: an existing `.deploy/local/.env` that predates the module lacks the key, so re-copy it from `.example.env`.
 
 ## Session keys
 
-`GATBASE_SESSION_KEYS` is a comma-separated keyring of `<kid>:<seed>` entries (`kid` matches `^[A-Za-z0-9._-]{1,32}$`, seed is 32 random bytes in unpadded base64url). The first entry signs; every entry verifies.
+`APP_SESSION_KEYS` is a comma-separated keyring of `<kid>:<seed>` entries (`kid` matches `^[A-Za-z0-9._-]{1,32}$`, seed is 32 random bytes in unpadded base64url). The first entry signs; every entry verifies.
 
 - Generate a seed: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`
-- Local only: `<kid>:passphrase:<24 to 128 characters>` derives the seed from the text (no commas); `Build` rejects it when `GATBASE_PUBLIC_BASE_URL` is `https`.
-- Rotation: add the new key as a second entry and deploy; move it first and deploy; after `GATBASE_SESSION_REFRESH_MAX_AGE` remove the old key.
+- Local only: `<kid>:passphrase:<24 to 128 characters>` derives the seed from the text (no commas); `Build` rejects it when `APP_PUBLIC_BASE_URL` is `https`.
+- Rotation: add the new key as a second entry and deploy; move it first and deploy; after `APP_SESSION_REFRESH_MAX_AGE` remove the old key.
 - Emergency rotation: replace the whole keyring; every token answers `401 SESSION_INVALID`.

@@ -1,7 +1,7 @@
 # AGENTS.md - ng-web
 
 <!-- AGENTIC-SETUP:AUTOGEN:overview START -->
-**Purpose**: Angular stack of the catalog: the console screens of each Gatbase module (login through the BFF session, tenant switch, module administration) that the generator copies into Angular projects.
+**Purpose**: Angular stack of the module catalog: the console screens of each platform module (login through the BFF session, tenant switch, module administration) that the generator copies into Angular projects.
 
 - **Stack**: Node.js 24.22.1 / Angular 22.2 / TypeScript
 - **UI libraries**: Optimus UI 2.0.2 (`@openng/optimus-ui`, a PrimeNG fork), Tailwind CSS 4, Transloco. The Sakai demos under `src/app/pages/uikit` are the component reference: copy their markup before inventing one.
@@ -47,7 +47,7 @@ Conventions for each file: `cookbooks/new-feature.md`, "Feature conventions".
 
 ### Layout of this Angular version
 
-Angular 22, standalone components only, no NgModules. Files are named `<name>.component.ts` / `.html` / `.scss` (the Sakai layout and demos use `<name>.ts`), routes live in `<feature>.routes.ts`, and the `@/` alias points to `src/app`. The Sakai shell sits in `src/app/layout`, shell pages in `src/app/pages`, developer demos in `src/app/dev` (replaced by empty files in production builds), generic code in `src/app/core`, and each feature in its own folder `src/app/<feature>/`, lazy-loaded from `src/app.routes.ts`. Gatbase modules go to `src/app/gatbase/<module>/`. Follow this layout where the file map above names `*.module.ts` or `*-routing.module.ts` files: use `<feature>.routes.ts` instead.
+Angular 22, standalone components only, no NgModules. Files are named `<name>.component.ts` / `.html` / `.scss` (the Sakai layout and demos use `<name>.ts`), routes live in `<feature>.routes.ts`, and the `@/` alias points to `src/app`. The Sakai shell sits in `src/app/layout`, shell pages in `src/app/pages`, developer demos in `src/app/dev` (replaced by empty files in production builds), generic code in `src/app/core`, and each feature in its own folder `src/app/<feature>/`, lazy-loaded from `src/app.routes.ts`. Platform modules go to `src/app/platform/<module>/`. Follow this layout where the file map above names `*.module.ts` or `*-routing.module.ts` files: use `<feature>.routes.ts` instead.
 
 ## Verification
 

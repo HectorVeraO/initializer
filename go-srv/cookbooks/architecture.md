@@ -1,21 +1,21 @@
 # go-srv -- Architecture and module layout
 
-Read before adding or changing a module, route, handler or error response. Canonical examples: `go-srv/internal/gatbase/core/health` (mounting, handler, black-box test) and `go-srv/internal/gatbase/core/coretest` (a module under test).
+Read before adding or changing a module, route, handler or error response. Canonical examples: `go-srv/internal/platform/core/health` (mounting, handler, black-box test) and `go-srv/internal/platform/core/coretest` (a module under test).
 
 ## Layout
 
 | Path | Holds |
 |---|---|
 | `cmd/server/main.go` | Fixed: `os.Exit(core.Main(installedModules()))`. `cmd/server/modules.go` is generated and lists the installed modules. No business logic. |
-| `internal/gatbase/core/` | The always-installed foundation: module seam (`Module`, `Builder`, `Host`, `Build`, `Run`), request chain, `api`, `auth`, `reqctx`, `featureflag`, `config`, `telemetry`, `db`, `migrate`, `health`, `clock`, `coretest`. |
-| `internal/gatbase/<module>/` | One package tree per catalog module (`coreauth`, `parameters`, `featureflags`). |
+| `internal/platform/core/` | The always-installed foundation: module seam (`Module`, `Builder`, `Host`, `Build`, `Run`), request chain, `api`, `access`, `reqctx`, `featureflag`, `config`, `telemetry`, `db`, `migrate`, `health`, `clock`, `coretest`. |
+| `internal/platform/<module>/` | One package tree per catalog module (`identity`, `parameters`, `featureflags`). |
 | `specs/<module>/openapi.yaml` (repo root) | The module's HTTP contract. The Go code implements it; it never defines it. |
 
-- Import rules, enforced by `internal/gatbase/core/boundary_test.go`: a package under `core/` imports no other `internal/gatbase/<x>`; a module imports from this Go module only `core/...` and its own subtree; `cmd/server` imports only `core` and the module root packages named in `modules.go`; core subpackages never import the `core` root (`core/coretest` is the one exception); the Go module path appears only in `go.mod` and import specs, in an import group of its own.
+- Import rules, enforced by `internal/platform/core/boundary_test.go`: a package under `core/` imports no other `internal/platform/<x>`; a module imports from this Go module only `core/...` and its own subtree; `cmd/server` imports only `core` and the module root packages named in `modules.go`; core subpackages never import the `core` root (`core/coretest` is the one exception); the Go module path appears only in `go.mod` and import specs, in an import group of its own.
 - Ports (session resolver, API key resolver, tenant directory, flag evaluator) are declared in core only; a module publishes one with `Builder.Provide*` in `Provide`, once, and reads it from `Host` in `Mount`.
 - One module owns its routes, its handlers, its persistence prefix and its tests. Nothing outside the module reads its tables.
 - Modules talk to each other through exported Go functions or interfaces of the other module's package, never through its tables.
-- Module paths are stable: the generator copies `internal/gatbase/<module>/` into generated projects at the same path, and each records its version in `gatbase.lock.json` (copy-and-own). Do not move a module directory.
+- Module paths are stable: the generator copies `internal/platform/<module>/` into generated projects at the same path, and each records its version in `initializer.lock.json` (copy-and-own). Do not move a module directory.
 - No package-level mutable state. Dependencies (logger, pool, clock, config) arrive as constructor parameters.
 - No reserved empty interfaces for modules that do not exist yet.
 
@@ -39,7 +39,7 @@ Every /api/v1 response body is one JSON object:
 ```
 
 - Success: `data` set, `error` null. Failure: `data` null, `error` set as `{ "code": "<CODE>", "message": "<text>", "issues": [] }`.
-- `meta.traceId` equals the `X-Trace-Id` response header (see `cookbooks/testing-tck.md` and root `AGENTS.md` "Gatbase rules").
+- `meta.traceId` equals the `X-Trace-Id` response header (see `cookbooks/testing-tck.md` and root `AGENTS.md` "Platform rules").
 - `meta.timestamp` is RFC 3339 UTC ending in `Z`.
 - Probes (/health/*) do not use the envelope.
 
@@ -48,7 +48,7 @@ Every /api/v1 response body is one JSON object:
 - Error codes are SCREAMING_SNAKE constants declared in the module that raises them (`TENANT_MISMATCH`, `LAST_TENANT_ADMIN`, `SYSTEM_PARAMETER_PROTECTED`). A code is part of the contract: renaming one is a breaking change.
 - Validation is accumulated: a `POST`, `PUT` or `PATCH` with invalid data collects every problem and answers `422` with all of them in `error.issues[]` (`{ "field": "<json path>", "code": "<CODE>", "message": "<text>" }`). Never stop at the first invalid field.
 - Status mapping: `401` credentials missing or rejected, `403` authenticated but not allowed (with its code), `404` not found or not visible to the active tenant, `409` state conflict, `422` validation.
-- The registry of codes lives in `internal/gatbase/core/api/codes.go`; add a code there with its contract change. Body decoding answers `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE` and `422` with every issue (`api.DecodeBody`).
+- The registry of codes lives in `internal/platform/core/api/codes.go`; add a code there with its contract change. Body decoding answers `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE` and `422` with every issue (`api.DecodeBody`).
 - Never return an internal error message, SQL error or stack trace in `error.message`. Log it with the trace id; answer a generic `500`.
 
 ## Tenant scoping

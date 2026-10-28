@@ -41,7 +41,7 @@ var (
 	projectKeys   = []string{"name", "goModule"}
 )
 
-// DecodeSelection decodes and validates a gatbase.selection.json file.
+// DecodeSelection decodes and validates an initializer.selection.json file.
 func DecodeSelection(path string, data []byte) (Selection, []issue.Issue) {
 	d := newDecoder(path, CodeSelectionInvalid)
 	var selection Selection

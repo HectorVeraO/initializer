@@ -1,4 +1,4 @@
-// Package semver implements the X.Y.Z and ^X.Y.Z subset used by Gatbase manifests.
+// Package semver implements the X.Y.Z and ^X.Y.Z subset used by the module and spec manifests.
 package semver
 
 import (

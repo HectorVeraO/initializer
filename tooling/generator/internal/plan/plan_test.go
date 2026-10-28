@@ -95,8 +95,8 @@ func backendModule(t *testing.T, cat *catalog.Catalog, id string) *catalog.Modul
 
 func TestEmptySelectionResolvesImpliedModules(t *testing.T) {
 	p := mustResolve(t, load(t, "backend.json"), selection())
-	wantIDs(t, p.Stacks[0], "core", "core-auth")
-	if !reflect.DeepEqual(p.Selection.Modules, []string{"core", "core-auth"}) {
+	wantIDs(t, p.Stacks[0], "core", "identity")
+	if !reflect.DeepEqual(p.Selection.Modules, []string{"core", "identity"}) {
 		t.Fatalf("recorded modules = %v", p.Selection.Modules)
 	}
 	if p.GoModule != "example.com/fixture/srv" || p.ComposeName != "fixture-app" {
@@ -114,7 +114,7 @@ func TestMilestoneOrderForBothSelectionForms(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			p := mustResolve(t, cat, sel)
-			want := []string{"core", "core-auth", "feature-flags", "parameters"}
+			want := []string{"core", "identity", "feature-flags", "parameters"}
 			wantIDs(t, p.Stacks[0], want...)
 			if !reflect.DeepEqual(p.Selection.Modules, want) || p.Selection.AllModules {
 				t.Fatalf("recorded selection = %+v", p.Selection)
@@ -122,10 +122,10 @@ func TestMilestoneOrderForBothSelectionForms(t *testing.T) {
 			if p.Selection.Project.Name != "acme-backend" || !reflect.DeepEqual(p.Selection.Stacks, []string{"go-srv"}) {
 				t.Fatalf("recorded selection = %+v", p.Selection)
 			}
-			if p.TCKGrep != "@(core|core-auth|feature-flags|otel|parameters)(?![A-Za-z0-9_-])" {
+			if p.TCKGrep != "@(core|feature-flags|identity|otel|parameters)(?![A-Za-z0-9_-])" {
 				t.Fatalf("grep = %q", p.TCKGrep)
 			}
-			wantEnv := map[string]string{"GATBASE_FLAGS_FILE": "specs/feature-flags/tck/fixtures/flags.yaml"}
+			wantEnv := map[string]string{"APP_FLAGS_FILE": "specs/feature-flags/tck/fixtures/flags.yaml"}
 			if !reflect.DeepEqual(p.TCKEnv, wantEnv) {
 				t.Fatalf("env = %v", p.TCKEnv)
 			}
@@ -136,7 +136,7 @@ func TestMilestoneOrderForBothSelectionForms(t *testing.T) {
 func TestTCKGrepIsAnchored(t *testing.T) {
 	cat := load(t, "backend.json")
 	p := mustResolve(t, cat, selection("parameters"))
-	if p.TCKGrep != "@(core|core-auth|otel|parameters)(?![A-Za-z0-9_-])" {
+	if p.TCKGrep != "@(core|identity|otel|parameters)(?![A-Za-z0-9_-])" {
 		t.Fatalf("grep = %q", p.TCKGrep)
 	}
 	if len(p.TCKEnv) != 0 {
@@ -146,12 +146,12 @@ func TestTCKGrepIsAnchored(t *testing.T) {
 	for _, spec := range p.Specs {
 		specNames = append(specNames, spec.Spec)
 	}
-	if !reflect.DeepEqual(specNames, []string{"core", "core-auth", "parameters"}) {
+	if !reflect.DeepEqual(specNames, []string{"core", "identity", "parameters"}) {
 		t.Fatalf("specs = %v", specNames)
 	}
 
 	coreOnly := load(t, "backend.json")
-	backendModule(t, &coreOnly, "core-auth").ImplementsSpec = map[string]string{}
+	backendModule(t, &coreOnly, "identity").ImplementsSpec = map[string]string{}
 	coreOnly.Specs[0].TCKTags = []string{"@core"}
 	p = mustResolve(t, coreOnly, selection())
 	if p.TCKGrep != "@(core)(?![A-Za-z0-9_-])" {
@@ -162,22 +162,22 @@ func TestTCKGrepIsAnchored(t *testing.T) {
 func TestRequiresChainPullsAndOrdersDependencies(t *testing.T) {
 	cat := load(t, "chain.json")
 	p := mustResolve(t, cat, selection("b"))
-	wantIDs(t, p.Stacks[0], "core", "core-auth", "a", "b")
+	wantIDs(t, p.Stacks[0], "core", "identity", "a", "b")
 	// Diamond: d needs b and c, both need a. Ready ties break by id.
 	p = mustResolve(t, cat, selection("d"))
-	wantIDs(t, p.Stacks[0], "core", "core-auth", "a", "b", "c", "d")
+	wantIDs(t, p.Stacks[0], "core", "identity", "a", "b", "c", "d")
 }
 
 func TestImpliedModulesComeFirstAmongReady(t *testing.T) {
-	// "a" sorts before "core-auth" bytewise; the implied module still wins.
+	// "a" sorts before "identity" bytewise; the implied module still wins.
 	p := mustResolve(t, load(t, "chain.json"), selection("a"))
-	wantIDs(t, p.Stacks[0], "core", "core-auth", "a")
+	wantIDs(t, p.Stacks[0], "core", "identity", "a")
 }
 
 func TestDuplicatesAndImpliedIdsListedExplicitly(t *testing.T) {
 	cat := load(t, "backend.json")
 	clean := mustResolve(t, cat, selection("parameters"))
-	noisy := mustResolve(t, cat, selection("parameters", "core", "core-auth", "parameters", "core-auth"))
+	noisy := mustResolve(t, cat, selection("parameters", "core", "identity", "parameters", "identity"))
 	if !reflect.DeepEqual(clean, noisy) {
 		t.Fatalf("plans differ:\n%+v\n%+v", clean, noisy)
 	}
@@ -187,7 +187,7 @@ func TestResolveIgnoresOrderAndDuplicationOfModules(t *testing.T) {
 	cat := load(t, "chain.json")
 	base := mustResolve(t, cat, selection("a", "b", "c", "d"))
 	rng := rand.New(rand.NewSource(1))
-	pool := []string{"a", "b", "c", "d", "core", "core-auth"}
+	pool := []string{"a", "b", "c", "d", "core", "identity"}
 	for i := 0; i < 50; i++ {
 		modules := []string{"d"}
 		for j := rng.Intn(8); j > 0; j-- {
@@ -230,7 +230,7 @@ func TestFrontendStackMissingModuleIsNotCopied(t *testing.T) {
 	if p.Stacks[0].Stack != "go-srv" || p.Stacks[1].Stack != "ng-web" {
 		t.Fatalf("stacks not sorted: %s %s", p.Stacks[0].Stack, p.Stacks[1].Stack)
 	}
-	wantIDs(t, p.Stacks[0], "core", "core-auth", "parameters")
+	wantIDs(t, p.Stacks[0], "core", "identity", "parameters")
 	wantIDs(t, p.Stacks[1], "core", "parameters")
 	if !reflect.DeepEqual(p.Selection.Stacks, []string{"go-srv", "ng-web"}) {
 		t.Fatalf("recorded stacks = %v", p.Selection.Stacks)
@@ -284,7 +284,7 @@ func TestRequiresUnsatisfied(t *testing.T) {
 	t.Run("0.0.Z exact range", func(t *testing.T) {
 		cat := load(t, "backend.json")
 		backendModule(t, &cat, "core").Version = "0.0.5"
-		backendModule(t, &cat, "core-auth").RequiresCore = "0.0.5"
+		backendModule(t, &cat, "identity").RequiresCore = "0.0.5"
 		backendModule(t, &cat, "parameters").RequiresCore = "0.0.5"
 		mustResolve(t, cat, selection("parameters"))
 		backendModule(t, &cat, "parameters").RequiresCore = "^0.0.6"
@@ -292,7 +292,7 @@ func TestRequiresUnsatisfied(t *testing.T) {
 	})
 	t.Run("frontend requirement missing from its stack", func(t *testing.T) {
 		cat := load(t, "fullstack.json")
-		cat.Stacks[1].Modules[3].RequiresModules = []catalog.Requirement{{Module: "core-auth", Range: "^0.1.0"}}
+		cat.Stacks[1].Modules[3].RequiresModules = []catalog.Requirement{{Module: "identity", Range: "^0.1.0"}}
 		sel := selection("parameters")
 		sel.Stacks = []string{"go-srv", "ng-web"}
 		wantCodes(t, cat, sel, catalog.CodeRequiresUnsatisfied)
@@ -327,14 +327,14 @@ func TestGeneratorMismatch(t *testing.T) {
 
 func TestTCKEnvConflictAndAgreement(t *testing.T) {
 	cat := load(t, "backend.json")
-	cat.Specs[3].TCKEnv = map[string]string{"GATBASE_FLAGS_FILE": "other.yaml"}
-	cat.Specs[2].TCKEnv = map[string]string{"GATBASE_FLAGS_FILE": "flags.yaml"}
+	cat.Specs[3].TCKEnv = map[string]string{"APP_FLAGS_FILE": "other.yaml"}
+	cat.Specs[1].TCKEnv = map[string]string{"APP_FLAGS_FILE": "flags.yaml"}
 	wantCodes(t, cat, selection("parameters", "feature-flags"), plan.CodeTCKEnvConflict)
 	// A conflicting spec that is not copied does not count.
 	mustResolve(t, cat, selection("feature-flags"))
-	cat.Specs[3].TCKEnv["GATBASE_FLAGS_FILE"] = "flags.yaml"
+	cat.Specs[3].TCKEnv["APP_FLAGS_FILE"] = "flags.yaml"
 	p := mustResolve(t, cat, selection("parameters", "feature-flags"))
-	if p.TCKEnv["GATBASE_FLAGS_FILE"] != "flags.yaml" || len(p.TCKEnv) != 1 {
+	if p.TCKEnv["APP_FLAGS_FILE"] != "flags.yaml" || len(p.TCKEnv) != 1 {
 		t.Fatalf("env = %v", p.TCKEnv)
 	}
 }
@@ -344,15 +344,15 @@ func TestHostileCatalogValuesAreRefused(t *testing.T) {
 	tag.Specs[0].TCKTags = []string{"@core|.*"}
 	wantCodes(t, tag, selection(), catalog.CodeCatalogInvalid)
 	env := load(t, "backend.json")
-	env.Specs[2].TCKEnv = map[string]string{"GATBASE_FLAGS_FILE": "a`b"}
+	env.Specs[1].TCKEnv = map[string]string{"APP_FLAGS_FILE": "a`b"}
 	wantCodes(t, env, selection("feature-flags"), catalog.CodeCatalogInvalid)
 	for _, hostile := range []string{"a\nb", "a\rb", "a\x00b"} {
 		bad := load(t, "backend.json")
-		bad.Specs[2].TCKEnv = map[string]string{"GATBASE_FLAGS_FILE": hostile}
+		bad.Specs[1].TCKEnv = map[string]string{"APP_FLAGS_FILE": hostile}
 		wantCodes(t, bad, selection("feature-flags"), catalog.CodeCatalogInvalid)
 	}
 	key := load(t, "backend.json")
-	key.Specs[2].TCKEnv = map[string]string{"lower": "x"}
+	key.Specs[1].TCKEnv = map[string]string{"lower": "x"}
 	wantCodes(t, key, selection("feature-flags"), catalog.CodeCatalogInvalid)
 	version := load(t, "backend.json")
 	backendModule(t, &version, "core").Version = "not-a-version"
@@ -374,7 +374,7 @@ func TestCoreIsPlannedWhenNotImplied(t *testing.T) {
 	cat := load(t, "backend.json")
 	backendModule(t, &cat, "core").Implied = false
 	p := mustResolve(t, cat, selection())
-	wantIDs(t, p.Stacks[0], "core", "core-auth")
+	wantIDs(t, p.Stacks[0], "core", "identity")
 }
 
 func TestSpecUnknown(t *testing.T) {

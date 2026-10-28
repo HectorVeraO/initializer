@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 const baseURL = process.env.TCK_BASE_URL;
 if (!baseURL) {
-  throw new Error('TCK_BASE_URL is required: set it to the GATBASE_PUBLIC_BASE_URL of the instance under test');
+  throw new Error('TCK_BASE_URL is required: set it to the APP_PUBLIC_BASE_URL of the instance under test');
 }
 
 // Tag selection lives in scripts/run-tck.mjs; this config sets no grep.

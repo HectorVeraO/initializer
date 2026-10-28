@@ -74,10 +74,10 @@ func TestDecodeRefusals(t *testing.T) {
 }
 
 func TestModuleDirDropsHyphensOnlyForGo(t *testing.T) {
-	if dir, ok := lockfile.ModuleDir("go-srv", "feature-flags"); !ok || dir != "go-srv/internal/gatbase/featureflags/" {
+	if dir, ok := lockfile.ModuleDir("go-srv", "feature-flags"); !ok || dir != "go-srv/internal/platform/featureflags/" {
 		t.Errorf("go dir = %q %v", dir, ok)
 	}
-	if dir, ok := lockfile.ModuleDir("ng-web", "feature-flags"); !ok || dir != "ng-web/src/app/gatbase/feature-flags/" {
+	if dir, ok := lockfile.ModuleDir("ng-web", "feature-flags"); !ok || dir != "ng-web/src/app/platform/feature-flags/" {
 		t.Errorf("ng dir = %q %v", dir, ok)
 	}
 	if _, ok := lockfile.ModuleDir("other", "x"); ok {

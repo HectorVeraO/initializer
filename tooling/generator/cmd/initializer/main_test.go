@@ -27,7 +27,7 @@ func execute(t *testing.T, args ...string) (code int, stdout, stderr string) {
 
 func writeSelection(t *testing.T, content string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "gatbase.selection.json")
+	path := filepath.Join(t.TempDir(), "initializer.selection.json")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write selection: %v", err)
 	}

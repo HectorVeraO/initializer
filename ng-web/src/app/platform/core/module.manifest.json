@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "stack": "ng-web",
+  "module": "core",
+  "version": "0.1.7",
+  "implied": true,
+  "implementsSpec": { "core": "1.0.0", "identity": "2.0.0" },
+  "requiresModules": [],
+  "files": ["ng-web/"],
+  "exclude": ["ng-web/.vscode/", "ng-web/AGENTS.md", "ng-web/cookbooks/"]
+}
