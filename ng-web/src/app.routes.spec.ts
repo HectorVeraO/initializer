@@ -3,6 +3,7 @@ import { Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, Routes } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
+import { AppLayout } from '@/layout/component/layout/app.layout';
 import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
 import { WebModule, anonymousGuard, coreModule, providePlatform, requireAccess } from '@/platform/core';
 import { accessContext, provideFakeAccess, provideTenantSelection } from './testing/fixtures/access-testing';
@@ -53,6 +54,7 @@ describe('app routes without identity', () => {
     configure([BARE_CORE]);
 
     expect(await resolve(url)).toBe(url);
+    expect(router.routerState.snapshot.root.firstChild?.component).toBe(AppLayout);
   });
 
   it('redirects the empty path to /home', async () => {

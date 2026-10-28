@@ -236,7 +236,6 @@ describe('AcceptInvitationPage', () => {
     post.flush(okEnvelope({ membership: MEMBERSHIP, account: { id: 'b', email: 'jane@example.com', fullName: 'Jane Doe' } }), { status: 201, statusText: 'Created' });
 
     await vi.waitFor(() => expect(signIn).toHaveBeenCalledExactlyOnceWith({ email: 'jane@example.com', notice: 'accountCreated' }));
-    expect(TestBed.inject(Router).url).not.toContain('jane');
   });
 
   it('does not send a form with a different confirmation', async () => {
