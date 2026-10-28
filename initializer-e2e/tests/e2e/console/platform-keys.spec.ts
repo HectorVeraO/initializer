@@ -8,7 +8,7 @@ test.skip(!env.ok, env.ok ? '' : `missing env: ${env.missing.join(', ')}`);
 // Spanish copy from ng-web/src/app/platform/api-keys/i18n/es.json (defaultLang is es).
 const OWNER_GLOBAL = 'Claves globales (sin tenant)';
 const NO_SCOPES_WITHOUT_TENANT =
-  'En este proyecto, ningún permiso puede ser tenido por una clave sin tenant.';
+  'En este proyecto no hay permisos que una clave sin tenant pueda tener.';
 
 test.describe('Console with api-keys and no tenancy', () => {
   test(
