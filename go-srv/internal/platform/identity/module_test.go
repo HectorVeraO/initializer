@@ -313,7 +313,7 @@ func TestIdentityAloneCreatesOnlyItsOwnTable(t *testing.T) {
 	}
 }
 
-func TestMountedRoutesAreExactlyTheSessionRoutesAndTheKratosProxy(t *testing.T) {
+func TestMountedRoutesAreTheSessionRoutesAndTheKratosProxyAndNoSiblings(t *testing.T) {
 	kratos := newStubKratos(t)
 	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
 		Database: true,

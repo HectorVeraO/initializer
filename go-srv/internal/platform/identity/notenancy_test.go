@@ -1,9 +1,12 @@
 package identity
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 )
 
 // aloneEnv is identity with no tenant provider: the core No* defaults answer.
@@ -126,14 +129,30 @@ func TestAloneSwitchTenantIsDeniedForEveryWellFormedID(t *testing.T) {
 }
 
 func TestAloneSwitchTenantRejectsAMalformedBody(t *testing.T) {
-	bodies := []string{`{}`, `{"tenantId":null}`, `{"tenantId":5}`, `{"tenantId":"not-a-uuid"}`, `{"tenantId":""}`, `{"tenantId":`, `[]`}
+	cases := []struct {
+		body  string
+		issue string
+	}{
+		{`{}`, "FIELD_REQUIRED"},
+		{`{"tenantId":null}`, "FIELD_REQUIRED"},
+		{`{"tenantId":5}`, "FIELD_TYPE_INVALID"},
+		{`{"tenantId":"not-a-uuid"}`, "FIELD_INVALID_FORMAT"},
+		{`{"tenantId":""}`, "FIELD_INVALID_FORMAT"},
+		{`{"tenantId":`, "BODY_MALFORMED"},
+		{`[]`, "BODY_MALFORMED"},
+	}
 	e := aloneEnv(t, sessEnvOptions{})
 	c := e.signIn(e.person())
-	for _, body := range bodies {
-		t.Run(body, func(t *testing.T) {
-			rec := c.switchBody(body, nil)
+	for _, tc := range cases {
+		t.Run(tc.body, func(t *testing.T) {
+			rec := c.switchBody(tc.body, nil)
 
 			expectError(t, rec, http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+			var envelope api.Envelope[json.RawMessage]
+			_ = json.Unmarshal(rec.Body.Bytes(), &envelope)
+			if len(envelope.Error.Issues) != 1 || string(envelope.Error.Issues[0].Code) != tc.issue {
+				t.Errorf("issues = %+v, want one %s", envelope.Error.Issues, tc.issue)
+			}
 			expectNoCookies(t, rec)
 		})
 	}
