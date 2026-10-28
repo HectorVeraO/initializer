@@ -347,6 +347,13 @@ test('narrowing keeps a co-tagged test whose tags are all installed', () => {
   assert.doesNotMatch('x @alpha @beta', invertOf(main));
 });
 
+test('narrowing still inverts an uninstalled cooperating tag', () => {
+  const [main] = planRun({ specsDir: coopRoot('absent'), tags: '@alpha' });
+  assert.match('x @alpha', grepOf(main));
+  assert.match('x @alpha @beta', invertOf(main));
+  assert.doesNotMatch('x @alpha', invertOf(main));
+});
+
 test('run-tck --dry-run prints the invert of the cooperating tag', () => {
   const result = runNode('run-tck.mjs', ['--dry-run', '--specs-dir', coopRoot('absent')]);
   assert.equal(result.status, 0, result.stderr);
