@@ -297,7 +297,7 @@ func TestListBlobsMapsPathsToObjectIds(t *testing.T) {
 		t.Fatalf("flags.yaml blob = %q, want %q", blobs["flags.yaml"], want)
 	}
 	_, err = repo.ListBlobs(dir, "-bad")
-	if err == nil {
-		t.Fatal("want an error for an option-like revision")
+	if err == nil || !strings.Contains(err.Error(), "invalid revision") {
+		t.Fatalf("option-like revision: got %v, want an invalid revision error", err)
 	}
 }

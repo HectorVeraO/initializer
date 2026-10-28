@@ -659,14 +659,14 @@ func TestTagOnDeletedOrAddedComponentFileFails(t *testing.T) {
 	writeAt(t, dir, "go-srv/internal/platform/parameters/extra.go", "package parameters\n")
 	commitAll(t, dir, "add file")
 	found := tagContent(t, dir)
-	if len(found) != 1 || !strings.HasPrefix(found[0], "TAG_CONTENT_MISMATCH ") {
+	if len(found) != 1 || found[0] != "TAG_CONTENT_MISMATCH go-srv/internal/platform/parameters/module.manifest.json" {
 		t.Fatalf("added file: got %v", found)
 	}
 	runGit(t, dir, "reset", "--hard", "HEAD~1")
 	runGit(t, dir, "rm", "-q", "go-srv/internal/platform/parameters/params.go")
 	runGit(t, dir, "commit", "-m", "delete file")
 	found = tagContent(t, dir)
-	if len(found) != 1 || !strings.HasPrefix(found[0], "TAG_CONTENT_MISMATCH ") {
+	if len(found) != 1 || found[0] != "TAG_CONTENT_MISMATCH go-srv/internal/platform/parameters/module.manifest.json" {
 		t.Fatalf("deleted file: got %v", found)
 	}
 }
