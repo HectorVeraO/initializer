@@ -498,6 +498,9 @@ func (b *builder) contentChecks(p, target string, owner *moduleDoc) (File, bool,
 		b.addPlain(CodeNonLFText, p, "text file contains CRLF line ends")
 	}
 	b.goChecks(p, data, owner)
+	if isText(data) {
+		b.markerChecks(p, data, owner)
+	}
 	sum := sha256.Sum256(data)
 	return File{Path: p, SHA256: hex.EncodeToString(sum[:]), Target: target}, true, nil
 }

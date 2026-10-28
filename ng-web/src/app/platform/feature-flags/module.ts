@@ -1,13 +1,6 @@
-import type { ProviderScope } from '@jsverse/transloco';
 import { requireSession } from '@/platform/core';
 import type { WebModule } from '@/platform/core';
-
-/** Transloco scope of the feature-flags module; keys are read as `featureFlags.<key>`. */
-export const PLATFORM_FEATURE_FLAGS_I18N: ProviderScope = {
-  scope: 'feature-flags',
-  alias: 'featureFlags',
-  loader: { en: () => import('./i18n/en.json').then((m) => m.default), es: () => import('./i18n/es.json').then((m) => m.default) }
-};
+import { PLATFORM_FEATURE_FLAGS_I18N } from './i18n/scope';
 
 /** The feature-flags module: the operator flag list with the global override, and the flag detail with tenant overrides. */
 export const featureFlagsModule: WebModule = {

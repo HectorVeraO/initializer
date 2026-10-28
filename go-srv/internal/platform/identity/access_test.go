@@ -153,7 +153,7 @@ func TestCheckAccessNonMemberAndUnknownTenantLookAlike(t *testing.T) {
 	const wantDeniedMessage = "The account has no access to this tenant."
 	for _, tenantID := range []string{suspended, other, unknown, badID, ""} {
 		_, err := env.access.CheckAccess(ctx, account.ID, &tenantID)
-		apiErr := requireDenied(t, err, identity.CodeTenantAccessDenied)
+		apiErr := requireDenied(t, err, api.CodeTenantAccessDenied)
 		if apiErr.Message != wantDeniedMessage {
 			t.Fatalf("tenant %q: message = %q, want %q", tenantID, apiErr.Message, wantDeniedMessage)
 		}
@@ -166,7 +166,7 @@ func TestCheckAccessSuspendedTenantBeatsMembershipState(t *testing.T) {
 	tenantID := env.tenant("acme", "suspended")
 	env.member(tenantID, account.ID, "member", "revoked", accessNow)
 	_, err := env.access.CheckAccess(context.Background(), account.ID, &tenantID)
-	requireDenied(t, err, identity.CodeTenantSuspended)
+	requireDenied(t, err, api.CodeTenantSuspended)
 }
 
 func TestCheckAccessMembershipStates(t *testing.T) {
@@ -177,12 +177,12 @@ func TestCheckAccessMembershipStates(t *testing.T) {
 	revoked := env.account()
 	env.member(tenantID, revoked.ID, "member", "revoked", accessNow)
 	_, err := env.access.CheckAccess(ctx, revoked.ID, &tenantID)
-	revokedErr := requireDenied(t, err, identity.CodeMembershipRevoked)
+	revokedErr := requireDenied(t, err, api.CodeMembershipRevoked)
 
 	suspended := env.account()
 	env.member(tenantID, suspended.ID, "member", "suspended", accessNow)
 	_, err = env.access.CheckAccess(ctx, suspended.ID, &tenantID)
-	suspendedErr := requireDenied(t, err, identity.CodeMembershipRevoked)
+	suspendedErr := requireDenied(t, err, api.CodeMembershipRevoked)
 
 	if suspendedErr.Message != "The membership is suspended." {
 		t.Fatalf("suspended message = %q", suspendedErr.Message)
@@ -229,7 +229,7 @@ func TestCheckAccessIgnoresAnotherAccountsMembership(t *testing.T) {
 	env.member(tenantID, owner.ID, "admin", "active", accessNow)
 	stranger := env.account()
 	_, err := env.access.CheckAccess(context.Background(), stranger.ID, &tenantID)
-	requireDenied(t, err, identity.CodeTenantAccessDenied)
+	requireDenied(t, err, api.CodeTenantAccessDenied)
 }
 
 func TestSelectTenantPrefersLastActive(t *testing.T) {

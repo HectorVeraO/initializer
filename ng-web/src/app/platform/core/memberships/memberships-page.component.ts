@@ -12,7 +12,7 @@ import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
-import { PLATFORM_CORE_I18N } from '../module';
+import { TENANCY_I18N } from '../i18n/tenancy/scope';
 import { SessionStore } from '../session/session-store.service';
 import type { MembershipRole, MembershipStatus } from '../session/session.types';
 import { InlineConfirmComponent } from '../ui/inline-confirm.component';
@@ -25,7 +25,7 @@ const ROLES: readonly MembershipRole[] = ['admin', 'member', 'viewer'];
 @Component({
   selector: 'app-memberships-page',
   imports: [FormsModule, ButtonModule, MessageModule, SelectModule, TableModule, TranslocoModule, ListStateComponent, PageHeaderComponent, InlineConfirmComponent],
-  providers: [provideTranslocoScope(PLATFORM_CORE_I18N)],
+  providers: [provideTranslocoScope(TENANCY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './memberships-page.component.html'
 })
@@ -38,7 +38,7 @@ export class MembershipsPage {
   private loadSequence = 0;
   private hasLoaded = false;
 
-  protected readonly roleOptions = ROLES.map((role) => ({ value: role, labelKey: `core.shell.roles.${role}` }));
+  protected readonly roleOptions = ROLES.map((role) => ({ value: role, labelKey: `tenancy.roles.${role}` }));
 
   protected readonly rows = signal<MemberView[]>([]);
   protected readonly totalItems = signal(0);
@@ -137,14 +137,14 @@ export class MembershipsPage {
     failure.record(error);
 
     if (failure.conflictWith(ApiErrorCode.LastTenantAdmin)) {
-      this.setRowError(row.id, this.transloco.translate('core.memberships.lastAdmin'));
+      this.setRowError(row.id, this.transloco.translate('tenancy.memberships.lastAdmin'));
 
       return;
     }
 
     if (failure.status() === 404) {
       await this.load();
-      this.messages.add({ severity: 'warn', summary: this.transloco.translate('core.errors.rowGone') });
+      this.messages.add({ severity: 'warn', summary: this.transloco.translate('tenancy.errors.rowGone') });
 
       return;
     }

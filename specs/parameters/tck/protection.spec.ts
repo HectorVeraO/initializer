@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { bootstrapOperator, expectData, expectError, mutate, seedTenant } from '../../tck-support/actors';
+import { bootstrapOperator, expectData, expectError, mutate } from '../../tck-support/actors';
+import { seedTenant } from '../../tck-support/actors/tenants';
 import { defineParameter, expectView, overridePath, paramKey, readParameter } from './support';
 import type { ParameterDeleted } from './support';
 

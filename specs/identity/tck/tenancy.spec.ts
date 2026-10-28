@@ -1,15 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
-import {
-  bootstrapOperator,
-  expectData,
-  expectError,
-  membershipIdOf,
-  mutate,
-  seedTenant,
-  tenantlessActor,
-} from '../../tck-support/actors';
+import { bootstrapOperator, expectData, expectError, mutate } from '../../tck-support/actors';
+import { membershipIdOf, seedTenant, tenantlessActor } from '../../tck-support/actors/tenants';
 
 interface TenantSummary {
   id: string;

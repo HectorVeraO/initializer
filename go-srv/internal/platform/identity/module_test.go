@@ -16,6 +16,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 )
 
 // exampleEnvSettings are the identity lines of .deploy/local/.example.env,
@@ -149,6 +150,42 @@ func TestProvideRegistersTheCoreScopes(t *testing.T) {
 		if !registry.Known(name) {
 			t.Errorf("scope %s is not registered", name)
 		}
+	}
+}
+
+func TestModuleProvidesTheCorePorts(t *testing.T) {
+	var host *core.Host
+	probe := core.Module{
+		ID: "port-probe",
+		Mount: func(_ context.Context, h *core.Host) error {
+			host = h
+			return nil
+		},
+	}
+	coretest.New(t, []core.Module{Module(), probe}, coretest.Options{
+		Database: true,
+		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
+	})
+	ctx := context.Background()
+	st := newStore(host.Pool(), host.Clock())
+	tenant := mustTenant(t, st, "tenant-a")
+	account := mustAccount(t, st, "member@example.com")
+	if _, err := st.InsertMembership(ctx, tenant.ID, account.ID, "member"); err != nil {
+		t.Fatalf("insert membership: %v", err)
+	}
+
+	if _, found, err := host.TenantDirectory().Tenant(ctx, reqctx.TenantID(tenant.ID)); err != nil || !found {
+		t.Errorf("tenant directory found=%v err=%v, want the stored tenant", found, err)
+	}
+	if _, err := host.TenantAccess().Grant(ctx, reqctx.AccountID(account.ID), reqctx.TenantID(tenant.ID)); err != nil {
+		t.Errorf("tenant access grant: %v, want the stored membership granted", err)
+	}
+	refs, err := host.AccountDirectory().ByEmail(ctx, "member@example.com")
+	if err != nil || len(refs) != 1 {
+		t.Errorf("account directory refs=%v err=%v, want the stored account", refs, err)
+	}
+	if host.AccountProvisioner().GrantsOperator("someone@example.com") {
+		t.Error("account provisioner grants operator to an unlisted email, want identity's operator list")
 	}
 }
 

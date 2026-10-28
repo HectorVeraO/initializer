@@ -11,14 +11,14 @@ import { firstValueFrom } from 'rxjs';
 import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { errorMessage } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
-import { PLATFORM_CORE_I18N } from '../module';
+import { TENANCY_I18N } from '../i18n/tenancy/scope';
 import { SessionStore } from '../session/session-store.service';
 import { fieldIssueMessages, issueMessage, unmatchedIssueMessages } from '../ui/issue-message';
 import { InvitationsApi } from './invitations-api.service';
 import { ACCEPT_PATH, tokenFromHash } from './invitation-token';
 import { PendingInvitation } from './pending-invitation.service';
 
-const SCOPE_ALIAS = PLATFORM_CORE_I18N.alias as string;
+const SCOPE_ALIAS = TENANCY_I18N.alias as string;
 
 const NEW_ACCOUNT_FIELDS: readonly string[] = ['fullName', 'password'];
 
@@ -34,7 +34,7 @@ function passwordsMatch(group: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-accept-invitation-page',
   imports: [ReactiveFormsModule, RouterLink, ButtonModule, InputTextModule, MessageModule, TranslocoModule],
-  providers: [provideTranslocoScope(PLATFORM_CORE_I18N)],
+  providers: [provideTranslocoScope(TENANCY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './accept-invitation-page.component.html'
 })
@@ -133,7 +133,7 @@ export class AcceptInvitationPage {
       return;
     }
 
-    this.messages.add({ severity: 'success', summary: this.transloco.translate('core.accept.accepted') });
+    this.messages.add({ severity: 'success', summary: this.transloco.translate('tenancy.accept.accepted') });
     await this.router.navigateByUrl('/home');
   }
 
@@ -202,7 +202,7 @@ export class AcceptInvitationPage {
     if (status === 404 || status === 422) {
       this.errorText.set(this.transloco.translate('errors.codes.INVITATION_INVALID'));
     } else if (code === ApiErrorCode.InvitationEmailMismatch) {
-      this.errorText.set(this.transloco.translate('core.accept.emailMismatch'));
+      this.errorText.set(this.transloco.translate('tenancy.accept.emailMismatch'));
     } else if (code === ApiErrorCode.MembershipAlreadyActive) {
       this.isAlreadyMember.set(true);
     } else {
@@ -217,7 +217,7 @@ export class AcceptInvitationPage {
 
     if (status === 409) {
       this.highlightSignIn.set(true);
-      this.errorText.set(this.transloco.translate('core.accept.accountExists'));
+      this.errorText.set(this.transloco.translate('tenancy.accept.accountExists'));
     } else if (status === 422) {
       const hasTokenIssue = this.submitErrors.issues().some((issue) => issue.field === 'token');
 

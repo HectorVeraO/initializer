@@ -1,0 +1,34 @@
+{
+  "login": {
+    "title": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in",
+    "unavailable": "Sign in is not available right now. Try again in a few minutes.",
+    "rejected": "The email or the password is not valid.",
+    "kratos": {
+      "4000006": "The email or the password is not valid."
+    },
+    "notices": {
+      "invitationAccepted": "Your invitation was accepted. Sign in to continue.",
+      "accountCreated": "Your account was created. Sign in to continue."
+    }
+  },
+  "session": {
+    "tenantChanged": "The active tenant changed in another tab."
+  },
+  "shell": {
+    "account": "Account",
+    "signOut": "Sign out",
+    "operator": "Platform operator",
+    "roles": {
+      "admin": "Admin",
+      "member": "Member",
+      "viewer": "Viewer"
+    }
+  },
+  "errors": {
+    "ACCOUNT_LOCKED_OR_DISABLED": "This account is locked or disabled. Contact an administrator."
+  }
+}

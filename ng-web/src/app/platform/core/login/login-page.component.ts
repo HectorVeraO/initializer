@@ -9,7 +9,7 @@ import { MessageModule } from '@openng/optimus-ui/message';
 import { KratosLoginClient } from '../auth/kratos-login.service';
 import type { KratosMessage } from '../auth/kratos.types';
 import { scopedText } from '../i18n/scoped-text';
-import { PLATFORM_CORE_I18N } from '../module';
+import { IDENTITY_I18N } from '../i18n/identity/scope';
 import { SessionStore } from '../session/session-store.service';
 import { safeReturnUrl } from './return-url';
 
@@ -22,7 +22,7 @@ interface LoginHistoryState {
 @Component({
   selector: 'app-login-page',
   imports: [ReactiveFormsModule, ButtonModule, InputTextModule, MessageModule, TranslocoModule],
-  providers: [provideTranslocoScope(PLATFORM_CORE_I18N)],
+  providers: [provideTranslocoScope(IDENTITY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './login-page.component.html'
 })
@@ -70,7 +70,7 @@ export class LoginPage {
     const result = await this.kratos.signIn(this.form.controls.email.value, this.form.controls.password.value);
 
     if (result.kind === 'unavailable') {
-      return [await scopedText(this.transloco, 'login.unavailable')];
+      return [await scopedText(this.transloco, IDENTITY_I18N, 'login.unavailable')];
     }
 
     if (result.kind === 'rejected') {
@@ -80,7 +80,7 @@ export class LoginPage {
     try {
       await this.store.reload();
     } catch {
-      return [await scopedText(this.transloco, 'login.unavailable')];
+      return [await scopedText(this.transloco, IDENTITY_I18N, 'login.unavailable')];
     }
 
     if (this.store.state() !== 'authenticated') {
@@ -89,7 +89,7 @@ export class LoginPage {
 
       const key = denial === null ? 'login.unavailable' : `errors.${denial}`;
 
-      return [await scopedText(this.transloco, key)];
+      return [await scopedText(this.transloco, IDENTITY_I18N, key)];
     }
 
     const returnUrl = safeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl'));
@@ -101,7 +101,7 @@ export class LoginPage {
 
   private async rejectedTexts(messages: readonly KratosMessage[]): Promise<string[]> {
     if (messages.length === 0) {
-      return [await scopedText(this.transloco, 'login.rejected')];
+      return [await scopedText(this.transloco, IDENTITY_I18N, 'login.rejected')];
     }
 
     const texts: string[] = [];
@@ -109,7 +109,7 @@ export class LoginPage {
     for (const message of messages) {
       const key = `login.kratos.${message.id}`;
 
-      const mapped = await scopedText(this.transloco, key);
+      const mapped = await scopedText(this.transloco, IDENTITY_I18N, key);
 
       // A key without its own entry comes back unchanged; the Kratos text is shown as text instead.
       texts.push(mapped.endsWith(key) ? message.text : mapped);
@@ -122,7 +122,7 @@ export class LoginPage {
     const denial = this.store.takeDenial();
 
     if (denial !== null) {
-      this.notice.set(await scopedText(this.transloco, `errors.${denial}`));
+      this.notice.set(await scopedText(this.transloco, IDENTITY_I18N, `errors.${denial}`));
 
       return;
     }
@@ -135,7 +135,7 @@ export class LoginPage {
 
     const key = `login.notices.${noticeKey}`;
 
-    const text = await scopedText(this.transloco, key);
+    const text = await scopedText(this.transloco, IDENTITY_I18N, key);
 
     this.notice.set(text.endsWith(key) ? null : text);
   }

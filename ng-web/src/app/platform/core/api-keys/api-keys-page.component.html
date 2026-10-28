@@ -1,10 +1,10 @@
-<p-page-header [title]="'core.apiKeys.title' | transloco" />
+<p-page-header [title]="'apiKeys.title' | transloco" />
 
-<p-form-section [title]="'core.apiKeys.createTitle' | transloco">
+<p-form-section [title]="'apiKeys.createTitle' | transloco">
   <form [formGroup]="form" class="flex flex-col gap-4" data-testid="api-key-form" (ngSubmit)="submit()">
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
       <div class="flex flex-col gap-2 md:col-span-2">
-        <label for="api-key-name">{{ 'core.apiKeys.name' | transloco }}</label>
+        <label for="api-key-name">{{ 'apiKeys.name' | transloco }}</label>
         <input pInputText id="api-key-name" formControlName="name" type="text" autocomplete="off" data-testid="api-key-name" />
         @for (message of nameMessages(); track $index) {
           <p-message severity="error" variant="simple" size="small" role="alert" data-testid="api-key-name-error">{{ message }}</p-message>
@@ -12,7 +12,7 @@
       </div>
 
       <div class="flex flex-col gap-2">
-        <label for="api-key-expires-at">{{ 'core.apiKeys.expiresAt' | transloco }}</label>
+        <label for="api-key-expires-at">{{ 'apiKeys.expiresAt' | transloco }}</label>
         <p-datepicker inputId="api-key-expires-at" formControlName="expiresAt" dateFormat="yy-mm-dd" [showButtonBar]="true" appendTo="body" data-testid="api-key-expires-at" />
         @for (message of expiresAtMessages(); track $index) {
           <p-message severity="error" variant="simple" size="small" role="alert" data-testid="api-key-expires-at-error">{{ message }}</p-message>
@@ -21,15 +21,15 @@
     </div>
 
     <fieldset class="flex flex-col gap-2 border-0 p-0 m-0">
-      <legend class="mb-2">{{ 'core.apiKeys.scopes' | transloco }}</legend>
+      <legend class="mb-2">{{ 'apiKeys.scopes' | transloco }}</legend>
       @if (scopesFailed()) {
         <div class="flex items-center gap-2" role="alert" data-testid="api-key-scopes-load-error">
-          <span>{{ 'core.apiKeys.scopesLoadFailed' | transloco }}</span>
-          <button pButton type="button" severity="secondary" data-testid="api-key-scopes-retry" (click)="reloadScopes()">{{ 'core.apiKeys.scopesRetry' | transloco }}</button>
+          <span>{{ 'apiKeys.scopesLoadFailed' | transloco }}</span>
+          <button pButton type="button" severity="secondary" data-testid="api-key-scopes-retry" (click)="reloadScopes()">{{ 'apiKeys.scopesRetry' | transloco }}</button>
         </div>
       }
       @if (isScopesEmpty()) {
-        <p class="m-0" data-testid="api-key-scopes-empty">{{ 'core.apiKeys.noScopes' | transloco }}</p>
+        <p class="m-0" data-testid="api-key-scopes-empty">{{ 'apiKeys.noScopes' | transloco }}</p>
       }
       @for (scope of availableScopes(); track scope.name) {
         <label class="flex items-center gap-2" [for]="'api-key-scope-' + scope.name">
@@ -62,21 +62,21 @@
     }
 
     <div>
-      <button pButton type="submit" data-testid="api-key-submit" [disabled]="isSubmitting() || hasNoScopes()">{{ 'core.apiKeys.submit' | transloco }}</button>
+      <button pButton type="submit" data-testid="api-key-submit" [disabled]="isSubmitting() || hasNoScopes()">{{ 'apiKeys.submit' | transloco }}</button>
     </div>
   </form>
 </p-form-section>
 
 <div class="card mt-4">
-  <p-list-state feature="api-keys" [loading]="isLoading()" [loadFailed]="loadFailed()" [empty]="isEmpty()" sectionKey="core.apiKeys.section" emptyKey="core.apiKeys.empty" (retry)="reload()">
+  <p-list-state feature="api-keys" [loading]="isLoading()" [loadFailed]="loadFailed()" [empty]="isEmpty()" sectionKey="apiKeys.section" emptyKey="apiKeys.empty" (retry)="reload()">
     <p-table [value]="rows()" dataKey="id">
       <ng-template pTemplate="header">
         <tr>
-          <th>{{ 'core.apiKeys.name' | transloco }}</th>
-          <th>{{ 'core.apiKeys.prefix' | transloco }}</th>
-          <th>{{ 'core.apiKeys.scopes' | transloco }}</th>
-          <th>{{ 'core.apiKeys.expires' | transloco }}</th>
-          <th>{{ 'core.apiKeys.status' | transloco }}</th>
+          <th>{{ 'apiKeys.name' | transloco }}</th>
+          <th>{{ 'apiKeys.prefix' | transloco }}</th>
+          <th>{{ 'apiKeys.scopes' | transloco }}</th>
+          <th>{{ 'apiKeys.expires' | transloco }}</th>
+          <th>{{ 'apiKeys.status' | transloco }}</th>
           <th></th>
         </tr>
       </ng-template>
@@ -86,19 +86,19 @@
           <td data-testid="api-keys-cell-prefix">{{ row.keyPrefix }}</td>
           <td data-testid="api-keys-cell-scopes">{{ row.scopes.join(', ') }}</td>
           <td data-testid="api-keys-cell-expires">{{ row.expiresAt === null ? '-' : (row.expiresAt | santiagoDate) }}</td>
-          <td data-testid="api-keys-cell-status" [attr.data-value]="row.status">{{ 'core.apiKeys.statuses.' + row.status | transloco }}</td>
+          <td data-testid="api-keys-cell-status" [attr.data-value]="row.status">{{ 'apiKeys.statuses.' + row.status | transloco }}</td>
           <td class="text-right">
             @if (row.status === 'active') {
-              <app-inline-confirm labelKey="core.apiKeys.revoke" testId="api-key-revoke" (confirmed)="revoke(row)" />
+              <app-inline-confirm labelKey="apiKeys.revoke" testId="api-key-revoke" (confirmed)="revoke(row)" />
             }
           </td>
         </tr>
       </ng-template>
     </p-table>
     @if (isTruncated()) {
-      <p class="mt-2 mb-0 text-sm" data-testid="api-keys-truncated">{{ 'core.apiKeys.truncated' | transloco: { shown: rows().length, total: totalItems() } }}</p>
+      <p class="mt-2 mb-0 text-sm" data-testid="api-keys-truncated">{{ 'apiKeys.truncated' | transloco: { shown: rows().length, total: totalItems() } }}</p>
     }
   </p-list-state>
 </div>
 
-<app-one-time-secret-dialog titleKey="core.apiKeys.secretTitle" [secret]="secret()" (closed)="closeSecret()" />
+<app-one-time-secret-dialog titleKey="apiKeys.secretTitle" [secret]="secret()" (closed)="closeSecret()" />

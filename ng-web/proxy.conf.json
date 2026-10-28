@@ -4,11 +4,13 @@
     "secure": false,
     "changeOrigin": false
   },
+  // initializer:module identity
   "/kratos": {
     "target": "http://localhost:10100",
     "secure": false,
     "changeOrigin": false
   },
+  // initializer:end identity
   "/health": {
     "target": "http://localhost:10100",
     "secure": false,

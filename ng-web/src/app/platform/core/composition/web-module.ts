@@ -1,8 +1,7 @@
 import { EnvironmentProviders, InjectionToken, makeEnvironmentProviders } from '@angular/core';
 import type { Routes } from '@angular/router';
-import { provideTranslocoScope, type ProviderScope } from '@jsverse/transloco';
+import type { ProviderScope } from '@jsverse/transloco';
 import type { SessionRequirement } from '../guards/requirement';
-import { PLATFORM_CORE_I18N } from '../module';
 
 /** One catalog module as the console shell sees it. Pure data: no side effects at import. */
 export interface WebModule {
@@ -48,11 +47,11 @@ function assertValidModules(modules: readonly WebModule[]): void {
   }
 }
 
-/** Providers for app.config.ts: PLATFORM_MODULES = modules and the core Transloco scope. Throws Error('PLATFORM_CORE_MODULE_FIRST') unless modules[0].id === 'core', Error('PLATFORM_DUPLICATE_MODULE:<id>') when an id repeats. */
+/** Providers for app.config.ts: PLATFORM_MODULES = modules. Throws Error('PLATFORM_CORE_MODULE_FIRST') unless modules[0].id === 'core', Error('PLATFORM_DUPLICATE_MODULE:<id>') when an id repeats. */
 export function providePlatform(modules: readonly WebModule[]): EnvironmentProviders {
   assertValidModules(modules);
 
-  const providers = makeEnvironmentProviders([{ provide: PLATFORM_MODULES, useValue: modules }, provideTranslocoScope(PLATFORM_CORE_I18N)]);
+  const providers = makeEnvironmentProviders([{ provide: PLATFORM_MODULES, useValue: modules }]);
 
   return providers;
 }

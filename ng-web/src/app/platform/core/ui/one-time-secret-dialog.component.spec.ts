@@ -8,7 +8,7 @@ const SECRET = 'synthetic-secret-value';
 @Component({
   selector: 'app-host',
   imports: [OneTimeSecretDialogComponent],
-  template: `<app-one-time-secret-dialog titleKey="core.invitations.linkTitle" [secret]="secret()" (closed)="secret.set(null)" />`
+  template: `<app-one-time-secret-dialog titleKey="core.nav.invitations" [secret]="secret()" (closed)="secret.set(null)" />`
 })
 class HostComponent {
   readonly secret = signal<string | null>(null);

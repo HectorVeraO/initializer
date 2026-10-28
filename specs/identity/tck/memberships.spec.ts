@@ -6,12 +6,10 @@ import {
   bootstrapOperator,
   expectData,
   expectError,
-  invite,
-  membershipIdOf,
   mutate,
   runSuffix,
-  seedTenant,
 } from '../../tck-support/actors';
+import { invite, membershipIdOf, seedTenant } from '../../tck-support/actors/tenants';
 import type { Actor } from '../../tck-support/actors';
 
 interface Member {

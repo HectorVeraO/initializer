@@ -59,6 +59,14 @@ func (d fakeDirectory) TenantExists(_ context.Context, id reqctx.TenantID) (bool
 	return d.known[string(id)], nil
 }
 
+func (d fakeDirectory) Tenant(ctx context.Context, id reqctx.TenantID) (access.TenantRef, bool, error) {
+	exists, err := d.TenantExists(ctx, id)
+	if err != nil || !exists {
+		return access.TenantRef{}, false, err
+	}
+	return access.TenantRef{ID: id, Status: access.TenantActive}, true, nil
+}
+
 // routeEnv is the module behind its real chain with an operator and a tenant admin.
 type routeEnv struct {
 	handler http.Handler
