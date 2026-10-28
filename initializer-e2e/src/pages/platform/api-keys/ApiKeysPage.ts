@@ -5,10 +5,18 @@ import type { Locator, Page } from '@playwright/test';
 export class ApiKeysPage {
   readonly name: Locator;
   readonly submit: Locator;
+  readonly owner: Locator;
+  readonly scopesError: Locator;
+  readonly rows: Locator;
+  readonly secretDialog: Locator;
 
   constructor(private readonly page: Page) {
     this.name = page.getByTestId('api-key-name');
     this.submit = page.getByTestId('api-key-submit');
+    this.owner = page.getByTestId('api-keys-owner');
+    this.scopesError = page.getByTestId('api-key-scopes-error');
+    this.rows = page.getByTestId('api-keys-row');
+    this.secretDialog = page.getByTestId('one-time-secret-dialog');
   }
 
   /** Fills the create form with one scope and submits it. */
