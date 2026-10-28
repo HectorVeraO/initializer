@@ -339,15 +339,17 @@ func (s *tenancy) AcceptInvitation(ctx context.Context, accountID, token string)
 	if !isUUID || token == "" {
 		return MembershipView{}, errors.New("identity: accept invitation: account id and token are required")
 	}
+	// The account is read before the transaction opens: the accounts port uses
+	// its own pooled connection, so reading inside would hold two.
+	id := reqctx.AccountID(account)
+	found, err := s.accounts.Get(ctx, []reqctx.AccountID{id})
+	if err != nil {
+		return MembershipView{}, wrapOperational("accept invitation", err)
+	}
 	var view MembershipView
-	err := db.InTx(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	err = db.InTx(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		now := s.clock.Now()
 		invitation, err := lockPendingInvitation(ctx, tx, token, now)
-		if err != nil {
-			return err
-		}
-		id := reqctx.AccountID(account)
-		found, err := s.accounts.Get(ctx, []reqctx.AccountID{id})
 		if err != nil {
 			return err
 		}

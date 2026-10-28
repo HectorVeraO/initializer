@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -1089,18 +1090,6 @@ func TestServicesRejectMalformedInput(t *testing.T) {
 	}
 }
 
-// stubProvisioner answers Provision from a script.
-type stubProvisioner struct {
-	ref accounts.Ref
-	err error
-}
-
-func (p *stubProvisioner) Provision(context.Context, accounts.NewAccount) (accounts.Ref, error) {
-	return p.ref, p.err
-}
-
-func (p *stubProvisioner) GrantsOperator(string) bool { return false }
-
 func TestAcceptNewAfterProvisionFailureLeavesAccountAndAcceptRecovers(t *testing.T) {
 	ctx := context.Background()
 	e := newTenEnv(t)
@@ -1109,20 +1098,17 @@ func TestAcceptNewAfterProvisionFailureLeavesAccountAndAcceptRecovers(t *testing
 	jane := e.account(janeEmail)
 	e.member(tenant.ID, jane.ID, "member", "revoked")
 	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
-	stub := &stubProvisioner{err: errors.New("provisioner unavailable")}
-	e.svc.provisioner = stub
+	e.kratos.rejectStatus = http.StatusInternalServerError
 
 	_, err := e.svc.AcceptNew(ctx, token, randomPassword(t), "Jane Doe")
 
-	var apiErr *api.Error
-	if err == nil || errors.As(err, &apiErr) {
-		t.Fatalf("err = %v, want an operational error", err)
-	}
+	requireAPIError(t, err, 503, CodeIdentityProviderUnavailable)
 	if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
 		t.Fatalf("invitation status = %s, want pending", got)
 	}
 
-	stub.err = conflict(CodeIdentityAlreadyExists, "An account with this email already exists.")
+	e.kratos.rejectStatus = 0
+	e.kratos.identities[janeEmail] = "11111111-1111-4111-8111-111111111111"
 	_, err = e.svc.AcceptNew(ctx, token, randomPassword(t), "Jane Doe")
 	requireAPIError(t, err, 409, CodeIdentityAlreadyExists)
 

@@ -149,7 +149,7 @@ func FuzzGrantIDs(f *testing.F) {
 	})
 }
 
-func TestPortConstructorsHonorTheirContracts(t *testing.T) {
+func TestTenantDirectoryReportsTenantSlugAndStatus(t *testing.T) {
 	env := newAccessEnv(t)
 	var directory coreaccess.TenantDirectory = identity.NewTenantDirectory(env.pool)
 	tenantID := env.tenant("acme", "suspended")
@@ -159,7 +159,12 @@ func TestPortConstructorsHonorTheirContracts(t *testing.T) {
 	if err != nil || !found || ref.Slug != "acme" || ref.Status != coreaccess.TenantSuspended {
 		t.Fatalf("tenant = %+v found=%v err=%v", ref, found, err)
 	}
+}
+
+func TestAccountProvisionerGrantsOperatorOnlyToListedEmails(t *testing.T) {
+	env := newAccessEnv(t)
 	_, provisioner := identity.NewAccounts(env.pool, clock.Fixed(accessNow), nil, []string{"ops@example.com"})
+
 	if !provisioner.GrantsOperator("ops@example.com") || provisioner.GrantsOperator("other@example.com") {
 		t.Fatal("provisioner did not honor the operator list")
 	}
