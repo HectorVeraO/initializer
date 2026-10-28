@@ -722,6 +722,14 @@ func TestRequirementParityMessageNamesMissingAndExtra(t *testing.T) {
 			addNgModule(r, "parameters", false, `{"parameters": "0.1.0"}`)
 			edit(t, r, paramsManifest, `"requiresModules": [],`, `"requiresModules": [{"module": "feature-flags", "range": "^0.1.0"}],`)
 		}, "missing [feature-flags], extra []"},
+		{"each manifest declares a different module", func(t *testing.T, r fstest.MapFS) {
+			addNgCore(r)
+			addNgModule(r, "parameters", false, `{"parameters": "0.1.0"}`)
+			addNgModule(r, "feature-flags", false, `{"feature-flags": "0.1.0"}`)
+			addNgModule(r, "identity", false, `{"identity": "1.0.0"}`)
+			edit(t, r, paramsManifest, `"requiresModules": [],`, `"requiresModules": [{"module": "feature-flags", "range": "^0.1.0"}],`)
+			edit(t, r, ngRoot+"parameters/module.manifest.json", `"requiresModules": [],`, `"requiresModules": [{"module": "identity", "range": "^0.1.0"}],`)
+		}, "missing [feature-flags], extra [identity]"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
