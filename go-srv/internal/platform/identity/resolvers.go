@@ -181,7 +181,7 @@ func (k *apiKeyResolver) Resolve(ctx context.Context, r *http.Request) (reqctx.P
 	}
 	if row.tenantStatus == statusSuspended {
 		k.logRejected(ctx, prefix, true, "tenant_suspended")
-		return zero, forbidden(CodeTenantSuspended, "The tenant is suspended.")
+		return zero, forbidden(api.CodeTenantSuspended, "The tenant is suspended.")
 	}
 	tenantID := reqctx.TenantID(row.tenantID)
 	granted := make([]string, 0, len(row.scopes))

@@ -356,7 +356,7 @@ func (s *tenancy) AcceptInvitation(ctx context.Context, accountID, token string)
 			return err
 		}
 		if tenant.Status != statusActive {
-			return forbidden(CodeTenantSuspended, "The tenant is suspended.")
+			return forbidden(api.CodeTenantSuspended, "The tenant is suspended.")
 		}
 		var existing string
 		err = tx.QueryRow(ctx,
@@ -414,7 +414,7 @@ func (s *tenancy) AcceptNew(ctx context.Context, token, password, fullName strin
 			return err
 		}
 		if tenant.Status != statusActive {
-			return forbidden(CodeTenantSuspended, "The tenant is suspended.")
+			return forbidden(api.CodeTenantSuspended, "The tenant is suspended.")
 		}
 		identity, err := s.createIdentity(ctx, invitation.Email, password)
 		if err != nil {
