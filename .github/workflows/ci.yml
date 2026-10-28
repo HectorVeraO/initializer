@@ -256,6 +256,7 @@ jobs:
           cache-dependency-path: |
             specs/package-lock.json
             ng-web/package-lock.json
+            initializer-e2e/package-lock.json
       - name: Build the CLI and the catalog
         run: |
           set -euo pipefail
@@ -388,6 +389,32 @@ jobs:
           done
           echo "timeout waiting for ${url}" >&2
           exit 1
+      - name: Run the console e2e the lock selects
+        if: matrix.web
+        run: |
+          set -euo pipefail
+          project="${RUNNER_TEMP}/gen-a"
+          installed() {
+            jq -e --arg m "$1" 'any(.modules[]; .module == $m)' "${project}/initializer.lock.json" > /dev/null
+          }
+          if ! installed identity; then
+            e2e_grep='@shell-open'
+          elif installed tenancy; then
+            echo "multi-tenant console: covered by the repo e2e job"
+            exit 0
+          else
+            e2e_grep='@console-identity'
+            if installed api-keys; then
+              e2e_grep="${e2e_grep}|@console-platform-keys"
+            fi
+          fi
+          npm --prefix initializer-e2e ci
+          (cd initializer-e2e && npx playwright install --with-deps chromium)
+          grep -Ev '^(PW_(VIDEO|SCREENSHOT|TRACE)|INIT_START_STACK|INIT_WEB_BASE_URL|INIT_USER_EMAIL|INIT_USER_PASSWORD)=' initializer-e2e/.example.env > initializer-e2e/.env
+          email="$(. "${project}/.deploy/local/.env"; printf '%s' "${APP_BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}")"
+          password="$(. "${project}/.deploy/local/.env"; printf '%s' "${APP_BOOTSTRAP_ADMIN_PASSWORD:-change-me-local-only}")"
+          printf 'INIT_WEB_BASE_URL=http://localhost:10120\nINIT_USER_EMAIL=%s\nINIT_USER_PASSWORD=%s\n' "${email}" "${password}" >> initializer-e2e/.env
+          (cd initializer-e2e && npx playwright test tests/e2e/console --grep "${e2e_grep}")
       - name: Run the TCK the lock selects
         working-directory: ${{ runner.temp }}/gen-a/specs
         run: |
@@ -431,6 +458,8 @@ jobs:
           path: |
             ${{ runner.temp }}/gen-a/specs/test-results/
             ${{ runner.temp }}/gen-a/specs/playwright-report/
+            initializer-e2e/playwright-report/
+            initializer-e2e/test-results/
             ${{ runner.temp }}/go-srv.log
             ${{ runner.temp }}/ng-web.log
             ${{ runner.temp }}/compose.log

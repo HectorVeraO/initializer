@@ -6,11 +6,21 @@ export class ShellPage {
   readonly accountEmailLocator: Locator;
   readonly operatorBadge: Locator;
   readonly signOutButton: Locator;
+  readonly roleBadge: Locator;
+  readonly mainMenu: Locator;
+  readonly moduleSections: Locator;
+  readonly tenantSwitcher: Locator;
+  readonly accountMenu: Locator;
 
   constructor(private readonly page: Page) {
     this.accountEmailLocator = page.getByTestId('session-account-email');
     this.operatorBadge = page.getByTestId('session-operator');
     this.signOutButton = page.getByTestId('sign-out');
+    this.roleBadge = page.getByTestId('session-role');
+    this.mainMenu = page.getByTestId('menu-main');
+    this.moduleSections = page.locator('[data-testid^="menu-module-"]');
+    this.tenantSwitcher = page.getByTestId('topbar-tenant-switcher');
+    this.accountMenu = page.getByTestId('topbar-account-menu');
   }
 
   /** Email of the signed-in account, once the topbar shows it. */
