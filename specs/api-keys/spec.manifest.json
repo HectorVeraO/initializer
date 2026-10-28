@@ -3,5 +3,6 @@
   "spec": "api-keys",
   "version": "0.1.0",
   "tckTags": ["@api-keys"],
-  "tckEnv": {}
+  "tckEnv": {},
+  "cooperatesWith": ["@tenancy"]
 }
