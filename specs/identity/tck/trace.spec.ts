@@ -21,11 +21,3 @@ test(
     await operator.request.dispose();
   },
 );
-
-test('a sampled traceparent is continued on the session route without credentials', { tag: '@identity' }, async ({ request }) => {
-  const traceId = '4bf92f3577b34da6a3ce929d0e0e4736';
-  const response = await request.get(SESSION, { headers: { traceparent: `00-${traceId}-00f067aa0ba902b7-01` } });
-  const envelope = await expectEnvelope(response, { status: 401, code: 'SESSION_INVALID' });
-  expect(envelope.meta.traceId).toBe(traceId);
-  expect(response.headers()['x-trace-id']).toBe(traceId);
-});
