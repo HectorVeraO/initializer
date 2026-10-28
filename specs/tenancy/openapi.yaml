@@ -115,7 +115,7 @@ paths:
         - name: sort
           in: query
           required: false
-          schema: { type: string, enum: [createdAt, -createdAt, email, -email], default: email }
+          schema: { type: string, enum: [createdAt, -createdAt], default: createdAt }
         - { $ref: '#/components/parameters/ActiveTenantId' }
       responses:
         '200': { $ref: '#/components/responses/MemberPageOk' }

@@ -173,7 +173,7 @@ func (s *tenancy) readMemberView(ctx context.Context, tenant Tenant, m Membershi
 	}
 	holder, exists := found[id]
 	if !exists {
-		return MemberView{}, fmt.Errorf("read member account: account %s not found", m.AccountID)
+		return MemberView{}, errors.New("identity: member account missing")
 	}
 	account := MemberAccount{ID: string(holder.ID), Email: holder.Email, FullName: holder.FullName}
 	return MemberView{
@@ -188,14 +188,13 @@ func memberSortColumn(field string) (string, bool) {
 	switch field {
 	case "createdAt":
 		return "m.created_at", true
-	case "email":
-		return "a.email", true
 	}
 	return "", false
 }
 
-// ListMembers pages the members of the tenant whose status is one of
-// statuses, optionally only those with role (empty means any).
+// ListMembers pages the tenant's members, sorted by createdAt only, whose
+// status is one of statuses, optionally only those with role (empty means
+// any). Account data comes from the accounts directory.
 func (s *tenancy) ListMembers(ctx context.Context, tenantID string, statuses []string, role string, q api.PageQuery) ([]MemberView, int64, error) {
 	tenantUUID, tenantOK := api.ParseUUID(tenantID)
 	column, sortOK := memberSortColumn(q.SortField)
@@ -216,29 +215,44 @@ func (s *tenancy) ListMembers(ctx context.Context, tenantID string, statuses []s
 	}
 	direction := sortDirection(q)
 	rows, err := s.pool.Query(ctx,
-		`SELECT m.id::text, m.role, m.status, m.created_at, a.id::text, a.email, a.full_name
-FROM ten_memberships m JOIN iam_accounts a ON a.id = m.account_id
+		`SELECT m.id::text, m.role, m.status, m.created_at, m.account_id::text
+FROM ten_memberships m
 WHERE `+filter+" ORDER BY "+column+" "+direction+", m.id "+direction+" LIMIT $4 OFFSET $5",
 		tenantUUID, statuses, role, q.Size, q.Offset())
 	if err != nil {
 		return nil, 0, fmt.Errorf("identity: list members: %w", err)
 	}
-	views, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (MemberView, error) {
-		var (
-			id, memberRole, memberStatus string
-			createdAt                    time.Time
-			account                      MemberAccount
-		)
-		scanErr := row.Scan(&id, &memberRole, &memberStatus, &createdAt, &account.ID, &account.Email, &account.FullName)
-		view := MemberView{
-			MembershipView: newMembershipView(id, tenant, memberRole, memberStatus),
-			Account:        account,
-			CreatedAt:      createdAt.UTC(),
-		}
-		return view, scanErr
+	type memberRow struct {
+		id, role, status, accountID string
+		createdAt                   time.Time
+	}
+	page, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (memberRow, error) {
+		var item memberRow
+		scanErr := row.Scan(&item.id, &item.role, &item.status, &item.createdAt, &item.accountID)
+		return item, scanErr
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("identity: list members: %w", err)
+	}
+	ids := make([]reqctx.AccountID, 0, len(page))
+	for _, item := range page {
+		ids = append(ids, reqctx.AccountID(item.accountID))
+	}
+	found, err := s.accounts.Get(ctx, ids)
+	if err != nil {
+		return nil, 0, fmt.Errorf("identity: read member accounts: %w", err)
+	}
+	views := make([]MemberView, 0, len(page))
+	for _, item := range page {
+		holder, exists := found[reqctx.AccountID(item.accountID)]
+		if !exists {
+			return nil, 0, errors.New("identity: member account missing")
+		}
+		views = append(views, MemberView{
+			MembershipView: newMembershipView(item.id, tenant, item.role, item.status),
+			Account:        MemberAccount{ID: string(holder.ID), Email: holder.Email, FullName: holder.FullName},
+			CreatedAt:      item.createdAt.UTC(),
+		})
 	}
 	return views, total, nil
 }
@@ -262,7 +276,7 @@ func (rt *tenancyRoutes) listMemberships(w http.ResponseWriter, r *http.Request)
 	if role != "" {
 		api.CheckOneOf(&p, "role", role, membershipRoles...)
 	}
-	query := api.ParsePageQuery(r, &p, api.PageSpec{Sorts: []string{"createdAt", "email"}, DefaultSort: "email"})
+	query := api.ParsePageQuery(r, &p, api.PageSpec{Sorts: []string{"createdAt"}, DefaultSort: "createdAt"})
 	err := p.Err()
 	if err != nil {
 		rt.writer.Fail(w, r, err)

@@ -312,6 +312,16 @@ func (e *sessEnv) tenant(slug, status string) string {
 	return e.scan("INSERT INTO ten_tenants (slug, name, status) VALUES ($1, $1, $2) RETURNING id::text", slug, status)
 }
 
+// remember records tenantID as the account's last selected tenant through the
+// TenantAccess port.
+func (e *sessEnv) remember(accountID, tenantID string) {
+	e.t.Helper()
+	err := newTenantAccess(e.pool, e.clock).Remember(context.Background(), reqctx.AccountID(accountID), reqctx.TenantID(tenantID))
+	if err != nil {
+		e.t.Fatalf("remember: %v", err)
+	}
+}
+
 func (e *sessEnv) member(tenantID, accountID, role, status string, createdAt time.Time) {
 	e.t.Helper()
 	e.exec(`INSERT INTO ten_memberships (tenant_id, account_id, role, status, created_at)

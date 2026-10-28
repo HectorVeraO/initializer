@@ -1170,3 +1170,113 @@ func (d upperCaseDirectory) Get(ctx context.Context, ids []reqctx.AccountID) (ma
 func (d upperCaseDirectory) ByEmail(ctx context.Context, email string) ([]accounts.Ref, error) {
 	return d.inner.ByEmail(ctx, email)
 }
+
+// holeDirectory answers every account except the hidden ones, as a directory
+// that lost a row would.
+type holeDirectory struct {
+	inner  accounts.Directory
+	hidden map[reqctx.AccountID]bool
+}
+
+func (d holeDirectory) Get(ctx context.Context, ids []reqctx.AccountID) (map[reqctx.AccountID]accounts.Ref, error) {
+	found, err := d.inner.Get(ctx, ids)
+	for id := range d.hidden {
+		delete(found, id)
+	}
+	return found, err
+}
+
+func (d holeDirectory) ByEmail(ctx context.Context, email string) ([]accounts.Ref, error) {
+	return d.inner.ByEmail(ctx, email)
+}
+
+func requireMissingMemberAccount(t *testing.T, err error) {
+	t.Helper()
+	var apiErr *api.Error
+	if err == nil || errors.As(err, &apiErr) {
+		t.Fatalf("err = %v, want an operational error that answers 500", err)
+	}
+	if !strings.Contains(err.Error(), "identity: member account missing") {
+		t.Fatalf("err = %v, want member account missing", err)
+	}
+}
+
+func TestListMembersFillsAccountDataFromTheDirectoryInCreatedAtOrder(t *testing.T) {
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+	zed := e.account("zed@example.com")
+	amy := e.account("amy@example.com")
+	mid := e.account("mid@example.com")
+	zedMembership := e.member(tenant.ID, zed.ID, "member", statusActive)
+	amyMembership := e.member(tenant.ID, amy.ID, "member", statusActive)
+	midMembership := e.member(tenant.ID, mid.ID, "member", statusActive)
+	e.exec("UPDATE ten_memberships SET created_at = $2 WHERE id = $1::uuid", zedMembership.ID, time.Unix(1000, 0).UTC())
+	e.exec("UPDATE ten_memberships SET created_at = $2 WHERE id = $1::uuid", midMembership.ID, time.Unix(2000, 0).UTC())
+	e.exec("UPDATE ten_memberships SET created_at = $2 WHERE id = $1::uuid", amyMembership.ID, time.Unix(3000, 0).UTC())
+	e.svc.accounts = upperCaseDirectory{inner: e.svc.accounts}
+	emails := func(views []MemberView) string {
+		var out []string
+		for _, view := range views {
+			localPart, _, _ := strings.Cut(view.Account.Email, "@")
+			out = append(out, localPart)
+		}
+		return strings.Join(out, ",")
+	}
+
+	asc, total, err := e.svc.ListMembers(context.Background(), tenant.ID, []string{statusActive}, "",
+		api.PageQuery{Page: 1, Size: 10, SortField: "createdAt"})
+	desc, _, descErr := e.svc.ListMembers(context.Background(), tenant.ID, []string{statusActive}, "",
+		api.PageQuery{Page: 1, Size: 10, SortField: "createdAt", SortDesc: true})
+
+	if err != nil || descErr != nil || total != 3 {
+		t.Fatalf("list: total=%d err=%v descErr=%v", total, err, descErr)
+	}
+	if got := emails(asc); got != "ZED,MID,AMY" {
+		t.Fatalf("ascending = %s, want directory data in createdAt order", got)
+	}
+	if got := emails(desc); got != "AMY,MID,ZED" {
+		t.Fatalf("descending = %s", got)
+	}
+}
+
+func TestListMembersRefusesAnEmailSort(t *testing.T) {
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+
+	_, _, err := e.svc.ListMembers(context.Background(), tenant.ID, []string{statusActive}, "",
+		api.PageQuery{Page: 1, Size: 10, SortField: "email"})
+
+	if err == nil {
+		t.Fatal("list members accepted sort=email")
+	}
+}
+
+func TestListMembersWithAMissingAccountIsAnOperationalError(t *testing.T) {
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+	kept := e.account("kept@example.com")
+	lost := e.account("lost@example.com")
+	e.member(tenant.ID, kept.ID, "member", statusActive)
+	e.member(tenant.ID, lost.ID, "member", statusActive)
+	e.svc.accounts = holeDirectory{inner: e.svc.accounts, hidden: map[reqctx.AccountID]bool{reqctx.AccountID(lost.ID): true}}
+
+	_, _, err := e.svc.ListMembers(context.Background(), tenant.ID, []string{statusActive}, "",
+		api.PageQuery{Page: 1, Size: 10, SortField: "createdAt"})
+
+	requireMissingMemberAccount(t, err)
+}
+
+func TestUpdateMembershipWithAMissingAccountIsAnOperationalError(t *testing.T) {
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+	admin := e.account("admin@example.com")
+	lost := e.account("lost@example.com")
+	e.member(tenant.ID, admin.ID, "admin", statusActive)
+	lostMembership := e.member(tenant.ID, lost.ID, "member", statusActive)
+	e.svc.accounts = holeDirectory{inner: e.svc.accounts, hidden: map[reqctx.AccountID]bool{reqctx.AccountID(lost.ID): true}}
+	role := reqctx.RoleViewer
+
+	_, err := e.svc.UpdateMembership(context.Background(), tenant.ID, lostMembership.ID, &role, nil)
+
+	requireMissingMemberAccount(t, err)
+}

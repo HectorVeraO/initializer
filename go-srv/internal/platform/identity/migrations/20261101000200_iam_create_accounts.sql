@@ -6,7 +6,6 @@ CREATE TABLE iam_accounts (
   full_name              text        NULL,
   status                 text        NOT NULL DEFAULT 'active',
   is_platform_operator   boolean     NOT NULL DEFAULT false,
-  last_active_tenant_id  uuid        NULL REFERENCES ten_tenants (id),
   created_at             timestamptz NOT NULL DEFAULT now(),
   updated_at             timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT iam_accounts_status_check CHECK (status IN ('active', 'locked', 'disabled')),
@@ -14,4 +13,3 @@ CREATE TABLE iam_accounts (
 );
 CREATE UNIQUE INDEX iam_accounts_kratos_identity_key ON iam_accounts (kratos_identity_id);
 CREATE INDEX iam_accounts_email_idx ON iam_accounts (email);
-CREATE INDEX iam_accounts_last_active_tenant_idx ON iam_accounts (last_active_tenant_id);

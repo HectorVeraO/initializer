@@ -35,9 +35,9 @@ export class MembershipsApi {
   private readonly http = inject(HttpClient);
   private readonly runtimeConfig = inject(RuntimeConfigService);
 
-  /** GET /api/v1/memberships?page=1&size=100&sort=email (active and suspended). The view shows its own load error. */
+  /** GET /api/v1/memberships?page=1&size=100&sort=createdAt (active and suspended). The view shows its own load error. */
   list(): Observable<ApiPage<MemberView>> {
-    const params = buildParams({ page: 1, size: MEMBERSHIPS_PAGE_SIZE, sort: 'email' });
+    const params = buildParams({ page: 1, size: MEMBERSHIPS_PAGE_SIZE, sort: 'createdAt' });
 
     const page = this.http.get<ApiEnvelope<ApiPage<MemberView>>>(this.runtimeConfig.apiPath('/api/v1/memberships'), { params, context: skipErrorToast() }).pipe(unwrapData<ApiPage<MemberView>>());
 

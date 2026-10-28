@@ -131,7 +131,7 @@ func TestIssueFallsBackToAnotherActiveMembership(t *testing.T) {
 	healthy := e.tenant("healthy-co", "active")
 	e.member(suspended, p.accountID, "admin", "active", e.clock.Now().Add(-2*time.Hour))
 	e.member(healthy, p.accountID, "viewer", "active", e.clock.Now().Add(-time.Hour))
-	e.exec("UPDATE iam_accounts SET last_active_tenant_id = $2::uuid WHERE id = $1::uuid", p.accountID, suspended)
+	e.remember(p.accountID, suspended)
 	c := e.client()
 	c.cookies[kratosCookieName] = p.kratosCookie
 
@@ -558,5 +558,44 @@ func TestProbeRouteEnforcesCSRFOnTheSessionResolver(t *testing.T) {
 	expectError(t, c.do(http.MethodPost, "/api/v1/probe", nil), http.StatusForbidden, "CSRF_TOKEN_INVALID")
 	if rec := c.mutate(http.MethodPost, "/api/v1/probe"); rec.Code != http.StatusOK {
 		t.Errorf("with the csrf header: status %d", rec.Code)
+	}
+}
+
+func TestIssueLandsOnTheRememberedTenant(t *testing.T) {
+	e := newSessEnv(t, sessEnvOptions{})
+	p := e.person()
+	oldest := e.tenant("oldest-co", "active")
+	remembered := e.tenant("remembered-co", "active")
+	e.member(oldest, p.accountID, "admin", "active", e.clock.Now().Add(-2*time.Hour))
+	e.member(remembered, p.accountID, "viewer", "active", e.clock.Now().Add(-time.Hour))
+	e.remember(p.accountID, remembered)
+	c := e.client()
+	c.cookies[kratosCookieName] = p.kratosCookie
+
+	view := decodeData[viewReply](t, c.do(http.MethodGet, "/api/v1/auth/session", nil))
+
+	if view.ActiveTenant == nil || view.ActiveTenant.Slug != "remembered-co" {
+		t.Fatalf("activeTenant = %+v, want the remembered tenant", view.ActiveTenant)
+	}
+}
+
+func TestANewLoginLandsOnTheTenantTheLastSwitchChose(t *testing.T) {
+	e := newSessEnv(t, sessEnvOptions{})
+	p := e.person()
+	c, _ := signedInOn(e, p, "tenant-a", "admin")
+	target := e.tenant("tenant-b", "active")
+	e.member(target, p.accountID, "member", "active", e.clock.Now())
+	e.clock.advance(time.Minute)
+	rec := c.switchTo(target)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("switch status = %d: %s", rec.Code, rec.Body.String())
+	}
+	fresh := e.client()
+	fresh.cookies[kratosCookieName] = p.kratosCookie
+
+	view := decodeData[viewReply](t, fresh.do(http.MethodGet, "/api/v1/auth/session", nil))
+
+	if view.ActiveTenant == nil || view.ActiveTenant.Slug != "tenant-b" {
+		t.Fatalf("activeTenant = %+v, want the switched tenant", view.ActiveTenant)
 	}
 }

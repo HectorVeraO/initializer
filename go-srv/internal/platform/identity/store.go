@@ -32,7 +32,6 @@ type Account struct {
 	FullName           *string
 	Status             string
 	IsPlatformOperator bool
-	LastActiveTenantID *string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }
@@ -51,7 +50,7 @@ type Membership struct {
 const (
 	tenantColumns  = "id::text, slug, name, status, created_at, updated_at"
 	accountColumns = "id::text, kratos_identity_id::text, email, full_name, status, " +
-		"is_platform_operator, last_active_tenant_id::text, created_at, updated_at"
+		"is_platform_operator, created_at, updated_at"
 	membershipColumns = "id::text, tenant_id::text, account_id::text, role, status, created_at, updated_at"
 )
 
@@ -79,7 +78,7 @@ func scanTenant(row rowScanner) (Tenant, error) {
 func scanAccount(row rowScanner) (Account, error) {
 	var a Account
 	err := row.Scan(&a.ID, &a.KratosIdentityID, &a.Email, &a.FullName, &a.Status,
-		&a.IsPlatformOperator, &a.LastActiveTenantID, &a.CreatedAt, &a.UpdatedAt)
+		&a.IsPlatformOperator, &a.CreatedAt, &a.UpdatedAt)
 	return a, err
 }
 

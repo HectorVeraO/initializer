@@ -232,6 +232,9 @@ test('the member list pages, filters by role and never shows another tenant', { 
     ['page', 'FIELD_OUT_OF_RANGE'],
   ]);
 
+  const emailSort = await expectError(await tenant.admin.request.get('/api/v1/memberships?sort=email'), 422, 'VALIDATION_FAILED');
+  expect(emailSort.issues.map((issue) => [issue.field, issue.code])).toEqual([['sort', 'FIELD_NOT_ALLOWED']]);
+
   for (const actor of [...Object.values(tenant.members), tenant.admin, other.admin, operator]) {
     await actor.request.dispose();
   }

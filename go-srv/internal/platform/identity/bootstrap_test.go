@@ -19,6 +19,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 )
 
 const (
@@ -404,8 +405,16 @@ func TestBootstrapCreatesTheTenantAndItsOperatorAdmin(t *testing.T) {
 	if !account.IsPlatformOperator {
 		t.Error("the bootstrap admin is not a platform operator")
 	}
-	if account.LastActiveTenantID == nil || *account.LastActiveTenantID != tenant.ID {
-		t.Errorf("last_active_tenant_id = %v, want %s", account.LastActiveTenantID, tenant.ID)
+	selectedAt := env.pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM ten_memberships WHERE account_id = $1::uuid AND tenant_id = $2::uuid AND last_selected_at IS NOT NULL",
+		account.ID, tenant.ID)
+	var marked int
+	if err := selectedAt.Scan(&marked); err != nil || marked != 1 {
+		t.Errorf("admin membership with last_selected_at = %d err=%v, want 1", marked, err)
+	}
+	grant, err := newTenantAccess(env.pool, clock.System{}).Select(context.Background(), reqctx.AccountID(account.ID))
+	if err != nil || grant == nil || string(grant.Tenant.ID) != tenant.ID {
+		t.Errorf("first session select = %+v err=%v, want the bootstrap tenant %s", grant, err, tenant.ID)
 	}
 }
 
@@ -424,9 +433,10 @@ func TestBootstrapPromotesAnAccountThatAlreadyExistsForTheAdminIdentity(t *testi
 			env.count("iam_accounts"), env.count("ten_tenants"), env.count("ten_memberships"))
 	}
 	account := env.account(testAdminEmail)
-	if !account.IsPlatformOperator || account.LastActiveTenantID == nil {
-		t.Errorf("account operator=%v lastActiveTenant=%v, want operator with a tenant",
-			account.IsPlatformOperator, account.LastActiveTenantID)
+	grant, err := newTenantAccess(env.pool, clock.System{}).Select(context.Background(), reqctx.AccountID(account.ID))
+	if !account.IsPlatformOperator || err != nil || grant == nil {
+		t.Errorf("account operator=%v select=%+v err=%v, want operator with a tenant",
+			account.IsPlatformOperator, grant, err)
 	}
 }
 

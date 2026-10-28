@@ -169,7 +169,7 @@ func (s *service) findOrCreateIdentity(ctx context.Context, cfg BootstrapConfig)
 }
 
 // createAdmin writes the account, the tenant and the admin membership in one
-// transaction and points the account at the tenant.
+// transaction; the membership starts as the account's last selected tenant.
 func (s *service) createAdmin(ctx context.Context, cfg BootstrapConfig, identityID string) (string, string, error) {
 	var accountID, tenantID string
 	now := s.store.clock.Now()
@@ -190,16 +190,10 @@ RETURNING id::text`, identityID, cfg.AdminEmail, now).Scan(&accountID)
 			return fmt.Errorf("insert tenant: %w", err)
 		}
 		_, err = tx.Exec(ctx,
-			`INSERT INTO ten_memberships (tenant_id, account_id, role, created_at, updated_at)
-VALUES ($1::uuid, $2::uuid, $3, $4, $4)`, tenantID, accountID, bootstrapRole, now)
+			`INSERT INTO ten_memberships (tenant_id, account_id, role, last_selected_at, created_at, updated_at)
+VALUES ($1::uuid, $2::uuid, $3, $4, $4, $4)`, tenantID, accountID, bootstrapRole, now)
 		if err != nil {
 			return fmt.Errorf("insert membership: %w", err)
-		}
-		_, err = tx.Exec(ctx,
-			`UPDATE iam_accounts SET last_active_tenant_id = $1::uuid, updated_at = $3 WHERE id = $2::uuid`,
-			tenantID, accountID, now)
-		if err != nil {
-			return fmt.Errorf("set last active tenant: %w", err)
 		}
 		return nil
 	})

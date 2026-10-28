@@ -89,7 +89,7 @@ describe('MembershipsPage', () => {
     (byTestId(rowOf(fixture, name), `${testId}-confirm`) as HTMLButtonElement).click();
   }
 
-  it('lists the members with name, role and status and asks for the first page sorted by email', async () => {
+  it('lists the members with name, role and status and asks for the first page sorted by createdAt', async () => {
     visitor.set(accessContext());
 
     const fixture = TestBed.createComponent(MembershipsPage);
@@ -99,7 +99,7 @@ describe('MembershipsPage', () => {
     const request = await nextCall('GET', LIST_URL);
 
     expect(request.request.params.get('size')).toBe('100');
-    expect(request.request.params.get('sort')).toBe('email');
+    expect(request.request.params.get('sort')).toBe('createdAt');
     request.flush(pageOf([member('jane'), member('omar', { role: 'viewer', status: 'suspended' })]));
     await settle(fixture);
     await vi.waitFor(() => {

@@ -15,7 +15,7 @@ import (
 )
 
 // tenantAccess is core's coreaccess.TenantAccess over ten_memberships and
-// ten_tenants. The remembered tenant lives in iam_accounts.last_active_tenant_id.
+// ten_tenants. The remembered tenant is ten_memberships.last_selected_at.
 type tenantAccess struct {
 	pool  *pgxpool.Pool
 	clock clock.Clock
@@ -61,9 +61,11 @@ JOIN ten_memberships m ON m.tenant_id = t.id AND m.account_id = $2::uuid WHERE t
 	return coreaccess.TenantGrant{Tenant: ref, Role: reqctx.Role(role)}, nil
 }
 
-// Select returns the remembered tenant when Grant passes for it, else the
-// oldest active membership of an active tenant, else nil. The account step
-// (a locked or disabled account) is the caller's.
+// Select picks the tenant a new or tenantless session starts on: the
+// membership with the latest last_selected_at when Grant passes for its
+// tenant, else the oldest active membership of an active tenant
+// (ORDER BY m.created_at, m.id), else nil. It never returns a rejection. The
+// account step (a locked or disabled account) is the caller's.
 func (a *tenantAccess) Select(ctx context.Context, account reqctx.AccountID) (*coreaccess.TenantGrant, error) {
 	accountID, isUUID := canonicalID(string(account))
 	if !isUUID {
@@ -71,9 +73,11 @@ func (a *tenantAccess) Select(ctx context.Context, account reqctx.AccountID) (*c
 	}
 	var remembered *string
 	err := a.pool.QueryRow(ctx,
-		"SELECT last_active_tenant_id::text FROM iam_accounts WHERE id = $1::uuid", accountID).Scan(&remembered)
+		`SELECT tenant_id::text FROM ten_memberships
+WHERE account_id = $1::uuid AND last_selected_at IS NOT NULL
+ORDER BY last_selected_at DESC, id LIMIT 1`, accountID).Scan(&remembered)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("identity: read last active tenant: %w", err)
+		return nil, fmt.Errorf("identity: read last selected tenant: %w", err)
 	}
 	if remembered != nil {
 		grant, err := a.Grant(ctx, reqctx.AccountID(accountID), reqctx.TenantID(*remembered))
@@ -107,19 +111,24 @@ ORDER BY m.created_at, m.id LIMIT 1`, accountID).Scan(
 	return &grant, nil
 }
 
-// Remember records the tenant a session last used. It does not check access:
-// callers run Grant first.
+// Remember sets last_selected_at = now on the (tenant, account) membership.
+// The caller already called Grant; no row is an operational error.
 func (a *tenantAccess) Remember(ctx context.Context, account reqctx.AccountID, tenant reqctx.TenantID) error {
 	accountID, accountOK := canonicalID(string(account))
 	tenantID, tenantOK := canonicalID(string(tenant))
 	if !accountOK || !tenantOK {
 		return errors.New("identity: remember tenant: ids must be UUIDs")
 	}
-	_, err := a.pool.Exec(ctx,
-		"UPDATE iam_accounts SET last_active_tenant_id = $2::uuid, updated_at = $3 WHERE id = $1::uuid",
-		accountID, tenantID, a.clock.Now())
+	now := a.clock.Now()
+	tag, err := a.pool.Exec(ctx,
+		`UPDATE ten_memberships SET last_selected_at = $3, updated_at = $3
+WHERE account_id = $1::uuid AND tenant_id = $2::uuid`,
+		accountID, tenantID, now)
 	if err != nil {
 		return mapError("remember tenant", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("identity: remember tenant: no membership")
 	}
 	return nil
 }
