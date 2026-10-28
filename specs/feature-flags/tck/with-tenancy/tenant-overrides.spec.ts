@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { bootstrapOperator, expectData, expectError, mutate } from '../../tck-support/actors';
-import { invite, seedTenant } from '../../tck-support/actors/tenants';
-import type { Actor } from '../../tck-support/actors';
-import type { SeededTenant } from '../../tck-support/actors/tenants';
+import { bootstrapOperator, expectData, expectError, mutate } from '../../../tck-support/actors';
+import { invite, seedTenant } from '../../../tck-support/actors/tenants';
+import type { Actor } from '../../../tck-support/actors';
+import type { SeededTenant } from '../../../tck-support/actors/tenants';
 
 const FLAGS = '/api/v1/feature-flags';
 const RELEASE_KEY = 'new_settings_ui';

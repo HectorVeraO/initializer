@@ -471,6 +471,9 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 			envFrom[key] = spec.Spec
 		}
 	}
+	for i := range specs {
+		specs[i].Files = installedFiles(specs[i].Files, tagSet)
+	}
 	for _, spec := range sortedKeys(wanted) {
 		r.add(catalog.CodeSpecUnknown, catalogSource, "/specs", fmt.Sprintf("spec %q is implemented by a module but not in the catalog", spec))
 	}
@@ -511,6 +514,20 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 		GoModule:      r.cat.GoModule,
 		ComposeName:   r.cat.ComposeName,
 	}
+}
+
+// installedFiles drops the files of a with-<tag> cooperation folder whose tag no
+// copied spec installs. It returns a new slice and leaves files untouched.
+func installedFiles(files []catalog.File, installed map[string]bool) []catalog.File {
+	kept := make([]catalog.File, 0, len(files))
+	for _, file := range files {
+		tag, gated := catalog.CooperationTag(file.Path)
+		if gated && !installed[tag] {
+			continue
+		}
+		kept = append(kept, file)
+	}
+	return kept
 }
 
 // Grep builds the anchored Playwright --grep pattern for sorted tags. The
