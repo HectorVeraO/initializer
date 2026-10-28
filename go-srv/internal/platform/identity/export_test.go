@@ -6,7 +6,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 )
 
 // NewTestPool gives the external tests an it_ database with the module
@@ -26,14 +29,9 @@ func NewAccess(pool *pgxpool.Pool, clk clock.Clock, operatorEmails []string) *Ac
 	return &Access{inner: newAccess(pool, clk, operatorEmails)}
 }
 
-// CheckAccess runs checkAccess.
-func (a *Access) CheckAccess(ctx context.Context, accountID string, tenantID *string) (Grant, error) {
-	return a.inner.checkAccess(ctx, accountID, tenantID)
-}
-
-// SelectTenant runs selectTenant.
-func (a *Access) SelectTenant(ctx context.Context, accountID string) (*string, Grant, error) {
-	return a.inner.selectTenant(ctx, accountID)
+// CheckAccount runs checkAccount.
+func (a *Access) CheckAccount(ctx context.Context, accountID string) (bool, error) {
+	return a.inner.checkAccount(ctx, accountID)
 }
 
 // LinkIdentity runs linkIdentity.
@@ -41,7 +39,18 @@ func (a *Access) LinkIdentity(ctx context.Context, kratosIdentityID, email strin
 	return a.inner.linkIdentity(ctx, kratosIdentityID, email)
 }
 
-// SetLastActiveTenant runs setLastActiveTenant.
-func (a *Access) SetLastActiveTenant(ctx context.Context, accountID, tenantID string) error {
-	return a.inner.setLastActiveTenant(ctx, accountID, tenantID)
+// NewTenantAccess builds identity's TenantAccess over pool.
+func NewTenantAccess(pool *pgxpool.Pool, clk clock.Clock) coreaccess.TenantAccess {
+	return newTenantAccess(pool, clk)
+}
+
+// NewTenantDirectory builds identity's TenantDirectory over pool.
+func NewTenantDirectory(pool *pgxpool.Pool) coreaccess.TenantDirectory {
+	return &tenantDirectory{pool: pool}
+}
+
+// NewAccounts builds identity's account Directory and Provisioner.
+func NewAccounts(pool *pgxpool.Pool, clk clock.Clock, admin *kratos.Admin, operatorEmails []string) (accounts.Directory, accounts.Provisioner) {
+	port := newAccountDirectory(pool, clk, admin, operatorEmails)
+	return port, port
 }

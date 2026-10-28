@@ -5,7 +5,9 @@ import (
 	"errors"
 	"net/http"
 
+	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/session"
 )
@@ -95,24 +97,25 @@ func (rt *sessionRoutes) refreshClaims(ctx context.Context, w http.ResponseWrite
 	if err != nil {
 		return session.Claims{}, err
 	}
-	var tenantID *string
-	var grant Grant
+	platformOperator, err := rt.access.checkAccount(ctx, old.AccountID)
+	if err != nil {
+		return session.Claims{}, err
+	}
+	var granted *coreaccess.TenantGrant
 	if old.TenantID == nil {
-		grant, err = rt.access.checkAccess(ctx, old.AccountID, nil)
-		if err != nil {
-			return session.Claims{}, err
-		}
-		tenantID, grant, err = rt.access.selectTenant(ctx, old.AccountID)
+		granted, err = rt.tenants.Select(ctx, reqctx.AccountID(old.AccountID))
 		if err != nil {
 			return session.Claims{}, err
 		}
 	} else {
-		tenantID = old.TenantID
-		grant, err = rt.access.checkAccess(ctx, old.AccountID, tenantID)
+		var tenantGrant coreaccess.TenantGrant
+		tenantGrant, err = rt.tenants.Grant(ctx, reqctx.AccountID(old.AccountID), reqctx.TenantID(*old.TenantID))
 		if err != nil {
 			return session.Claims{}, err
 		}
+		granted = &tenantGrant
 	}
+	tenantID, grant := claimsGrant(granted, platformOperator)
 	claims := reissue(old, tenantID, grant)
 	claims.ExpiresAt = rt.clock.Now().Add(rt.cfg.SessionTTL)
 	token, err := rt.codec.Encode(claims)
@@ -145,12 +148,18 @@ func (rt *sessionRoutes) switchTenant(w http.ResponseWriter, r *http.Request) {
 		rt.writer.Fail(w, r, err)
 		return
 	}
-	grant, err := rt.access.checkAccess(ctx, old.AccountID, &tenantID)
+	platformOperator, err := rt.access.checkAccount(ctx, old.AccountID)
 	if err != nil {
 		rt.writer.Fail(w, r, err)
 		return
 	}
-	claims := reissue(old, &tenantID, grant)
+	granted, err := rt.tenants.Grant(ctx, reqctx.AccountID(old.AccountID), reqctx.TenantID(tenantID))
+	if err != nil {
+		rt.writer.Fail(w, r, err)
+		return
+	}
+	switchedTo, grant := claimsGrant(&granted, platformOperator)
+	claims := reissue(old, switchedTo, grant)
 	expiresAt := rt.clock.Now().Add(rt.cfg.SessionTTL)
 	if old.ExpiresAt.Before(expiresAt) {
 		expiresAt = old.ExpiresAt
@@ -161,7 +170,7 @@ func (rt *sessionRoutes) switchTenant(w http.ResponseWriter, r *http.Request) {
 		rt.writer.Fail(w, r, err)
 		return
 	}
-	err = rt.access.setLastActiveTenant(ctx, old.AccountID, tenantID)
+	err = rt.tenants.Remember(ctx, reqctx.AccountID(old.AccountID), reqctx.TenantID(tenantID))
 	if err != nil {
 		rt.writer.Fail(w, r, err)
 		return

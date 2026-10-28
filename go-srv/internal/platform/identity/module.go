@@ -81,7 +81,7 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 	s.access = newAccess(b.Pool(), b.Clock(), s.cfg.PlatformOperatorEmails)
 	s.provideSession(b)
 	s.provideKratos(b)
-	s.tenancy = newTenancy(b.Pool(), b.Clock(), s.admin, s.cfg)
+	s.tenancy = newTenancy(b.Pool(), b.Clock(), s.cfg)
 	s.apiKeys = newAPIKeys(b.Pool(), b.Clock())
 	err := b.ProvideTenantDirectory(&tenantDirectory{pool: b.Pool()})
 	if err != nil {
