@@ -89,7 +89,7 @@ func TestPreReleaseMigrationsStillResolvesTheBase(t *testing.T) {
 	dir := migrationsRepo(t, "-- +goose Up\n")
 	writeAt(t, dir, "versioning.json", preReleaseOn)
 	r := invoke([]string{"migrations", "--root", dir, "--base-rev", "nope"}, fixedNow, nil)
-	if r.code != 2 {
+	if r.code != 2 || !strings.HasPrefix(r.stderr, migrationsNotice) {
 		t.Fatalf("got %+v", r)
 	}
 }

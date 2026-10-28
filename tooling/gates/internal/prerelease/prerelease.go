@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -70,11 +71,26 @@ func Load(root string) (bool, error) {
 // right shape of keys but a wrong value type.
 func grammarProblems(raw []byte) []string {
 	var fields map[string]json.RawMessage
-	err := json.Unmarshal(raw, &fields)
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	err := dec.Decode(&fields)
 	if err != nil {
 		return []string{"must be a JSON object"}
 	}
 	var problems []string
+	var unknown []string
+	for key := range fields {
+		if key != "schema" && key != "preRelease" {
+			unknown = append(unknown, key)
+		}
+	}
+	sort.Strings(unknown)
+	for _, key := range unknown {
+		problems = append(problems, fmt.Sprintf("unknown field %q", key))
+	}
+	_, err = dec.Token()
+	if !errors.Is(err, io.EOF) {
+		problems = append(problems, "unexpected data after the object")
+	}
 	var schema int
 	schemaRaw, hasSchema := fields["schema"]
 	if !hasSchema {
