@@ -433,10 +433,22 @@ func TestBootstrapPromotesAnAccountThatAlreadyExistsForTheAdminIdentity(t *testi
 			env.count("iam_accounts"), env.count("ten_tenants"), env.count("ten_memberships"))
 	}
 	account := env.account(testAdminEmail)
+	tenant, err := newStore(env.pool, clock.System{}).TenantBySlug(context.Background(), testSlug)
+	if err != nil {
+		t.Fatalf("tenant: %v", err)
+	}
 	grant, err := newTenantAccess(env.pool, clock.System{}).Select(context.Background(), reqctx.AccountID(account.ID))
-	if !account.IsPlatformOperator || err != nil || grant == nil {
-		t.Errorf("account operator=%v select=%+v err=%v, want operator with a tenant",
-			account.IsPlatformOperator, grant, err)
+	hasBootstrapTenant := err == nil && grant != nil && string(grant.Tenant.ID) == tenant.ID
+	if !account.IsPlatformOperator || !hasBootstrapTenant {
+		t.Errorf("account operator=%v select=%+v err=%v, want operator with the bootstrap tenant %s",
+			account.IsPlatformOperator, grant, err, tenant.ID)
+	}
+	var marked int
+	row := env.pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM ten_memberships WHERE account_id = $1::uuid AND tenant_id = $2::uuid AND last_selected_at IS NOT NULL",
+		account.ID, tenant.ID)
+	if err := row.Scan(&marked); err != nil || marked != 1 {
+		t.Errorf("promoted membership with last_selected_at = %d err=%v, want 1", marked, err)
 	}
 }
 
