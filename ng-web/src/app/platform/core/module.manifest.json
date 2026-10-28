@@ -4,7 +4,7 @@
   "module": "core",
   "version": "0.1.0",
   "implied": true,
-  "implementsSpec": { "core": "0.1.0", "identity": "0.1.0" },
+  "implementsSpec": { "api-keys": "0.1.0", "core": "0.1.0", "identity": "0.1.0", "tenancy": "0.1.0" },
   "requiresModules": [],
   "files": ["ng-web/"],
   "exclude": ["ng-web/.vscode/", "ng-web/AGENTS.md", "ng-web/cookbooks/"]

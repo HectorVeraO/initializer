@@ -49,7 +49,7 @@ async function rawPost(admin: Actor, path: string, body: string): Promise<APIRes
   return admin.request.fetch(path, { method: 'POST', headers: { 'X-XSRF-TOKEN': csrf.value, 'Content-Type': 'application/json' }, data: body });
 }
 
-test('CA-03 API key listings never expose secrets and a key lists only with its scope', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-03 API key listings never expose secrets and a key lists only with its scope', { tag: '@api-keys' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'ca03-a' });
   const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
@@ -95,7 +95,7 @@ test('CA-03 API key listings never expose secrets and a key lists only with its 
   }
 });
 
-test('CA-03 a key resolves its tenant by slug or id and rejects another tenant', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-03 a key resolves its tenant by slug or id and rejects another tenant', { tag: '@api-keys' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'ca03t-a' });
   const tenantB = await seedTenant(playwright, operator, { slugBase: 'ca03t-b' });
@@ -114,7 +114,7 @@ test('CA-03 a key resolves its tenant by slug or id and rejects another tenant',
   }
 });
 
-test('CA-03 expired, revoked, unknown, malformed and wrong-secret keys answer the same 401', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-03 expired, revoked, unknown, malformed and wrong-secret keys answer the same 401', { tag: '@api-keys' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'ca03i-a' });
   const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
@@ -145,7 +145,7 @@ test('CA-03 expired, revoked, unknown, malformed and wrong-secret keys answer th
   }
 });
 
-test('CA-04 a key answers TENANT_SUSPENDED on the request after its tenant is suspended', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-04 a key answers TENANT_SUSPENDED on the request after its tenant is suspended', { tag: '@api-keys' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca04k-a' });
   const key = await createKey(tenant.admin, 'k-suspend', ['tenant:read']);
@@ -161,7 +161,7 @@ test('CA-04 a key answers TENANT_SUSPENDED on the request after its tenant is su
   await operator.request.dispose();
 });
 
-test('CA-05 POST /api/v1/api-keys accumulates every issue', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-05 POST /api/v1/api-keys accumulates every issue', { tag: '@api-keys' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca05k-a' });
   const issues = async (response: APIResponse) => (await expectError(response, 422, 'VALIDATION_FAILED')).issues.map((issue) => [issue.field, issue.code]);
@@ -185,7 +185,7 @@ test('CA-05 POST /api/v1/api-keys accumulates every issue', { tag: '@identity' }
   await operator.request.dispose();
 });
 
-test('CA-10 an API key id of another tenant, an unknown one and a malformed one answer the same 404', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-10 an API key id of another tenant, an unknown one and a malformed one answer the same 404', { tag: '@api-keys' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'ca10k-a' });
   const tenantB = await seedTenant(playwright, operator, { slugBase: 'ca10k-b' });
@@ -205,7 +205,7 @@ test('CA-10 an API key id of another tenant, an unknown one and a malformed one 
   }
 });
 
-test('CA-11 a viewer cannot create keys and a key cannot reach session-only routes', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-11 a viewer cannot create keys and a key cannot reach session-only routes', { tag: '@api-keys' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca11k-a', members: [{ label: 'ca11k-viewer', role: 'viewer' }] });
   const viewer = tenant.members['ca11k-viewer'];
@@ -224,7 +224,7 @@ test('CA-11 a viewer cannot create keys and a key cannot reach session-only rout
   }
 });
 
-test('CA-14 a session cookie together with X-API-Key is a credential conflict', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-14 a session cookie together with X-API-Key is a credential conflict', { tag: '@api-keys' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca14-a' });
   const key = await createKey(tenant.admin, 'k-ca14', ['tenant:read']);
@@ -236,7 +236,7 @@ test('CA-14 a session cookie together with X-API-Key is a credential conflict', 
   await operator.request.dispose();
 });
 
-test('CA-15 creating a key with a changed active tenant answers ACTIVE_TENANT_CHANGED and stores nothing', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-15 creating a key with a changed active tenant answers ACTIVE_TENANT_CHANGED and stores nothing', { tag: '@api-keys' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'ca15k-a' });
   const tenantC = await seedTenant(playwright, operator, { slugBase: 'ca15k-c' });

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { bootstrapOperator, expectError, mutate } from '../../tck-support/actors';
 import { seedTenant } from '../../tck-support/actors/tenants';
 
-test('CA-12 tenant creation refuses a taken slug and accumulates validation issues', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-12 tenant creation refuses a taken slug and accumulates validation issues', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca12-a' });
 
@@ -29,7 +29,7 @@ test('CA-12 tenant creation refuses a taken slug and accumulates validation issu
   await operator.request.dispose();
 });
 
-test('CA-12 only a platform operator creates tenants', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-12 only a platform operator creates tenants', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'tenant-ops' });
 

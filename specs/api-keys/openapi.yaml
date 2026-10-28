@@ -1,0 +1,323 @@
+openapi: 3.1.0
+info:
+  title: API keys
+  version: 0.1.0
+  description: >
+    M2M API keys sent as X-API-Key. Keys belong to a tenant when the tenancy module is
+    installed and the caller has an active tenant; a platform operator without an active
+    tenant mints keys without a tenant. Every /api/v1 body is ApiEnvelope<T>.
+servers:
+  - url: /
+security: []
+tags:
+  - name: api-keys
+x-initializer-tck:
+  pinned:
+    - routes, methods, bodies, status codes and error codes of this file
+    - the key format
+    - a session together with X-API-Key is 409 CREDENTIAL_CONFLICT
+  unpinned:
+    - how the secret is hashed and stored
+paths:
+  /api/v1/api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [api-keys]
+      description: Admin session, or an API key holding api-keys:read. Never a secret or hash.
+      security: [{ sessionCookie: [] }, { apiKey: [] }]
+      x-initializer-scope: api-keys:read
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/ApiKeyStatus' }
+          description: Every status when absent.
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Size' }
+        - name: sort
+          in: query
+          required: false
+          schema: { type: string, enum: [createdAt, -createdAt, name, -name], default: -createdAt }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/ApiKeyPageOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createApiKey
+      tags: [api-keys]
+      description: Admin session only. plainTextKey is shown once and never stored.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateApiKeyRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/ApiKeyCreatedOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/api-keys/{id}:
+    delete:
+      operationId: revokeApiKey
+      tags: [api-keys]
+      description: Admin session only. Idempotent; a foreign, unknown or malformed id is 404.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/XsrfToken' }
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/ApiKeyViewOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/api-key-scopes:
+    get:
+      operationId: listApiKeyScopes
+      tags: [api-keys]
+      description: Admin session only. The scopes registered by installed modules, ordered by name.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ActiveTenantId' }
+      responses:
+        '200': { $ref: '#/components/responses/ScopeListOk' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: app_session
+      description: Name is __Host-app_session over https. Not pinned by the TCK; treat it as opaque.
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "Format ^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$. Never combined with a session cookie (409 CREDENTIAL_CONFLICT)."
+  parameters:
+    XsrfToken:
+      name: X-XSRF-TOKEN
+      in: header
+      required: false
+      description: Required on cookie-authenticated mutations; value of the XSRF-TOKEN cookie. Missing or wrong -> 403 CSRF_TOKEN_INVALID.
+      schema: { type: string }
+    ActiveTenantId:
+      name: X-Active-Tenant-Id
+      in: header
+      required: false
+      description: Tenant the client rendered. Differs from the session tenant -> 409 ACTIVE_TENANT_CHANGED, nothing executed. Ignored for API keys.
+      schema: { type: string, format: uuid }
+    Id:
+      name: id
+      in: path
+      required: true
+      description: UUID. A malformed, unknown or other tenant's id answers the same 404 RESOURCE_NOT_FOUND.
+      schema: { type: string }
+    Page:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 1 }
+    Size:
+      name: size
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  headers:
+    XTraceId:
+      description: The trace id of the request; equals meta.traceId of the body.
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{32}$'
+    CacheControl:
+      schema: { type: string, const: no-store }
+  responses:
+    Error:
+      description: Error envelope.
+      headers:
+        X-Trace-Id:
+          $ref: '#/components/headers/XTraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiEnvelopeError'
+    ApiKeyViewOk:
+      description: API key metadata.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ApiKeyView' } } } ] }
+    ApiKeyPageOk:
+      description: Page of API key metadata; never a secret, hash or plain key.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { allOf: [ { $ref: '#/components/schemas/PageInfo' }, { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ApiKeyView' } } } } ] } } } ] }
+    ApiKeyCreatedOk:
+      description: plainTextKey is shown once and never stored.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { $ref: '#/components/schemas/ApiKeyCreated' } } } ] }
+    ScopeListOk:
+      description: Registered scopes ordered by name.
+      headers: { X-Trace-Id: { $ref: '#/components/headers/XTraceId' }, Cache-Control: { $ref: '#/components/headers/CacheControl' } }
+      content:
+        application/json:
+          schema: { allOf: [ { $ref: '#/components/schemas/SuccessEnvelope' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ScopeInfo' } } } } ] }
+  schemas:
+    ApiMeta:
+      type: object
+      required: [traceId, timestamp]
+      additionalProperties: false
+      properties:
+        traceId:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+          description: 32 lowercase hex characters, never all zeros.
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC in whole seconds, ending in Z.
+    ApiIssue:
+      type: object
+      required: [field, code, message]
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+          description: JSON path into the request body or a query parameter name; empty means the whole body.
+        code:
+          $ref: '#/components/schemas/ApiIssueCode'
+        message:
+          type: string
+    ApiError:
+      type: object
+      required: [code, message, issues]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/ApiErrorCode'
+        message:
+          type: string
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiIssue'
+    ApiEnvelopeError:
+      type: object
+      required: [data, meta, error]
+      additionalProperties: false
+      properties:
+        data:
+          type: 'null'
+        meta:
+          $ref: '#/components/schemas/ApiMeta'
+        error:
+          $ref: '#/components/schemas/ApiError'
+    ApiErrorCode:
+      type: string
+      description: Top-level error.code. The set grows (x-extensible-enum), so a client treats an unknown code as a generic error; renaming or removing a code is a breaking change.
+      x-extensible-enum:
+        - SESSION_INVALID
+        - CSRF_TOKEN_INVALID
+        - ACCOUNT_LOCKED_OR_DISABLED
+        - TENANT_ACCESS_DENIED
+        - TENANT_SUSPENDED
+        - MEMBERSHIP_REVOKED
+        - ACTIVE_TENANT_CHANGED
+        - VALIDATION_FAILED
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
+        - ROUTE_NOT_FOUND
+        - INTERNAL_ERROR
+        - SERVICE_UNAVAILABLE
+        - IDENTITY_PROVIDER_UNAVAILABLE
+        - PLATFORM_OPERATOR_REQUIRED
+        - ACTIVE_TENANT_REQUIRED
+        - INSUFFICIENT_ROLE
+        - RESOURCE_NOT_FOUND
+        - INVITATION_INVALID
+        - INVITATION_EMAIL_MISMATCH
+        - MEMBERSHIP_ALREADY_ACTIVE
+        - INVITATION_NOT_PENDING
+        - TENANT_SLUG_TAKEN
+        - IDENTITY_ALREADY_EXISTS
+        - TENANT_MISMATCH
+        - LAST_TENANT_ADMIN
+        - INVITATION_REQUIRED
+        - API_KEY_INVALID_OR_REVOKED
+        - INSUFFICIENT_SCOPE
+        - CREDENTIAL_CONFLICT
+    ApiIssueCode:
+      type: string
+      description: error.issues[].code, always under a 422 VALIDATION_FAILED. The set grows (x-extensible-enum), so a client treats an unknown code as a generic problem.
+      x-extensible-enum:
+        - BODY_MALFORMED
+        - FIELD_REQUIRED
+        - FIELD_TYPE_INVALID
+        - FIELD_TOO_SHORT
+        - FIELD_TOO_LONG
+        - FIELD_OUT_OF_RANGE
+        - FIELD_INVALID_FORMAT
+        - FIELD_NOT_ALLOWED
+        - FIELD_DUPLICATE
+        - FIELD_MIN_ITEMS
+        - PASSWORD_REJECTED
+    SuccessEnvelope:
+      type: object
+      required: [data, meta, error]
+      properties:
+        data: {}
+        meta: { $ref: '#/components/schemas/ApiMeta' }
+        error: { type: 'null' }
+    PageInfo:
+      type: object
+      required: [page, size, totalItems]
+      properties:
+        page: { type: integer, minimum: 1 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalItems: { type: integer, minimum: 0 }
+    ApiKeyStatus: { type: string, enum: [active, expired, revoked] }
+    ApiKeyView:
+      type: object
+      required: [id, name, keyPrefix, scopes, status, expiresAt, revokedAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        keyPrefix: { type: string, pattern: '^gbk_live_[a-z2-7]{16}$' }
+        scopes: { type: array, items: { type: string } }
+        status: { $ref: '#/components/schemas/ApiKeyStatus' }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        revokedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    ApiKeyCreated:
+      type: object
+      required: [apiKey, plainTextKey]
+      properties:
+        apiKey: { $ref: '#/components/schemas/ApiKeyView' }
+        plainTextKey: { type: string, pattern: '^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$' }
+    ScopeInfo:
+      type: object
+      required: [name, description]
+      properties:
+        name: { type: string, pattern: '^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$' }
+        description: { type: string }
+    CreateApiKeyRequest:
+      type: object
+      properties:
+        name: { type: string, description: 1-100 characters after trimming }
+        scopes: { type: array, items: { type: string }, description: Non-empty, registered, no duplicates }
+        expiresAt: { type: [string, 'null'], format: date-time, description: A past value is accepted and the key is born expired. }

@@ -51,7 +51,7 @@ async function rawPost(admin: Actor, body: string, contentType: string): Promise
   });
 }
 
-test('CA-06 invitations carry a fragment token, match the email and are single use', { tag: '@identity' }, async ({ playwright, request }) => {
+test('CA-06 invitations carry a fragment token, match the email and are single use', { tag: '@tenancy' }, async ({ playwright, request }) => {
   const suffix = runSuffix();
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'ca06-a' });
@@ -97,7 +97,7 @@ test('CA-06 invitations carry a fragment token, match the email and are single u
   }
 });
 
-test('CA-08 a new invitation supersedes the pending one', { tag: '@identity' }, async ({ playwright, request }) => {
+test('CA-08 a new invitation supersedes the pending one', { tag: '@tenancy' }, async ({ playwright, request }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca08-a' });
   const email = `ca08-${runSuffix()}@example.com`;
@@ -113,7 +113,7 @@ test('CA-08 a new invitation supersedes the pending one', { tag: '@identity' }, 
   await operator.request.dispose();
 });
 
-test('CA-09 accept-new accumulates issues and leaves an existing identity to accept', { tag: '@identity' }, async ({ playwright, request }) => {
+test('CA-09 accept-new accumulates issues and leaves an existing identity to accept', { tag: '@tenancy' }, async ({ playwright, request }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantB = await seedTenant(playwright, operator, { slugBase: 'ca09-b' });
   const other = await seedTenant(playwright, operator, { slugBase: 'ca09-w' });
@@ -134,7 +134,7 @@ test('CA-09 accept-new accumulates issues and leaves an existing identity to acc
   }
 });
 
-test('Transport limits on POST /api/v1/invitations answer the registry codes', { tag: '@identity' }, async ({ playwright }) => {
+test('Transport limits on POST /api/v1/invitations answer the registry codes', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'tl-a' });
 

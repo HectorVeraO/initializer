@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "spec": "tenancy",
+  "version": "0.1.0",
+  "tckTags": ["@tenancy"],
+  "tckEnv": {
+    "APP_BOOTSTRAP_TENANT_SLUG": "acme"
+  }
+}

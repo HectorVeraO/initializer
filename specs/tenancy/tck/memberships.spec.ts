@@ -47,7 +47,7 @@ async function xsrfValue(actor: Actor): Promise<string> {
   return cookie.value;
 }
 
-test('CA-02 switch-tenant is stateless and refuses non-members', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-02 switch-tenant is stateless and refuses non-members', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'ca02-a', members: [{ label: 'ca02-u', role: 'member' }] });
   const tenantB = await seedTenant(playwright, operator, { slugBase: 'ca02-b' });
@@ -83,7 +83,7 @@ test('CA-02 switch-tenant is stateless and refuses non-members', { tag: '@identi
   }
 });
 
-test('CA-05 the last active admin cannot be revoked or demoted', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-05 the last active admin cannot be revoked or demoted', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca05-a' });
   const ownId = await membershipIdOf(tenant.admin, tenant.admin.accountId);
@@ -99,7 +99,7 @@ test('CA-05 the last active admin cannot be revoked or demoted', { tag: '@identi
   await operator.request.dispose();
 });
 
-test('CA-05 membership updates accumulate validation issues', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-05 membership updates accumulate validation issues', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca05-v' });
   const ownId = await membershipIdOf(tenant.admin, tenant.admin.accountId);
@@ -121,7 +121,7 @@ test('CA-05 membership updates accumulate validation issues', { tag: '@identity'
   await operator.request.dispose();
 });
 
-test('CA-07 a revoked member returns only through a new invitation that keeps the membership', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-07 a revoked member returns only through a new invitation that keeps the membership', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca07-a', members: [{ label: 'ca07-jane', role: 'viewer' }] });
   const jane = tenant.members['ca07-jane'];
@@ -150,7 +150,7 @@ test('CA-07 a revoked member returns only through a new invitation that keeps th
   }
 });
 
-test('CA-10 membership and invitation ids of another tenant answer the same 404 as a random or malformed id', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-10 membership and invitation ids of another tenant answer the same 404 as a random or malformed id', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'ca10-a' });
   const tenantB = await seedTenant(playwright, operator, { slugBase: 'ca10-b' });
@@ -177,7 +177,7 @@ test('CA-10 membership and invitation ids of another tenant answer the same 404 
   }
 });
 
-test('CA-13 a membership update without or with a wrong CSRF token is refused and changes nothing', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-13 a membership update without or with a wrong CSRF token is refused and changes nothing', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca13-a', members: [{ label: 'ca13-m', role: 'member' }] });
   const target = tenant.members['ca13-m'];
@@ -199,7 +199,7 @@ test('CA-13 a membership update without or with a wrong CSRF token is refused an
   }
 });
 
-test('the member list pages, filters by role and never shows another tenant', { tag: '@identity' }, async ({ playwright }) => {
+test('the member list pages, filters by role and never shows another tenant', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, {
     slugBase: 'ml-a',

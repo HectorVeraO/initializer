@@ -4,7 +4,7 @@
   "module": "identity",
   "version": "0.1.0",
   "implied": false,
-  "implementsSpec": { "identity": "0.1.0" },
+  "implementsSpec": { "api-keys": "0.1.0", "identity": "0.1.0", "tenancy": "0.1.0" },
   "requiresCore": "^0.1.0",
   "requiresModules": [],
   "tablePrefixes": ["iam", "ten"],

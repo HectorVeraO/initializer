@@ -16,7 +16,7 @@ interface SessionView {
   activeTenant: TenantSummary | null;
 }
 
-test('GET /tenant answers the caller tenant for its id or slug in any case and refuses another tenant', { tag: '@identity' }, async ({ playwright }) => {
+test('GET /tenant answers the caller tenant for its id or slug in any case and refuses another tenant', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenantA = await seedTenant(playwright, operator, { slugBase: 'tn-a' });
   const tenantB = await seedTenant(playwright, operator, { slugBase: 'tn-b' });
@@ -37,7 +37,7 @@ test('GET /tenant answers the caller tenant for its id or slug in any case and r
   }
 });
 
-test('CA-14 GET /tenant refuses a missing or altered session cookie', { tag: '@identity' }, async ({ playwright, request }) => {
+test('CA-14 GET /tenant refuses a missing or altered session cookie', { tag: '@tenancy' }, async ({ playwright, request }) => {
   await expectError(await request.get('/api/v1/tenant'), 401, 'SESSION_INVALID');
 
   const operator = await bootstrapOperator(playwright);
@@ -57,7 +57,7 @@ test('CA-14 GET /tenant refuses a missing or altered session cookie', { tag: '@i
   await operator.request.dispose();
 });
 
-test('CA-04 a revoked membership blocks refresh and switch, and a suspended tenant blocks the switch', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-04 a revoked membership blocks refresh and switch, and a suspended tenant blocks the switch', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca04-a', members: [{ label: 'ca04-u', role: 'member' }] });
   const user = tenant.members['ca04-u'];
@@ -83,7 +83,7 @@ test('CA-04 a revoked membership blocks refresh and switch, and a suspended tena
   }
 });
 
-test('CA-11 role and operator codes on the tenancy routes', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-11 role and operator codes on the tenancy routes', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ca11-a', members: [{ label: 'ca11-m', role: 'member' }] });
   const member = tenant.members['ca11-m'];
@@ -101,7 +101,7 @@ test('CA-11 role and operator codes on the tenancy routes', { tag: '@identity' }
   }
 });
 
-test('CA-16 a signed-in user without a membership gets the same refusal for a suspended and an unknown tenant', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-16 a signed-in user without a membership gets the same refusal for a suspended and an unknown tenant', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const suspended = await seedTenant(playwright, operator, { slugBase: 'ca16-s' });
   await expectData<unknown>(await mutate(operator, 'PATCH', `/api/v1/tenants/${suspended.id}/status`, { status: 'suspended' }), 200);
@@ -124,7 +124,7 @@ test('CA-16 a signed-in user without a membership gets the same refusal for a su
   }
 });
 
-test('the operator lists, filters and toggles tenant status', { tag: '@identity' }, async ({ playwright }) => {
+test('the operator lists, filters and toggles tenant status', { tag: '@tenancy' }, async ({ playwright }) => {
   const operator = await bootstrapOperator(playwright);
   const tenant = await seedTenant(playwright, operator, { slugBase: 'ts-a' });
 
