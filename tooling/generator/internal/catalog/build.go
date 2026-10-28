@@ -193,6 +193,7 @@ func (b *builder) run() error {
 	}
 	b.checkTargets()
 	b.checkEntrypoints()
+	b.checkCooperationFolders()
 	return nil
 }
 
