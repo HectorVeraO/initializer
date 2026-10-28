@@ -1,4 +1,5 @@
-import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
+import { okEnvelope } from '../../../../testing/fixtures/api-envelope';
+import { sessionView } from '../../../../testing/fixtures/session-view';
 import type { MembershipRole, SessionView } from '../session/session.types';
 import { SessionRequirement, meetsRequirement } from './requirement';
 
@@ -103,6 +104,14 @@ describe('meetsRequirement', () => {
       { name: 'flag on', overrides: { flags: { beta: true } }, requirement: { flag: 'beta' }, expected: true },
       { name: 'flag off', overrides: { flags: { beta: false } }, requirement: { flag: 'beta' }, expected: false },
       { name: 'flag unknown', overrides: {}, requirement: { flag: 'beta' }, expected: false },
+      { name: 'tenantless operator meets tenant and roles with orTenantlessOperator', overrides: operatorWithoutTenant, requirement: { tenant: 'required', roles: ['admin'], orTenantlessOperator: true }, expected: true },
+      { name: 'non-operator without tenant is held despite orTenantlessOperator', overrides: { activeTenant: null }, requirement: { tenant: 'required', roles: ['admin'], orTenantlessOperator: true }, expected: false },
+      {
+        name: 'operator with a tenant is still held to roles with orTenantlessOperator',
+        overrides: { account: { ...(sessionView()['account'] as object), isPlatformOperator: true, role: 'viewer' } },
+        requirement: { tenant: 'required', roles: ['admin'], orTenantlessOperator: true },
+        expected: false
+      },
       { name: 'every clause met', overrides: { flags: { beta: true } }, requirement: { tenant: 'required', roles: ['admin'], flag: 'beta' }, expected: true },
       { name: 'one clause missed among several', overrides: { flags: {} }, requirement: { tenant: 'required', roles: ['admin'], flag: 'beta' }, expected: false }
     ];

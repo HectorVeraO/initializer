@@ -2,9 +2,8 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
-import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
+import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { parameterView } from '../../../../testing/fixtures/parameter-view';
-import { okEnvelope } from '../../../../testing/fixtures/session-view';
 import type { ParameterView } from '../parameters.types';
 import { ParameterOverrideDialog } from './parameter-override-dialog.component';
 

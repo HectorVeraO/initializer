@@ -4,9 +4,10 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
-import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
-import { CONFIG_URL, FakeBroadcastChannel, SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
+import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
+import { sessionView } from '../../../../testing/fixtures/session-view';
+import { SESSION_URL, fakeLocation, loadSession } from '../../../../testing/fixtures/session-testing';
+import { CONFIG_URL, FakeBroadcastChannel, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
 import { BROWSER_LOCATION } from './browser-location';
 import { SessionStore } from './session-store.service';
 

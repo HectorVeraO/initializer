@@ -4,8 +4,8 @@ import { Router, Routes } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
 import { WebModule, anonymousGuard, coreModule } from '@/platform/core';
-import { errorEnvelope } from './testing/fixtures/api-envelope';
-import { okEnvelope, sessionView } from './testing/fixtures/session-view';
+import { errorEnvelope, okEnvelope } from './testing/fixtures/api-envelope';
+import { sessionView } from './testing/fixtures/session-view';
 import { buildAppRoutes } from './app.routes';
 
 const CONFIG_URL = '/assets/config/runtime-config.json';
