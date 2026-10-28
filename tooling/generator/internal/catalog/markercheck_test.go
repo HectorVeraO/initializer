@@ -71,6 +71,13 @@ func TestValidMarkersAndProseAreAccepted(t *testing.T) {
 	assertCodes(t, issues)
 }
 
+func TestBinaryFileWithAMarkerLineIsNotChecked(t *testing.T) {
+	repo := cleanRepo(t)
+	put(repo, composeFile, "name: fixture-app\n\x00\n# initializer:module identity\n")
+	_, issues := buildRepo(t, repo)
+	assertCodes(t, issues)
+}
+
 func TestIdentityOwnsPostgresInitUnderCoreDeployFolder(t *testing.T) {
 	repo := cleanRepo(t)
 	put(repo, ".deploy/local/postgres-init/10-init.sh", "#!/bin/sh\n")
