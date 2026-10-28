@@ -8,6 +8,6 @@
   "requiresCore": "^0.1.0",
   "requiresModules": [{ "module": "identity", "range": "^0.1.0" }],
   "tablePrefixes": ["ten"],
-  "files": ["go-srv/internal/platform/tenancy/"],
+  "files": ["go-srv/internal/platform/tenancy/", "specs/tck-support/actors/tenants.ts"],
   "exclude": []
 }
