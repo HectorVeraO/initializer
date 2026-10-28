@@ -32,7 +32,15 @@ func TestDecodeSpecRules(t *testing.T) {
 		{"folder mismatch", "other", func(map[string]any) {}, "#/spec"},
 		{"bad id", "feature-flags", func(m map[string]any) { m["spec"] = "Feature" }, "#/spec"},
 		{"bad version", "feature-flags", func(m map[string]any) { m["version"] = "1.0" }, "#/version"},
-		{"unknown tag", "feature-flags", func(m map[string]any) { m["tckTags"] = []any{"@nope"} }, "#/tckTags/0"},
+		{"malformed tag", "feature-flags", func(m map[string]any) { m["tckTags"] = []any{"@Nope"} }, "#/tckTags/0"},
+		{"tag without at sign", "feature-flags", func(m map[string]any) { m["tckTags"] = []any{"tenancy"} }, "#/tckTags/0"},
+		{"bare at sign", "feature-flags", func(m map[string]any) { m["tckTags"] = []any{"@"} }, "#/tckTags/0"},
+		{"empty tags", "feature-flags", func(m map[string]any) { m["tckTags"] = []any{} }, "#/tckTags"},
+		{"cooperatesWith not an array", "feature-flags", func(m map[string]any) { m["cooperatesWith"] = "@tenancy" }, "#/cooperatesWith"},
+		{"cooperatesWith malformed item", "feature-flags", func(m map[string]any) { m["cooperatesWith"] = []any{"Tenancy"} }, "#/cooperatesWith/0"},
+		{"cooperatesWith unsorted", "feature-flags", func(m map[string]any) { m["cooperatesWith"] = []any{"@tenancy", "@api-keys"} }, "#/cooperatesWith/1"},
+		{"cooperatesWith duplicate", "feature-flags", func(m map[string]any) { m["cooperatesWith"] = []any{"@tenancy", "@tenancy"} }, "#/cooperatesWith/1"},
+		{"cooperatesWith own tag", "feature-flags", func(m map[string]any) { m["cooperatesWith"] = []any{"@core"} }, "#/cooperatesWith/0"},
 		{"unsorted tags", "feature-flags", func(m map[string]any) { m["tckTags"] = []any{"@otel", "@core"} }, "#/tckTags/1"},
 		{"duplicate tags", "feature-flags", func(m map[string]any) { m["tckTags"] = []any{"@core", "@core"} }, "#/tckTags/1"},
 		{"lowercase env key", "feature-flags", func(m map[string]any) { m["tckEnv"] = map[string]any{"abc": "x"} }, "#/tckEnv/abc"},
@@ -52,13 +60,43 @@ func TestDecodeSpecRules(t *testing.T) {
 	}
 }
 
-func TestDecodeSpecEmptyEnvAndTags(t *testing.T) {
+func TestDecodeSpecEmptyEnv(t *testing.T) {
 	data := mutateFixture(t, "spec.valid.json", func(m map[string]any) {
 		m["tckEnv"] = map[string]any{}
-		m["tckTags"] = []any{}
 	})
 	if _, issues := manifest.DecodeSpec(specPath, "feature-flags", data); len(issues) != 0 {
 		t.Fatalf("unexpected issues: %v", issues)
+	}
+}
+
+func TestDecodeSpecAcceptsAnyWellFormedTagAndCooperation(t *testing.T) {
+	cases := []struct {
+		name string
+		tags []any
+		coop any
+		want []string
+	}{
+		{"unlisted tag", []any{"@tenancy"}, nil, []string{}},
+		{"hyphenated tag", []any{"@api-keys", "@tenancy"}, nil, []string{}},
+		{"cooperation sorted", []any{"@core"}, []any{"@api-keys", "@tenancy"}, []string{"@api-keys", "@tenancy"}},
+		{"cooperation empty", []any{"@core"}, []any{}, []string{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := mutateFixture(t, "spec.valid.json", func(m map[string]any) {
+				m["tckTags"] = tc.tags
+				if tc.coop != nil {
+					m["cooperatesWith"] = tc.coop
+				}
+			})
+			spec, issues := manifest.DecodeSpec(specPath, "feature-flags", data)
+			if len(issues) != 0 {
+				t.Fatalf("unexpected issues: %v", issues)
+			}
+			if strings.Join(spec.CooperatesWith, ",") != strings.Join(tc.want, ",") || spec.CooperatesWith == nil {
+				t.Errorf("CooperatesWith = %#v, want %#v", spec.CooperatesWith, tc.want)
+			}
+		})
 	}
 }
 

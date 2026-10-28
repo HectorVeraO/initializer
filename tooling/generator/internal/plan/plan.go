@@ -35,7 +35,6 @@ const (
 )
 
 var (
-	tagPattern    = regexp.MustCompile(`^@[a-z][a-z0-9-]*$`)
 	envKeyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 )
 
@@ -52,6 +51,10 @@ type Plan struct {
 	TCKTags []string
 	// TCKGrep is the anchored Playwright --grep pattern built from TCKTags.
 	TCKGrep string
+	// TCKGrepInvert is the anchored Playwright --grep-invert pattern built from
+	// the cooperatesWith tags of the copied specs that are not in TCKTags,
+	// sorted; "" when every cooperating tag is installed.
+	TCKGrepInvert string
 	// TCKEnv is the union of the copied specs' tckEnv.
 	TCKEnv      map[string]string
 	GoModule    string
@@ -424,7 +427,7 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 		delete(wanted, spec.Spec)
 		specs = append(specs, spec)
 		for _, tag := range spec.TCKTags {
-			if !tagPattern.MatchString(tag) {
+			if !manifest.TagPattern.MatchString(tag) {
 				r.add(catalog.CodeCatalogInvalid, catalogSource, fmt.Sprintf("/specs/%d/tckTags", i), fmt.Sprintf("tag %q must match ^@[a-z][a-z0-9-]*$", tag))
 				continue
 			}
@@ -451,6 +454,18 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 		r.add(catalog.CodeSpecUnknown, catalogSource, "/specs", fmt.Sprintf("spec %q is implemented by a module but not in the catalog", spec))
 	}
 	tags := sortedKeys(tagSet)
+	invertSet := map[string]bool{}
+	for i, spec := range specs {
+		for _, tag := range spec.CooperatesWith {
+			if !manifest.TagPattern.MatchString(tag) {
+				r.add(catalog.CodeCatalogInvalid, catalogSource, fmt.Sprintf("/specs/%d/cooperatesWith", i), fmt.Sprintf("tag %q must match ^@[a-z][a-z0-9-]*$", tag))
+				continue
+			}
+			if !tagSet[tag] {
+				invertSet[tag] = true
+			}
+		}
+	}
 	recorded := make([]string, 0, len(backend.Modules))
 	for _, module := range backend.Modules {
 		recorded = append(recorded, module.Module)
@@ -466,13 +481,14 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 			Stacks:  stackNames,
 			Modules: recorded,
 		},
-		Stacks:      stacks,
-		Specs:       specs,
-		TCKTags:     tags,
-		TCKGrep:     Grep(tags),
-		TCKEnv:      env,
-		GoModule:    r.cat.GoModule,
-		ComposeName: r.cat.ComposeName,
+		Stacks:        stacks,
+		Specs:         specs,
+		TCKTags:       tags,
+		TCKGrep:       Grep(tags),
+		TCKGrepInvert: Grep(sortedKeys(invertSet)),
+		TCKEnv:        env,
+		GoModule:      r.cat.GoModule,
+		ComposeName:   r.cat.ComposeName,
 	}
 }
 

@@ -40,6 +40,35 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 	}
 }
 
+func TestTCKGrepInvertRoundTripsAndIsOmittedWhenEmpty(t *testing.T) {
+	plain, err := lockfile.Encode(validLock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plain), "tckGrepInvert") {
+		t.Fatalf("empty tckGrepInvert is encoded: %s", plain)
+	}
+	withInvert := validLock()
+	withInvert.TCKGrep = "@(core)(?![A-Za-z0-9_-])"
+	withInvert.TCKGrepInvert = "@(tenancy)(?![A-Za-z0-9_-])"
+	encoded, err := lockfile.Encode(withInvert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(encoded)
+	decoded, err := lockfile.Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.TCKGrepInvert != withInvert.TCKGrepInvert {
+		t.Fatalf("TCKGrepInvert = %q", decoded.TCKGrepInvert)
+	}
+	again, err := lockfile.Encode(decoded)
+	if err != nil || string(again) != text {
+		t.Fatalf("round trip differs: %v", err)
+	}
+}
+
 func TestDecodeRefusals(t *testing.T) {
 	cases := map[string]func(*lockfile.Lock){
 		"schema":        func(l *lockfile.Lock) { l.Schema = 2 },

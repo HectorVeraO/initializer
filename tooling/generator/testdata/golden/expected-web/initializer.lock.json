@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "generator": "0.1.0",
-  "catalogSha256": "bea57937f3f040ffbd753715e4bf200db5094ae7001173fa8312c5bc0746f7c3",
+  "catalogSha256": "6f25e8c6858e38677d3ab88b980278643c0b74ebd990595afdd5199d03936a35",
   "selection": {
     "schema": 1,
     "project": {
@@ -25,13 +25,14 @@
     "@parameters"
   ],
   "tckGrep": "@(core|identity|otel|parameters)(?![A-Za-z0-9_-])",
+  "tckGrepInvert": "@(tenancy)(?![A-Za-z0-9_-])",
   "tckEnv": {
     "FIXTURE_ADMIN": "admin@example.com"
   },
   "specs": [
     {
       "spec": "core",
-      "version": "1.0.0",
+      "version": "0.1.0",
       "files": [
         {
           "path": "specs/core/openapi.yaml",
@@ -39,13 +40,13 @@
         },
         {
           "path": "specs/core/spec.manifest.json",
-          "sha256": "a761a7828ba336ff6c6999b10471ce26139e9c3fcef3c4a3e63ab688f7c8731f"
+          "sha256": "b29286fdf9cfe3dbb53119eb1b7f542525d7e1d3e7fc3948ea68a9d8d7c6fd6c"
         }
       ]
     },
     {
       "spec": "identity",
-      "version": "1.0.0",
+      "version": "0.1.0",
       "files": [
         {
           "path": "specs/identity/openapi.yaml",
@@ -53,7 +54,7 @@
         },
         {
           "path": "specs/identity/spec.manifest.json",
-          "sha256": "820fa24ed1f586b8bf4ff7005502baba22749350bc9441c09ae005741da86245"
+          "sha256": "317967a230cec715c227e488c1df14597a59584423ef9028375f49e2a7ef12aa"
         }
       ]
     },
@@ -67,7 +68,7 @@
         },
         {
           "path": "specs/parameters/spec.manifest.json",
-          "sha256": "652ec70aff9c51bfe273b5ef7adf974fcfe2a124dee4152c16196ca63d506988"
+          "sha256": "745340ab60e3e050764de66ed58adcdcb9204763067a087953a6a228f096538d"
         }
       ]
     }
@@ -78,13 +79,13 @@
       "module": "core",
       "version": "0.1.0",
       "implementsSpec": {
-        "core": "1.0.0"
+        "core": "0.1.0"
       },
       "files": [
         {
           "path": ".deploy/local/.example.env",
           "sha256": "20ca4ef1d3d415344a32e65f01fb6a61cd42f4df518ee44d0055c3db2b45be17",
-          "sourceSha256": "12bc56b0f0ae61e92d65ed8a37f39b8607c343eba87e41b7a3762dd91a28e7b1"
+          "sourceSha256": "33454f3ea0ce48f98aac859e2f2d64941564c865b56a01a8b014999d6fa69d85"
         },
         {
           "path": ".deploy/local/README.md",
@@ -120,7 +121,7 @@
         },
         {
           "path": "go-srv/internal/platform/core/module.manifest.json",
-          "sha256": "0301655fcfab21a3a2eb517975d47e45acb257ad6b43a59fd9e593a858bb71ae"
+          "sha256": "42e8a506b0cbc86c56bf1f1992daa5a4e4c3247725e31751cffa890c62069707"
         },
         {
           "path": "go-srv/internal/platform/core/testdata/sample.go",
@@ -141,7 +142,7 @@
       "module": "identity",
       "version": "0.1.0",
       "implementsSpec": {
-        "identity": "1.0.0"
+        "identity": "0.1.0"
       },
       "files": [
         {
@@ -159,7 +160,7 @@
         },
         {
           "path": "go-srv/internal/platform/identity/module.manifest.json",
-          "sha256": "20c3341abe1e5135e3c5b77e124d1b10227e1b4607a09fedfc9354b7dbec9713"
+          "sha256": "be33fb17f81973c34fa1e861433b22535bf1f96de2a21ad411a303abe32aaa58"
         }
       ]
     },
@@ -192,8 +193,8 @@
       "module": "core",
       "version": "0.1.0",
       "implementsSpec": {
-        "core": "1.0.0",
-        "identity": "1.0.0"
+        "core": "0.1.0",
+        "identity": "0.1.0"
       },
       "files": [
         {
@@ -214,7 +215,7 @@
         },
         {
           "path": "ng-web/src/app/platform/core/module.manifest.json",
-          "sha256": "dd7783130ac7cb59eb14c861ee3f5509269490dc8a4c0db450f41e9a28b25295"
+          "sha256": "dce781bc1e9d7c530d928c1e36979fed26d6872cac7cfe9a4fa0b9d62eb565d4"
         },
         {
           "path": "ng-web/src/app/platform/core/module.ts",

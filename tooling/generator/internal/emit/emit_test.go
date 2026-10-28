@@ -136,22 +136,44 @@ func decodeLock(t *testing.T, project emit.Project) lockfile.Lock {
 
 func TestGolden(t *testing.T) {
 	repo := fixture.Load(t)
-	sel := selection(targetModule, "parameters")
-	first := mustWrite(t, mustBuild(t, repo, sel))
-	expected := filepath.Join(fixture.Dir(t), "expected")
-	if *update {
-		if err := os.RemoveAll(expected); err != nil {
-			t.Fatal(err)
-		}
-		if err := emit.Write(expected, mustBuild(t, repo, sel)); err != nil {
-			t.Fatal(err)
-		}
+	cases := []struct {
+		tree string
+		sel  manifest.Selection
+	}{
+		{"expected", selection(targetModule, "parameters")},
+		{"expected-tenancy", selection(targetModule, "parameters", "tenancy")},
 	}
-	got := readTree(t, first)
-	compareTrees(t, got, readTree(t, expected))
+	for _, tc := range cases {
+		t.Run(tc.tree, func(t *testing.T) {
+			first := mustWrite(t, mustBuild(t, repo, tc.sel))
+			expected := filepath.Join(fixture.Dir(t), tc.tree)
+			if *update {
+				if err := os.RemoveAll(expected); err != nil {
+					t.Fatal(err)
+				}
+				if err := emit.Write(expected, mustBuild(t, repo, tc.sel)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := readTree(t, first)
+			compareTrees(t, got, readTree(t, expected))
 
-	second := mustWrite(t, mustBuild(t, repo, sel))
-	compareTrees(t, readTree(t, second), got)
+			second := mustWrite(t, mustBuild(t, repo, tc.sel))
+			compareTrees(t, readTree(t, second), got)
+		})
+	}
+}
+
+func TestLockRecordsGrepInvertOfAnUninstalledCooperatingSpec(t *testing.T) {
+	repo := fixture.Load(t)
+	without := decodeLock(t, mustBuild(t, repo, selection(targetModule, "parameters")))
+	if want := "@(tenancy)(?![A-Za-z0-9_-])"; without.TCKGrepInvert != want {
+		t.Fatalf("TCKGrepInvert = %q, want %q", without.TCKGrepInvert, want)
+	}
+	with := decodeLock(t, mustBuild(t, repo, selection(targetModule, "parameters", "tenancy")))
+	if with.TCKGrepInvert != "" {
+		t.Fatalf("TCKGrepInvert = %q with tenancy installed, want empty", with.TCKGrepInvert)
+	}
 }
 
 func TestRegenerationFromTheRecordedSelectionIsByteIdentical(t *testing.T) {
@@ -233,6 +255,7 @@ func TestLockRecordsDeliveredAndSourceHashes(t *testing.T) {
 		t.Errorf("modules = %v", gotModules)
 	}
 	wantRewritten := []string{
+		".deploy/local/.example.env",
 		".deploy/local/docker-compose.yml",
 		"go-srv/cmd/server/main.go",
 		"go-srv/go.mod",
@@ -261,7 +284,7 @@ func TestLockRecordsDeliveredAndSourceHashes(t *testing.T) {
 
 func TestIdentityTargetOmitsSourceHashes(t *testing.T) {
 	repo := fixture.Load(t)
-	sel := selection(fixtureModule, "feature-flags", "parameters")
+	sel := selection(fixtureModule, "feature-flags", "parameters", "tenancy")
 	sel.Project.Name = "fixture"
 	project := mustBuild(t, repo, sel)
 	for _, module := range decodeLock(t, project).Modules {

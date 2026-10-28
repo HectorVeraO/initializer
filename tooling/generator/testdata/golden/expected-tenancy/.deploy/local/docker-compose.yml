@@ -1,0 +1,14 @@
+name: acme-backend
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: change-me-local-only
+
+  # initializer:module identity
+  kratos:
+    image: oryd/kratos:v26.2.0
+    depends_on:
+      - postgres
+  # initializer:end identity

@@ -173,7 +173,7 @@ func TestIssueCodes(t *testing.T) {
 			put(r, "go-srv/internal/platform/extra/extra.go", "package extra\n")
 		}, []string{"SPEC_IMPLEMENTED_TWICE"}},
 		{"spec nobody implements", func(t *testing.T, r fstest.MapFS) {
-			put(r, "specs/orphan/spec.manifest.json", `{ "schema": 1, "spec": "orphan", "version": "0.1.0", "tckTags": [], "tckEnv": {} }`+"\n")
+			put(r, "specs/orphan/spec.manifest.json", `{ "schema": 1, "spec": "orphan", "version": "0.1.0", "tckTags": ["@orphan"], "tckEnv": {} }`+"\n")
 		}, []string{"SPEC_UNIMPLEMENTED"}},
 		{"tag in two specs", func(t *testing.T, r fstest.MapFS) {
 			edit(t, r, "specs/parameters/spec.manifest.json", `["@parameters"]`, `["@feature-flags"]`)
@@ -497,4 +497,83 @@ func TestUnlistedFileInFolderWithManifestIsNotUnowned(t *testing.T) {
 
 	_, issues := buildRepo(t, repo)
 	assertCodes(t, issues)
+}
+
+func TestCooperatesWith(t *testing.T) {
+	addTenancy := func(r fstest.MapFS) {
+		put(r, "specs/tenancy/spec.manifest.json", `{ "schema": 1, "spec": "tenancy", "version": "0.1.0", "tckTags": ["@tenancy"], "tckEnv": {} }`+"\n")
+		put(r, "specs/tenancy/openapi.yaml", "openapi: 3.1.0\n")
+	}
+	cases := []struct {
+		name     string
+		mutate   func(r fstest.MapFS)
+		wantCode string
+		wantPath string
+	}{
+		{"tag owned by another spec", func(r fstest.MapFS) {
+			addTenancy(r)
+			edit(t, r, "specs/parameters/spec.manifest.json", `"tckEnv": {}`, `"tckEnv": {}, "cooperatesWith": ["@tenancy"]`)
+		}, "SPEC_UNIMPLEMENTED", ""},
+		{"tag owned by no spec", func(r fstest.MapFS) {
+			edit(t, r, "specs/parameters/spec.manifest.json", `"tckEnv": {}`, `"tckEnv": {}, "cooperatesWith": ["@ghost"]`)
+		}, "TCK_TAG_UNKNOWN", "specs/parameters/spec.manifest.json#/cooperatesWith/0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := cleanRepo(t)
+			tc.mutate(repo)
+			built, issues := buildRepo(t, repo)
+			if tc.wantPath == "" {
+				// The only issue is the unimplemented tenancy spec; no
+				// TCK_TAG_UNKNOWN means the cooperating tag resolved.
+				assertCodes(t, issues, tc.wantCode)
+				for _, entry := range built.Specs {
+					if entry.Spec == "parameters" && strings.Join(entry.CooperatesWith, ",") != "@tenancy" {
+						t.Errorf("cooperatesWith = %v", entry.CooperatesWith)
+					}
+				}
+				return
+			}
+			assertCodes(t, issues, tc.wantCode)
+			if issues[0].Path != tc.wantPath {
+				t.Errorf("path = %q, want %q", issues[0].Path, tc.wantPath)
+			}
+		})
+	}
+}
+
+func TestCatalogWithoutCooperationHasNoCooperatesWithKey(t *testing.T) {
+	built, issues := buildRepo(t, cleanRepo(t))
+	assertCodes(t, issues)
+	encoded, err := Encode(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "cooperatesWith") {
+		t.Fatalf("catalog mentions cooperatesWith:\n%s", encoded)
+	}
+}
+
+func TestCatalogRoundTripKeepsCooperatesWith(t *testing.T) {
+	built, _ := buildRepo(t, cleanRepo(t))
+	built.Specs[0].CooperatesWith = []string{"@parameters"}
+	encoded, err := Encode(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, issues := Decode(encoded)
+	if len(issues) > 0 {
+		t.Fatalf("decode: %v", issues)
+	}
+	if strings.Join(decoded.Specs[0].CooperatesWith, ",") != "@parameters" {
+		t.Fatalf("decoded = %v", decoded.Specs[0].CooperatesWith)
+	}
+	built.Specs[0].CooperatesWith = []string{"@b", "@a"}
+	unsorted, err := Encode(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, issues := Decode(unsorted); len(issues) == 0 {
+		t.Fatal("unsorted cooperatesWith was accepted")
+	}
 }

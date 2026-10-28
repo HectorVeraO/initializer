@@ -13,6 +13,8 @@ go-srv/cmd/server/main.go
 go-srv/cmd/server/modules.go
 go-srv/cookbooks/notes.md
 go-srv/go.mod
+go-srv/internal/platform/apikeys/apikeys.go
+go-srv/internal/platform/apikeys/module.manifest.json
 go-srv/internal/platform/core/core.go
 go-srv/internal/platform/core/module.manifest.json
 go-srv/internal/platform/core/testdata/sample.go
@@ -23,6 +25,8 @@ go-srv/internal/platform/identity/module.manifest.json
 go-srv/internal/platform/parameters/module.manifest.json
 go-srv/internal/platform/parameters/parameters.go
 go-srv/internal/platform/parameters/parameters_test.go
+go-srv/internal/platform/tenancy/module.manifest.json
+go-srv/internal/platform/tenancy/tenancy.go
 ng-web/.vscode/settings.json
 ng-web/AGENTS.md
 ng-web/cookbooks/notes.md
@@ -38,6 +42,8 @@ ng-web/src/app/platform/modules.ts
 ng-web/src/app/platform/parameters/i18n/en.json
 ng-web/src/app/platform/parameters/module.manifest.json
 ng-web/src/app/platform/parameters/module.ts
+specs/api-keys/openapi.yaml
+specs/api-keys/spec.manifest.json
 specs/core/openapi.yaml
 specs/core/spec.manifest.json
 specs/feature-flags/openapi.yaml
@@ -48,4 +54,6 @@ specs/package.json
 specs/parameters/openapi.yaml
 specs/parameters/spec.manifest.json
 specs/tck-support/index.ts
+specs/tenancy/openapi.yaml
+specs/tenancy/spec.manifest.json
 tooling/notes.txt

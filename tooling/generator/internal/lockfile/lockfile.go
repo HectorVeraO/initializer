@@ -33,10 +33,13 @@ type Lock struct {
 	Selection     manifest.Selection `json:"selection"`
 	TCKTags       []string           `json:"tckTags"`
 	TCKGrep       string             `json:"tckGrep"`
-	TCKEnv        map[string]string  `json:"tckEnv"`
-	Specs         []Spec             `json:"specs"`
-	Modules       []Module           `json:"modules"`
-	Generated     []File             `json:"generated"`
+	// TCKGrepInvert excludes the scenarios co-tagged with a cooperating spec
+	// that is not installed; omitted when empty.
+	TCKGrepInvert string            `json:"tckGrepInvert,omitempty"`
+	TCKEnv        map[string]string `json:"tckEnv"`
+	Specs         []Spec            `json:"specs"`
+	Modules       []Module          `json:"modules"`
+	Generated     []File            `json:"generated"`
 }
 
 // Spec is one copied spec with the delivered hash of each file.

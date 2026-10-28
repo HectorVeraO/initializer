@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "stack": "go-srv",
+  "module": "identity",
+  "version": "0.1.0",
+  "implied": true,
+  "implementsSpec": {"identity": "0.1.0"},
+  "requiresCore": "^0.1.0",
+  "requiresModules": [],
+  "tablePrefixes": ["iam"],
+  "files": [".deploy/local/kratos/", ".deploy/local/postgres-init/", "go-srv/internal/platform/identity/"],
+  "exclude": []
+}
