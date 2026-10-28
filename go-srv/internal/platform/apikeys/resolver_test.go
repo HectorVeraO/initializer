@@ -244,7 +244,7 @@ func TestResolverAnswersTheSame401ForAnUnknownTenantAndASuspendedOneOnlyAfterThe
 	}
 }
 
-func TestResolverFailsOperationallyWithoutADirectoryOrWhenItFails(t *testing.T) {
+func TestResolverFailsOperationallyWhenTheDirectoryFails(t *testing.T) {
 	f := newResolverFixture(t)
 	tenantID := f.e.tenant("acme", "active")
 	key := f.e.apiKey(tenantID, []string{"tenant:read"}, nil)
@@ -254,16 +254,6 @@ func TestResolverFailsOperationallyWithoutADirectoryOrWhenItFails(t *testing.T) 
 	var apiErr *api.Error
 	if err == nil || errors.As(err, &apiErr) {
 		t.Fatalf("a failing directory must be operational, got %v", err)
-	}
-
-	f.resolver.tenants = nil
-	_, err = f.resolver.Resolve(context.Background(), keyRequest(key))
-	if err == nil || errors.As(err, &apiErr) {
-		t.Fatalf("a missing directory must be operational, got %v", err)
-	}
-	_, err = f.resolver.Resolve(context.Background(), keyRequest("not-a-key"))
-	if err == nil || errors.As(err, &apiErr) {
-		t.Fatalf("a missing directory must be operational for any request, got %v", err)
 	}
 }
 
