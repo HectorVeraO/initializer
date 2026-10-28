@@ -8,6 +8,7 @@ import { RuntimeConfigService } from '@/core/config/runtime-config.service';
 import { unwrapData } from '@/core/envelope';
 import type { ApiEnvelope, ApiPage } from '@/core/envelope';
 import type { InvitationView, TenantStatus, TenantSummary } from '../session/session.types';
+import type { TenantDirectory } from './tenant-directory.port';
 
 /** A tenant as the platform operator lists it (identity `TenantView`). */
 export interface TenantView extends TenantSummary {
@@ -34,9 +35,9 @@ function skipErrorToast(): HttpContext {
   return new HttpContext().set(SKIP_ERROR_TOAST, true);
 }
 
-/** Calls of the tenant routes of identity (platform operator). Feature-flags reads the tenant list through it. */
+/** Calls of the tenant routes of identity (platform operator). Binds `TENANT_DIRECTORY`: feature-flags reads the tenant list through it. */
 @Injectable({ providedIn: 'root' })
-export class TenantsApi {
+export class TenantsApi implements TenantDirectory {
   private readonly http = inject(HttpClient);
   private readonly runtimeConfig = inject(RuntimeConfigService);
 
