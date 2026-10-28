@@ -19,7 +19,7 @@ var networkFailure = regexp.MustCompile(`dial tcp|no such host|i/o timeout|conne
 
 // tidyDiff runs "go mod tidy -diff" in dir and returns its output and whether it exited 0.
 // It skips the test only when the toolchain cannot fetch modules (no go binary, no module
-// cache and no network); any other failure without a tidy diff fails the test.
+// cache and no network) outside CI; any other failure without a tidy diff fails the test.
 func tidyDiff(t *testing.T, dir string) (string, bool) {
 	t.Helper()
 	goBinary, err := exec.LookPath("go")
@@ -39,6 +39,9 @@ func tidyDiff(t *testing.T, dir string) (string, bool) {
 	isNetworkFailure := networkFailure.MatchString(string(out))
 	if !isTidyDiff && !isNetworkFailure {
 		t.Fatalf("go mod tidy -diff failed: %v: %s", runErr, out)
+	}
+	if !isTidyDiff && os.Getenv("CI") != "" {
+		t.Fatalf("go mod tidy -diff cannot run in CI: %v: %s", runErr, out)
 	}
 	if !isTidyDiff {
 		t.Skipf("go mod tidy cannot run here: %v: %s", runErr, out)
