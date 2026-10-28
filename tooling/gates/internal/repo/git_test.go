@@ -281,3 +281,23 @@ func TestListTagsOutsideRepositoryIsAnError(t *testing.T) {
 		t.Fatal("want an error")
 	}
 }
+
+func TestListBlobsMapsPathsToObjectIds(t *testing.T) {
+	dir := newRepo(t)
+	blobs, err := repo.ListBlobs(dir, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "main:flags.yaml").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.TrimSpace(string(out))
+	if blobs["flags.yaml"] != want {
+		t.Fatalf("flags.yaml blob = %q, want %q", blobs["flags.yaml"], want)
+	}
+	_, err = repo.ListBlobs(dir, "-bad")
+	if err == nil {
+		t.Fatal("want an error for an option-like revision")
+	}
+}

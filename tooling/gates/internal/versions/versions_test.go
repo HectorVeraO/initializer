@@ -609,3 +609,98 @@ func TestPreReleaseViolationCarriesRefL76(t *testing.T) {
 		t.Fatalf("got %+v %v", violations, err)
 	}
 }
+
+func tagContent(t *testing.T, dir string) []string {
+	t.Helper()
+	violations, err := versions.CheckTagContent(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found []string
+	for _, v := range violations {
+		found = append(found, v.Rule+" "+v.Path)
+	}
+	return found
+}
+
+func TestTagAtMatchingContentPasses(t *testing.T) {
+	dir := baseRepo(t)
+	runGit(t, dir, "tag", "spec-alpha-v0.1.0")
+	runGit(t, dir, "tag", "go-srv-core-v0.1.0")
+	// Unrelated changes after the tag do not make it foreign.
+	writeAt(t, dir, "go-srv/AGENTS.md", "other docs\n")
+	writeAt(t, dir, "go-srv/cmd/server/modules.go", "package main // changed\n")
+	writeAt(t, dir, "go-srv/internal/platform/parameters/params.go", "package parameters // changed\n")
+	commitAll(t, dir, "unrelated")
+	if found := tagContent(t, dir); len(found) != 0 {
+		t.Fatalf("got %v", found)
+	}
+}
+
+func TestTagAtOtherContentFails(t *testing.T) {
+	dir := baseRepo(t)
+	runGit(t, dir, "tag", "spec-alpha-v0.1.0")
+	runGit(t, dir, "tag", "go-srv-core-v0.1.0")
+	runGit(t, dir, "tag", "go-srv-parameters-v0.1.0")
+	writeAt(t, dir, "specs/alpha/openapi.yaml", "openapi: 3.1.0\n")
+	writeAt(t, dir, "go-srv/main.go", "package main // changed\n")
+	commitAll(t, dir, "change")
+	want := "TAG_CONTENT_MISMATCH go-srv/internal/platform/core/module.manifest.json," +
+		"TAG_CONTENT_MISMATCH specs/alpha/spec.manifest.json"
+	found := tagContent(t, dir)
+	if strings.Join(found, ",") != want {
+		t.Fatalf("got %v", found)
+	}
+}
+
+func TestTagOnDeletedOrAddedComponentFileFails(t *testing.T) {
+	dir := baseRepo(t)
+	runGit(t, dir, "tag", "go-srv-parameters-v0.1.0")
+	writeAt(t, dir, "go-srv/internal/platform/parameters/extra.go", "package parameters\n")
+	commitAll(t, dir, "add file")
+	found := tagContent(t, dir)
+	if len(found) != 1 || !strings.HasPrefix(found[0], "TAG_CONTENT_MISMATCH ") {
+		t.Fatalf("added file: got %v", found)
+	}
+	runGit(t, dir, "reset", "--hard", "HEAD~1")
+	runGit(t, dir, "rm", "-q", "go-srv/internal/platform/parameters/params.go")
+	runGit(t, dir, "commit", "-m", "delete file")
+	found = tagContent(t, dir)
+	if len(found) != 1 || !strings.HasPrefix(found[0], "TAG_CONTENT_MISMATCH ") {
+		t.Fatalf("deleted file: got %v", found)
+	}
+}
+
+func TestTagOfAnotherVersionOrNoTagIsNotChecked(t *testing.T) {
+	dir := baseRepo(t)
+	runGit(t, dir, "tag", "spec-alpha-v1.0.0")
+	runGit(t, dir, "tag", "spec-alpha-v0.1.0")
+	writeAt(t, dir, "specs/alpha/openapi.yaml", "openapi: 3.1.0\n")
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("0.2.0"))
+	commitAll(t, dir, "release 0.2.0")
+	if found := tagContent(t, dir); len(found) != 0 {
+		t.Fatalf("got %v", found)
+	}
+}
+
+func TestAnnotatedTagAtOtherContentFails(t *testing.T) {
+	dir := baseRepo(t)
+	runGit(t, dir, "tag", "-a", "-m", "release", "spec-alpha-v0.1.0")
+	writeAt(t, dir, "specs/alpha/openapi.yaml", "openapi: 3.1.0\n")
+	commitAll(t, dir, "change")
+	found := tagContent(t, dir)
+	want := "TAG_CONTENT_MISMATCH specs/alpha/spec.manifest.json"
+	if strings.Join(found, ",") != want {
+		t.Fatalf("got %v", found)
+	}
+}
+
+func TestCheckTagContentOutsideRepositoryIsAnError(t *testing.T) {
+	requireGit(t)
+	dir := t.TempDir()
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("0.1.0"))
+	_, err := versions.CheckTagContent(context.Background(), dir)
+	if err == nil {
+		t.Fatal("want an error")
+	}
+}
