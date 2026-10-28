@@ -29,6 +29,7 @@ const (
 	CodeSpecImplementedTwice  = "SPEC_IMPLEMENTED_TWICE"
 	CodeSpecUnimplemented     = "SPEC_UNIMPLEMENTED"
 	CodeTCKTagDuplicate       = "TCK_TAG_DUPLICATE"
+	CodeTCKTagUnknown         = "TCK_TAG_UNKNOWN"
 	CodeRequiresUnsatisfied   = "REQUIRES_UNSATISFIED"
 	CodeDependencyCycle       = "DEPENDENCY_CYCLE"
 	CodeFileUnowned           = "FILE_UNOWNED"
@@ -652,12 +653,17 @@ func (b *builder) assemble(generator string) Catalog {
 		for k, v := range spec.spec.TCKEnv {
 			env[k] = v
 		}
+		var cooperates []string
+		if len(spec.spec.CooperatesWith) > 0 {
+			cooperates = append([]string{}, spec.spec.CooperatesWith...)
+		}
 		c.Specs = append(c.Specs, SpecEntry{
-			Spec:    spec.folder,
-			Version: spec.spec.Version.String(),
-			TCKTags: tags,
-			TCKEnv:  env,
-			Files:   sortedFiles(spec.files),
+			Spec:           spec.folder,
+			Version:        spec.spec.Version.String(),
+			TCKTags:        tags,
+			TCKEnv:         env,
+			CooperatesWith: cooperates,
+			Files:          sortedFiles(spec.files),
 		})
 	}
 	sort.SliceStable(c.Specs, func(i, j int) bool { return c.Specs[i].Spec < c.Specs[j].Spec })

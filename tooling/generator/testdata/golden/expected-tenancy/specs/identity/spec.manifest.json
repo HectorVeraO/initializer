@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "spec": "identity",
+  "version": "0.1.0",
+  "tckTags": ["@identity"],
+  "tckEnv": {"FIXTURE_ADMIN": "admin@example.com"}
+}

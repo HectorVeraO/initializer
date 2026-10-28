@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"testing/quick"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
@@ -495,5 +497,85 @@ func FuzzResolveSelection(f *testing.F) {
 func TestGrepOfNoTagsIsEmpty(t *testing.T) {
 	if got := plan.Grep(nil); got != "" {
 		t.Fatalf("grep = %q", got)
+	}
+}
+
+// withCooperation adds a tenancy spec and module to the backend fixture and
+// makes the named specs cooperate with the given tags.
+func withCooperation(t *testing.T, cooperation map[string][]string) catalog.Catalog {
+	t.Helper()
+	cat := load(t, "backend.json")
+	cat.Specs = append(cat.Specs, catalog.SpecEntry{Spec: "tenancy", Version: "0.1.0", TCKTags: []string{"@tenancy"}, TCKEnv: map[string]string{}, Files: []catalog.File{}})
+	for i := range cat.Specs {
+		cat.Specs[i].CooperatesWith = cooperation[cat.Specs[i].Spec]
+	}
+	for s := range cat.Stacks {
+		if cat.Stacks[s].Role == "backend" {
+			cat.Stacks[s].Modules = append(cat.Stacks[s].Modules, catalog.ModuleEntry{
+				Module: "tenancy", Version: "0.1.0", ImplementsSpec: map[string]string{"tenancy": "0.1.0"},
+				RequiresCore: "^0.1.0", RequiresModules: []catalog.Requirement{}, Files: []catalog.File{},
+			})
+		}
+	}
+	return cat
+}
+
+func TestMalformedCooperatesWithIsCatalogInvalid(t *testing.T) {
+	cat := withCooperation(t, map[string][]string{"parameters": {"@tenancy|.*"}})
+	wantCodes(t, cat, selection("parameters"), catalog.CodeCatalogInvalid)
+}
+
+func TestTCKGrepInvert(t *testing.T) {
+	cases := []struct {
+		name        string
+		cooperation map[string][]string
+		modules     []string
+		want        string
+	}{
+		{"cooperating tag not installed", map[string][]string{"parameters": {"@tenancy"}}, []string{"parameters"}, "@(tenancy)(?![A-Za-z0-9_-])"},
+		{"cooperating tag installed", map[string][]string{"parameters": {"@tenancy"}}, []string{"parameters", "tenancy"}, ""},
+		{"no copied spec cooperates", nil, []string{"parameters"}, ""},
+		{"cooperation of an uncopied spec is ignored", map[string][]string{"tenancy": {"@parameters"}}, []string{"feature-flags"}, ""},
+		{"two specs naming one tag list it once", map[string][]string{"parameters": {"@tenancy"}, "feature-flags": {"@tenancy"}}, []string{"parameters", "feature-flags"}, "@(tenancy)(?![A-Za-z0-9_-])"},
+		{"several tags are sorted", map[string][]string{"parameters": {"@tenancy"}, "feature-flags": {"@otel-x", "@api-keys"}}, []string{"parameters", "feature-flags"}, "@(api-keys|otel-x|tenancy)(?![A-Za-z0-9_-])"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cat := withCooperation(t, tc.cooperation)
+			p := mustResolve(t, cat, selection(tc.modules...))
+			if p.TCKGrepInvert != tc.want {
+				t.Fatalf("TCKGrepInvert = %q, want %q", p.TCKGrepInvert, tc.want)
+			}
+		})
+	}
+}
+
+func TestGrepAgreesWithTagPattern(t *testing.T) {
+	const head = "abcdefghijklmnopqrstuvwxyz"
+	const tail = "abcdefghijklmnopqrstuvwxyz0123456789-"
+	property := func(first uint8, rest []uint8) bool {
+		tag := "@" + string(head[int(first)%len(head)])
+		for _, b := range rest {
+			tag += string(tail[int(b)%len(tail)])
+		}
+		if !manifest.TagPattern.MatchString(tag) {
+			return false
+		}
+		// RE2 has no lookahead: express the trailing (?!...) as a consuming
+		// class or the end of the text.
+		grep := plan.Grep([]string{tag})
+		if !strings.HasSuffix(grep, "(?![A-Za-z0-9_-])") {
+			return false
+		}
+		pattern, err := regexp.Compile(strings.TrimSuffix(grep, "(?![A-Za-z0-9_-])") + "([^A-Za-z0-9_-]|$)")
+		if err != nil {
+			return false
+		}
+		matchesTag := pattern.MatchString("x " + tag)
+		matchesLonger := pattern.MatchString("x " + tag + "-y")
+		return matchesTag && !matchesLonger
+	}
+	if err := quick.Check(property, &quick.Config{MaxCount: 2000}); err != nil {
+		t.Fatal(err)
 	}
 }

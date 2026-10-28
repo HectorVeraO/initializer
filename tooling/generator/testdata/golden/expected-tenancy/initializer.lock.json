@@ -1,0 +1,240 @@
+{
+  "schema": 1,
+  "generator": "0.1.0",
+  "catalogSha256": "6f25e8c6858e38677d3ab88b980278643c0b74ebd990595afdd5199d03936a35",
+  "selection": {
+    "schema": 1,
+    "project": {
+      "name": "acme-backend",
+      "goModule": "example.com/acme/backend"
+    },
+    "stacks": [
+      "go-srv"
+    ],
+    "modules": [
+      "core",
+      "identity",
+      "parameters",
+      "tenancy"
+    ]
+  },
+  "tckTags": [
+    "@core",
+    "@identity",
+    "@otel",
+    "@parameters",
+    "@tenancy"
+  ],
+  "tckGrep": "@(core|identity|otel|parameters|tenancy)(?![A-Za-z0-9_-])",
+  "tckEnv": {
+    "FIXTURE_ADMIN": "admin@example.com",
+    "FIXTURE_TENANT_SLUG": "acme"
+  },
+  "specs": [
+    {
+      "spec": "core",
+      "version": "0.1.0",
+      "files": [
+        {
+          "path": "specs/core/openapi.yaml",
+          "sha256": "369bb55c82e2433de67951bbc35a4deca97aca700880b45fb75b9736ebcd40e1"
+        },
+        {
+          "path": "specs/core/spec.manifest.json",
+          "sha256": "b29286fdf9cfe3dbb53119eb1b7f542525d7e1d3e7fc3948ea68a9d8d7c6fd6c"
+        }
+      ]
+    },
+    {
+      "spec": "identity",
+      "version": "0.1.0",
+      "files": [
+        {
+          "path": "specs/identity/openapi.yaml",
+          "sha256": "f714dd2e2866fc6c3cfaad43a426dad310e4502cac9f0e29945d6d4a78eaa6d9"
+        },
+        {
+          "path": "specs/identity/spec.manifest.json",
+          "sha256": "317967a230cec715c227e488c1df14597a59584423ef9028375f49e2a7ef12aa"
+        }
+      ]
+    },
+    {
+      "spec": "parameters",
+      "version": "0.1.0",
+      "files": [
+        {
+          "path": "specs/parameters/openapi.yaml",
+          "sha256": "cd140ec887aa743360b3072b29bcd81aeb77e63104603e4f3eac351bab6991d4"
+        },
+        {
+          "path": "specs/parameters/spec.manifest.json",
+          "sha256": "745340ab60e3e050764de66ed58adcdcb9204763067a087953a6a228f096538d"
+        }
+      ]
+    },
+    {
+      "spec": "tenancy",
+      "version": "0.1.0",
+      "files": [
+        {
+          "path": "specs/tenancy/openapi.yaml",
+          "sha256": "4c18a7e291c82d00094aaf35a0fbbb39d0486ae3b0d6c8f09220e3f6fad5cdd1"
+        },
+        {
+          "path": "specs/tenancy/spec.manifest.json",
+          "sha256": "d975019da548ec9e0e06642d8fc8b79cd6aad4e1b7d8925d518deb9d876b2e9c"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "stack": "go-srv",
+      "module": "core",
+      "version": "0.1.0",
+      "implementsSpec": {
+        "core": "0.1.0"
+      },
+      "files": [
+        {
+          "path": ".deploy/local/.example.env",
+          "sha256": "0d37c4c7145bb38bdd8ddf0512767b2d6c5934c100a49ef1a8d5bdb73a4230f3",
+          "sourceSha256": "33454f3ea0ce48f98aac859e2f2d64941564c865b56a01a8b014999d6fa69d85"
+        },
+        {
+          "path": ".deploy/local/README.md",
+          "sha256": "9e4d9a501bb91327777322c78c39c2223427fbbe764750ea638916cd3c99bb97",
+          "sourceSha256": "059aa9b09efee040687aab13095e59d947db81cbbea63d2a1a56de0073b285c5"
+        },
+        {
+          "path": ".deploy/local/docker-compose.yml",
+          "sha256": "ec017e374449c009b35d996c371b02636cc766280c85b769f748755b42ef6f9c",
+          "sourceSha256": "b6f07b65a18479374ef1cff295630f1fb55b69e417f12286b795e7331f716adf"
+        },
+        {
+          "path": ".gitattributes",
+          "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
+        },
+        {
+          "path": ".gitignore",
+          "sha256": "4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97"
+        },
+        {
+          "path": "go-srv/cmd/server/main.go",
+          "sha256": "4a6dbe06d7c724277d44b14054f8aa04de01bdeffa5f6bc3fd13c4874c609ddd",
+          "sourceSha256": "c9813d7b7f4a1d1662295ec5962aba530f8d8d5b06296797ab98d4db288f66dc"
+        },
+        {
+          "path": "go-srv/go.mod",
+          "sha256": "e89e75e8b5a9fe5c7ea5c5e900d754102c12f4646742c9a7dbee27a393829f2b",
+          "sourceSha256": "597fb3bb55c2b0f6092731ec09f748cdef795e166dfdbafa3718da1e47f8b5c3"
+        },
+        {
+          "path": "go-srv/internal/platform/core/core.go",
+          "sha256": "b115c3aed45ee55aacd6eae3a55109823238ae84b705ca0bb6fff67c882262a8"
+        },
+        {
+          "path": "go-srv/internal/platform/core/module.manifest.json",
+          "sha256": "42e8a506b0cbc86c56bf1f1992daa5a4e4c3247725e31751cffa890c62069707"
+        },
+        {
+          "path": "go-srv/internal/platform/core/testdata/sample.go",
+          "sha256": "aac68f0046ac661942bdae56845c0b6f3400f17e5c0bfa8e8feb1fe9a31936aa"
+        },
+        {
+          "path": "specs/package.json",
+          "sha256": "5803374698fcdcfa7819e6037ff5d1f6c43df7a084a3e5d19fde4c6d8ebf62b2"
+        },
+        {
+          "path": "specs/tck-support/index.ts",
+          "sha256": "81442353d956688286a71320ea1452a102b080989da743313f6e7483c7bb0c52"
+        }
+      ]
+    },
+    {
+      "stack": "go-srv",
+      "module": "identity",
+      "version": "0.1.0",
+      "implementsSpec": {
+        "identity": "0.1.0"
+      },
+      "files": [
+        {
+          "path": ".deploy/local/kratos/kratos.yml",
+          "sha256": "da22cf00112181c10aca161583da518c2e392f615f40c9f0a7e0b598dd24e73b"
+        },
+        {
+          "path": ".deploy/local/postgres-init/10-init.sh",
+          "sha256": "1e9c8c43fc85e1f59d6b98c99d6428b3511e67762e5998effa4745524e934d69"
+        },
+        {
+          "path": "go-srv/internal/platform/identity/identity.go",
+          "sha256": "9b4a9a65e77a07a5e088e9d17a41c299e32e53254b90c93e304427af0e324a20",
+          "sourceSha256": "37c8753a4b6dee9d1c2a0e43d36fd874ab3dbc945ed48c985c1dfa75de5ad057"
+        },
+        {
+          "path": "go-srv/internal/platform/identity/module.manifest.json",
+          "sha256": "be33fb17f81973c34fa1e861433b22535bf1f96de2a21ad411a303abe32aaa58"
+        }
+      ]
+    },
+    {
+      "stack": "go-srv",
+      "module": "parameters",
+      "version": "0.1.0",
+      "implementsSpec": {
+        "parameters": "0.1.0"
+      },
+      "files": [
+        {
+          "path": "go-srv/internal/platform/parameters/module.manifest.json",
+          "sha256": "d6ef5d50aaa83a1475e1a16a9cb736daf0b4701e24d4ec7999c474011d9f848b"
+        },
+        {
+          "path": "go-srv/internal/platform/parameters/parameters.go",
+          "sha256": "86aca4081697494107b2b5c41830266592a7cc15e139bd8ee778cef3640e99e0",
+          "sourceSha256": "0efc45657f3b057add700c7aefbebf3ff144fa3958d8c427827f3a7ff1cc143a"
+        },
+        {
+          "path": "go-srv/internal/platform/parameters/parameters_test.go",
+          "sha256": "96e841da732e295fc3b37ce1807c5368082f5c92f5eed012124ab5ce34f84456",
+          "sourceSha256": "e6b85fffdb0e50333315766f87ea2fb2e5ef64fb43c5fd5ce60b81008570630f"
+        }
+      ]
+    },
+    {
+      "stack": "go-srv",
+      "module": "tenancy",
+      "version": "0.1.0",
+      "implementsSpec": {
+        "tenancy": "0.1.0"
+      },
+      "files": [
+        {
+          "path": "go-srv/internal/platform/tenancy/module.manifest.json",
+          "sha256": "c8af6a313420fba8417dfe59c46dcac72362484b105649ffab17f800daf978e2"
+        },
+        {
+          "path": "go-srv/internal/platform/tenancy/tenancy.go",
+          "sha256": "f466c29648eb9c39dcbfcd4b39938c900667123946426d215e90ac5ee5c5eec3",
+          "sourceSha256": "141858ed0247d2906505006b5156e9e2a0b0401b61ce9a67d7bcf73c0f4fa72d"
+        }
+      ]
+    }
+  ],
+  "generated": [
+    {
+      "path": "README.md",
+      "sha256": "4cade5c8aaa2c8d13784a5994e19dc4553e6c02e4da6e97b75c2d9a32f50c237"
+    },
+    {
+      "path": "go-srv/cmd/server/modules.go",
+      "sha256": "b5e7449542445c08eaed4d7c3db02ab7e79e3a7b3ed10bc7be0eb8adc4477695"
+    },
+    {
+      "path": "initializer.selection.json",
+      "sha256": "089a69a1cc7363a55dc1fc1fb6704fdf62f2d59059850394825e183204ae3483"
+    }
+  ]
+}

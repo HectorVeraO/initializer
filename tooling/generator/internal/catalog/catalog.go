@@ -38,7 +38,9 @@ type SpecEntry struct {
 	Version string            `json:"version"`
 	TCKTags []string          `json:"tckTags"`
 	TCKEnv  map[string]string `json:"tckEnv"`
-	Files   []File            `json:"files"`
+	// CooperatesWith lists the tags of other specs this spec's TCK calls.
+	CooperatesWith []string `json:"cooperatesWith,omitempty"`
+	Files          []File   `json:"files"`
 }
 
 // StackEntry is one stack with its modules.
@@ -192,6 +194,7 @@ func (v *validator) catalog(c Catalog) {
 		pointer := fmt.Sprintf("/specs/%d", i)
 		v.version(pointer+"/version", spec.Version)
 		v.sortedStrings(pointer+"/tckTags", spec.TCKTags)
+		v.sortedStrings(pointer+"/cooperatesWith", spec.CooperatesWith)
 		v.files(pointer+"/files", spec.Files)
 	}
 	v.sortedStrings("/specs", specNames)

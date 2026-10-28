@@ -56,7 +56,7 @@ var (
 		"tck-support": true, "scripts": true, "node_modules": true,
 		"test-results": true, "playwright-report": true,
 	}
-	allowedTags    = map[string]bool{"@core": true, "@otel": true, "@identity": true, "@parameters": true, "@feature-flags": true}
+	tagPattern     = regexp.MustCompile(`^@[a-z][a-z0-9-]*$`)
 	excludedLevels = map[string]bool{"draft": true, "alpha": true}
 	majorPattern   = regexp.MustCompile(`^(\d+)\.\d+\.\d+`)
 	breakingKeys   = []string{"BREAKING CHANGE", "BREAKING-CHANGE"}
@@ -214,8 +214,8 @@ func checkManifest(name, manifestPath string, raw []byte, doc *yaml.Node, contra
 		violations = append(violations, violation(RuleTCKTagInvalid, refPlain, manifestPath, 0, "tckTags is empty"))
 	}
 	for _, tag := range parsed.TCKTags {
-		if !allowedTags[tag] {
-			violations = append(violations, violation(RuleTCKTagInvalid, refPlain, manifestPath, 0, "tag %q is not an allowed TCK tag", tag))
+		if !tagPattern.MatchString(tag) {
+			violations = append(violations, violation(RuleTCKTagInvalid, refPlain, manifestPath, 0, "tag %q must match ^@[a-z][a-z0-9-]*$", tag))
 		}
 	}
 	return &parsed, violations

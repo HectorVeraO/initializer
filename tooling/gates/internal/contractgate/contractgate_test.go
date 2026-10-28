@@ -316,7 +316,10 @@ func TestTCKTags(t *testing.T) {
 		bad  bool
 	}{
 		{"empty", nil, true},
-		{"unknown", []string{"@nope"}, true},
+		{"well-formed tag no table lists", []string{"@tenancy"}, false},
+		{"hyphenated tag", []string{"@api-keys"}, false},
+		{"upper case", []string{"@Tenancy"}, true},
+		{"bare at sign", []string{"@"}, true},
 		{"missing at sign", []string{"core"}, true},
 		{"two valid", []string{"@core", "@otel"}, false},
 		{"same tag twice in one spec", []string{"@core", "@core"}, false},
