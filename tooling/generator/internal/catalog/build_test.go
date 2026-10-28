@@ -14,10 +14,12 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden catalog")
 
 const (
-	paramsManifest = "go-srv/internal/platform/parameters/module.manifest.json"
-	flagsManifest  = "go-srv/internal/platform/featureflags/module.manifest.json"
-	coreManifest   = "go-srv/internal/platform/core/module.manifest.json"
-	paramsFile     = "go-srv/internal/platform/parameters/parameters.go"
+	paramsManifest   = "go-srv/internal/platform/parameters/module.manifest.json"
+	flagsManifest    = "go-srv/internal/platform/featureflags/module.manifest.json"
+	coreManifest     = "go-srv/internal/platform/core/module.manifest.json"
+	identityManifest = "go-srv/internal/platform/identity/module.manifest.json"
+	actorsFile       = "specs/tck-support/actors/index.ts"
+	paramsFile       = "go-srv/internal/platform/parameters/parameters.go"
 )
 
 func TestCleanRepoMatchesGolden(t *testing.T) {
@@ -65,6 +67,13 @@ func TestOwnershipLongestPrefix(t *testing.T) {
 	}
 	if !hasFile(core.Files, "go-srv/cmd/server/main.go") {
 		t.Fatalf("main.go must belong to core")
+	}
+	identity := findModule(t, built, "go-srv", "identity")
+	if hasFile(core.Files, actorsFile) || !hasFile(identity.Files, actorsFile) {
+		t.Fatalf("%s must belong to identity, not to core's specs/tck-support/", actorsFile)
+	}
+	if !hasFile(core.Files, "specs/tck-support/index.ts") {
+		t.Fatalf("specs/tck-support/index.ts must stay with core")
 	}
 	notCatalogued := []string{
 		"go-srv/cmd/server/modules.go", "go-srv/AGENTS.md", "go-srv/cookbooks/notes.md",
@@ -137,11 +146,14 @@ func TestIssueCodes(t *testing.T) {
 		}, []string{"MODULE_NOT_IN_BACKEND"}},
 		{"implied differs between stacks", func(t *testing.T, r fstest.MapFS) {
 			addNgCore(r)
-			addNgModule(r, "identity", false, `{"identity": "1.0.0"}`)
+			addNgModule(r, "identity", true, `{"identity": "1.0.0"}`)
 		}, []string{"IMPLIED_MISMATCH"}},
-		{"identity implied in one stack and absent in the other", func(t *testing.T, r fstest.MapFS) {
-			addNgCore(r)
-		}, nil},
+		{"identity implied", func(t *testing.T, r fstest.MapFS) {
+			edit(t, r, identityManifest, `"implied": false`, `"implied": true`)
+		}, []string{"IMPLIED_MISMATCH"}},
+		{"core requires another module", func(t *testing.T, r fstest.MapFS) {
+			edit(t, r, coreManifest, `"requiresModules": [],`, `"requiresModules": [{"module": "parameters", "range": "^0.1.0"}],`)
+		}, []string{"REQUIRES_UNSATISFIED"}},
 		{"implied on a module that may not be", func(t *testing.T, r fstest.MapFS) {
 			edit(t, r, paramsManifest, `"implied": false`, `"implied": true`)
 		}, []string{"IMPLIED_MISMATCH"}},
@@ -575,5 +587,37 @@ func TestCatalogRoundTripKeepsCooperatesWith(t *testing.T) {
 	}
 	if _, issues := Decode(unsorted); len(issues) == 0 {
 		t.Fatal("unsorted cooperatesWith was accepted")
+	}
+}
+
+func TestImpliedAndCoreRequirementMessages(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(t *testing.T, repo fstest.MapFS)
+		path    string
+		message string
+	}{
+		{"module other than core implied", func(t *testing.T, r fstest.MapFS) {
+			edit(t, r, identityManifest, `"implied": false`, `"implied": true`)
+		}, identityManifest + "#/implied", "only core may be implied; select the module or require it through requiresModules"},
+		{"core not implied", func(t *testing.T, r fstest.MapFS) {
+			edit(t, r, coreManifest, `"implied": true`, `"implied": false`)
+		}, coreManifest + "#/implied", "core must be implied"},
+		{"core requires a module", func(t *testing.T, r fstest.MapFS) {
+			edit(t, r, coreManifest, `"requiresModules": [],`, `"requiresModules": [{"module": "identity", "range": "^0.1.0"}],`)
+		}, coreManifest + "#/requiresModules", "core must not require another module"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := cleanRepo(t)
+			tc.mutate(t, repo)
+			_, issues := buildRepo(t, repo)
+			for _, found := range issues {
+				if found.Path == tc.path && found.Message == tc.message {
+					return
+				}
+			}
+			t.Fatalf("want an issue at %s saying %q, got %+v", tc.path, tc.message, issues)
+		})
 	}
 }

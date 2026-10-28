@@ -103,8 +103,8 @@ func (b *builder) checkImplied(byStack map[string]map[string]*moduleDoc) {
 		switch {
 		case id == manifest.CoreModule && !doc.module.Implied:
 			b.add(CodeImpliedMismatch, doc.path, "/implied", "core must be implied")
-		case doc.module.Implied && id != manifest.CoreModule && id != "identity":
-			b.add(CodeImpliedMismatch, doc.path, "/implied", "only core and identity may be implied")
+		case doc.module.Implied && id != manifest.CoreModule:
+			b.add(CodeImpliedMismatch, doc.path, "/implied", "only core may be implied; select the module or require it through requiresModules")
 		}
 	}
 	// An id present in several stacks must agree with the first stack's value.
@@ -143,6 +143,9 @@ func (b *builder) checkCoreAndRequirements(byStack map[string]map[string]*module
 		for _, doc := range b.modules {
 			if doc.stack.name != stack.name || doc.duplicate {
 				continue
+			}
+			if doc.module.Module == manifest.CoreModule && len(doc.module.RequiresModules) > 0 {
+				b.add(CodeRequiresUnsatisfied, doc.path, "/requiresModules", "core must not require another module")
 			}
 			if core != nil && doc.module.RequiresCore != nil && !doc.module.RequiresCore.Contains(core.module.Version) {
 				b.add(CodeRequiresUnsatisfied, doc.path, "/requiresCore",

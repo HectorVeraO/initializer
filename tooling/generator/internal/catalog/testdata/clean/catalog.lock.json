@@ -170,7 +170,7 @@
         {
           "module": "identity",
           "version": "0.1.0",
-          "implied": true,
+          "implied": false,
           "implementsSpec": {
             "identity": "1.0.0"
           },
@@ -190,7 +190,11 @@
             },
             {
               "path": "go-srv/internal/platform/identity/module.manifest.json",
-              "sha256": "545e96bc2989396075f18c3c5bb68579024cabd3d1f0f62e03c1ce4c84da973b"
+              "sha256": "1d847775e548c913c56654c71f80fe0f5b32fb9321947f434976d249468c359f"
+            },
+            {
+              "path": "specs/tck-support/actors/index.ts",
+              "sha256": "396cec03e107759767f77d38a9adeddc967a3d7d140cbc0aadf4e3003587d765"
             }
           ]
         },

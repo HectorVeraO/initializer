@@ -38,6 +38,8 @@ ng-web/src/app/platform/core/module.manifest.json
 ng-web/src/app/platform/core/module.ts
 ng-web/src/app/platform/feature-flags/module.manifest.json
 ng-web/src/app/platform/feature-flags/module.ts
+ng-web/src/app/platform/identity/module.manifest.json
+ng-web/src/app/platform/identity/module.ts
 ng-web/src/app/platform/modules.ts
 ng-web/src/app/platform/parameters/i18n/en.json
 ng-web/src/app/platform/parameters/module.manifest.json
@@ -53,6 +55,7 @@ specs/identity/spec.manifest.json
 specs/package.json
 specs/parameters/openapi.yaml
 specs/parameters/spec.manifest.json
+specs/tck-support/actors/index.ts
 specs/tck-support/index.ts
 specs/tenancy/openapi.yaml
 specs/tenancy/spec.manifest.json

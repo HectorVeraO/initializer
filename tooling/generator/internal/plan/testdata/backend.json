@@ -15,9 +15,9 @@
       "role": "backend",
       "modules": [
         {"module": "core", "version": "0.1.0", "implied": true, "implementsSpec": {"core": "0.1.0"}, "requiresModules": [], "files": []},
-        {"module": "feature-flags", "version": "0.1.0", "implied": false, "implementsSpec": {"feature-flags": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []},
-        {"module": "identity", "version": "0.1.0", "implied": true, "implementsSpec": {"identity": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []},
-        {"module": "parameters", "version": "0.1.0", "implied": false, "implementsSpec": {"parameters": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []}
+        {"module": "feature-flags", "version": "0.1.0", "implied": false, "implementsSpec": {"feature-flags": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [{"module": "identity", "range": "^0.1.0"}], "files": []},
+        {"module": "identity", "version": "0.1.0", "implied": false, "implementsSpec": {"identity": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []},
+        {"module": "parameters", "version": "0.1.0", "implied": false, "implementsSpec": {"parameters": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [{"module": "identity", "range": "^0.1.0"}], "files": []}
       ]
     }
   ]

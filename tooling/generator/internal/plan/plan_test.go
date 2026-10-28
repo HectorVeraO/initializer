@@ -95,10 +95,10 @@ func backendModule(t *testing.T, cat *catalog.Catalog, id string) *catalog.Modul
 	return nil
 }
 
-func TestEmptySelectionResolvesImpliedModules(t *testing.T) {
+func TestEmptySelectionResolvesCore(t *testing.T) {
 	p := mustResolve(t, load(t, "backend.json"), selection())
-	wantIDs(t, p.Stacks[0], "core", "identity")
-	if !reflect.DeepEqual(p.Selection.Modules, []string{"core", "identity"}) {
+	wantIDs(t, p.Stacks[0], "core")
+	if !reflect.DeepEqual(p.Selection.Modules, []string{"core"}) {
 		t.Fatalf("recorded modules = %v", p.Selection.Modules)
 	}
 	if p.GoModule != "example.com/fixture/srv" || p.ComposeName != "fixture-app" {
@@ -153,7 +153,6 @@ func TestTCKGrepIsAnchored(t *testing.T) {
 	}
 
 	coreOnly := load(t, "backend.json")
-	backendModule(t, &coreOnly, "identity").ImplementsSpec = map[string]string{}
 	coreOnly.Specs[0].TCKTags = []string{"@core"}
 	p = mustResolve(t, coreOnly, selection())
 	if p.TCKGrep != "@(core)(?![A-Za-z0-9_-])" {
@@ -164,16 +163,16 @@ func TestTCKGrepIsAnchored(t *testing.T) {
 func TestRequiresChainPullsAndOrdersDependencies(t *testing.T) {
 	cat := load(t, "chain.json")
 	p := mustResolve(t, cat, selection("b"))
-	wantIDs(t, p.Stacks[0], "core", "identity", "a", "b")
+	wantIDs(t, p.Stacks[0], "core", "a", "b")
 	// Diamond: d needs b and c, both need a. Ready ties break by id.
 	p = mustResolve(t, cat, selection("d"))
-	wantIDs(t, p.Stacks[0], "core", "identity", "a", "b", "c", "d")
+	wantIDs(t, p.Stacks[0], "core", "a", "b", "c", "d")
 }
 
 func TestImpliedModulesComeFirstAmongReady(t *testing.T) {
-	// "a" sorts before "identity" bytewise; the implied module still wins.
+	// "a" sorts before "core" bytewise; the implied module still wins.
 	p := mustResolve(t, load(t, "chain.json"), selection("a"))
-	wantIDs(t, p.Stacks[0], "core", "identity", "a")
+	wantIDs(t, p.Stacks[0], "core", "a")
 }
 
 func TestDuplicatesAndImpliedIdsListedExplicitly(t *testing.T) {
@@ -189,7 +188,7 @@ func TestResolveIgnoresOrderAndDuplicationOfModules(t *testing.T) {
 	cat := load(t, "chain.json")
 	base := mustResolve(t, cat, selection("a", "b", "c", "d"))
 	rng := rand.New(rand.NewSource(1))
-	pool := []string{"a", "b", "c", "d", "core", "identity"}
+	pool := []string{"a", "b", "c", "d", "core"}
 	for i := 0; i < 50; i++ {
 		modules := []string{"d"}
 		for j := rng.Intn(8); j > 0; j-- {
@@ -321,6 +320,41 @@ func TestSpecNotInBackend(t *testing.T) {
 	mustResolve(t, cat, sel)
 }
 
+func TestSpecNotInBackendMessage(t *testing.T) {
+	const prefix = `no selected backend module implements spec "identity" (needed by ng-web core)`
+	cases := []struct {
+		name   string
+		mutate func(t *testing.T, cat *catalog.Catalog)
+		want   string
+	}{
+		{"one module implements the spec", func(t *testing.T, cat *catalog.Catalog) {},
+			prefix + `; select module "identity" or drop stack ng-web`},
+		{"several modules implement the spec", func(t *testing.T, cat *catalog.Catalog) {
+			backendModule(t, cat, "parameters").ImplementsSpec["identity"] = "0.1.0"
+			backendModule(t, cat, "feature-flags").ImplementsSpec["identity"] = "0.1.0"
+		}, prefix + `; select module "feature-flags,identity,parameters" or drop stack ng-web`},
+		{"no module implements the spec", func(t *testing.T, cat *catalog.Catalog) {
+			backendModule(t, cat, "identity").ImplementsSpec = map[string]string{}
+		}, prefix},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cat := load(t, "fullstack.json")
+			cat.Stacks[1].Modules[1].ImplementsSpec = map[string]string{"core": "0.1.0", "identity": "0.1.0"}
+			tc.mutate(t, &cat)
+			sel := selection()
+			sel.Stacks = []string{"go-srv", "ng-web"}
+			issues := wantCodes(t, cat, sel, plan.CodeSpecNotInBackend)
+			if issues[0].Message != tc.want {
+				t.Fatalf("message = %q, want %q", issues[0].Message, tc.want)
+			}
+			if want := "catalog.lock.json#/stacks/1/modules/1/implementsSpec/identity"; issues[0].Path != want {
+				t.Fatalf("path = %s, want %s", issues[0].Path, want)
+			}
+		})
+	}
+}
+
 func TestGeneratorMismatch(t *testing.T) {
 	cat := load(t, "backend.json")
 	cat.Generator = "9.9.9"
@@ -376,7 +410,7 @@ func TestCoreIsPlannedWhenNotImplied(t *testing.T) {
 	cat := load(t, "backend.json")
 	backendModule(t, &cat, "core").Implied = false
 	p := mustResolve(t, cat, selection())
-	wantIDs(t, p.Stacks[0], "core", "identity")
+	wantIDs(t, p.Stacks[0], "core")
 }
 
 func TestSpecUnknown(t *testing.T) {
@@ -577,5 +611,72 @@ func TestGrepAgreesWithTagPattern(t *testing.T) {
 	}
 	if err := quick.Check(property, &quick.Config{MaxCount: 2000}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPulls(t *testing.T) {
+	backend := load(t, "backend.json")
+	all := selection()
+	all.AllModules = true
+	cases := []struct {
+		name string
+		cat  catalog.Catalog
+		sel  manifest.Selection
+		want []plan.Pull
+	}{
+		{"typed module pulls its requirement", backend, selection("parameters"),
+			[]plan.Pull{{Module: "identity", RequiredBy: []string{"parameters"}, Stack: "go-srv"}}},
+		{"requirement named in the selection is not a pull", backend, selection("identity", "parameters"), nil},
+		{"two requirers are listed sorted", backend, selection("parameters", "feature-flags"),
+			[]plan.Pull{{Module: "identity", RequiredBy: []string{"feature-flags", "parameters"}, Stack: "go-srv"}}},
+		{"the same selection in another order reports the same pull", backend, selection("feature-flags", "parameters"),
+			[]plan.Pull{{Module: "identity", RequiredBy: []string{"feature-flags", "parameters"}, Stack: "go-srv"}}},
+		{"all modules reports nothing", backend, all, nil},
+		{"core alone pulls nothing", backend, selection(), nil},
+		{"a chain reports every pulled module", load(t, "chain.json"), selection("d"), []plan.Pull{
+			{Module: "a", RequiredBy: []string{"b", "c"}, Stack: "go-srv"},
+			{Module: "b", RequiredBy: []string{"d"}, Stack: "go-srv"},
+			{Module: "c", RequiredBy: []string{"d"}, Stack: "go-srv"},
+		}},
+		{"an implied module no one requires is not a pull", load(t, "chain.json"), selection("a"), nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := plan.Pulls(mustResolve(t, tc.cat, tc.sel), tc.sel)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("pulls = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPullsAreReportedPerStack(t *testing.T) {
+	cat := load(t, "fullstack.json")
+	cat.Stacks[1].Modules = append(cat.Stacks[1].Modules, catalog.ModuleEntry{
+		Module: "identity", Version: "0.1.0", ImplementsSpec: map[string]string{}, RequiresCore: "^0.1.0",
+		RequiresModules: []catalog.Requirement{}, Files: []catalog.File{},
+	})
+	cat.Stacks[1].Modules[3].RequiresModules = []catalog.Requirement{{Module: "identity", Range: "^0.1.0"}}
+	sel := selection("parameters")
+	sel.Stacks = []string{"ng-web", "go-srv"}
+	want := []plan.Pull{
+		{Module: "identity", RequiredBy: []string{"parameters"}, Stack: "go-srv"},
+		{Module: "identity", RequiredBy: []string{"parameters"}, Stack: "ng-web"},
+	}
+	if got := plan.Pulls(mustResolve(t, cat, sel), sel); !reflect.DeepEqual(got, want) {
+		t.Fatalf("pulls = %+v, want %+v", got, want)
+	}
+}
+
+// The order of the typed modules never changes the plan order (module order
+// comes from the catalog and the requirement edges, not from the selection).
+func TestSelectionOrderDoesNotChangeTheModuleOrder(t *testing.T) {
+	cat := withCooperation(t, nil)
+	backendModule(t, &cat, "tenancy").RequiresModules = []catalog.Requirement{{Module: "identity", Range: "^0.1.0"}}
+	first := mustResolve(t, cat, selection("tenancy", "parameters"))
+	second := mustResolve(t, cat, selection("parameters", "tenancy"))
+	wantIDs(t, first.Stacks[0], "core", "identity", "parameters", "tenancy")
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("plans differ:\n%+v\n%+v", first, second)
 	}
 }

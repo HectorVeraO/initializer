@@ -28,5 +28,6 @@ specs/identity/spec.manifest.json
 specs/package.json
 specs/parameters/openapi.yaml
 specs/parameters/spec.manifest.json
+specs/tck-support/actors/index.ts
 specs/tck-support/index.ts
 tooling/notes.txt
