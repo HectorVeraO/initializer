@@ -509,7 +509,7 @@ func TestAcceptInvitationFailures(t *testing.T) {
 		}, 403, CodeAccountLockedOrDisabled},
 		{"suspended tenant", janeEmail, func(e *tenEnv, tenant Tenant, _ Account) {
 			e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", tenant.ID)
-		}, 403, CodeTenantSuspended},
+		}, 403, api.CodeTenantSuspended},
 		{"already active", janeEmail, func(e *tenEnv, tenant Tenant, jane Account) {
 			e.member(tenant.ID, jane.ID, "member", "active")
 		}, 409, CodeMembershipAlreadyActive},
@@ -765,7 +765,7 @@ func TestAcceptNewRejectsBeforeCallingKratos(t *testing.T) {
 	requireAPIError(t, invalid, 404, CodeInvitationInvalid)
 	e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", tenant.ID)
 	_, suspended := e.svc.AcceptNew(ctx, token, randomPassword(t), "Jane Doe")
-	requireAPIError(t, suspended, 403, CodeTenantSuspended)
+	requireAPIError(t, suspended, 403, api.CodeTenantSuspended)
 
 	if n := len(e.kratos.received()); n != 0 {
 		t.Fatalf("Kratos received %d requests, want 0", n)

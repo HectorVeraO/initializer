@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
+	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/session"
 )
@@ -86,18 +87,34 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 	if err != nil {
 		return fmt.Errorf("provide tenant directory: %w", err)
 	}
+	err = b.ProvideTenantAccess(newTenantAccess(b.Pool(), b.Clock()))
+	if err != nil {
+		return fmt.Errorf("provide tenant access: %w", err)
+	}
+	accountsPort := newAccountDirectory(b.Pool(), b.Clock(), s.admin, s.cfg.PlatformOperatorEmails)
+	err = b.ProvideAccountDirectory(accountsPort)
+	if err != nil {
+		return fmt.Errorf("provide account directory: %w", err)
+	}
+	err = b.ProvideAccountProvisioner(accountsPort)
+	if err != nil {
+		return fmt.Errorf("provide account provisioner: %w", err)
+	}
 	keyResolver := newAPIKeyResolver(b.Pool(), b.Clock(), b.Scopes(), b.Logger())
 	err = b.ProvideAPIKeyResolver(keyResolver)
 	if err != nil {
 		return fmt.Errorf("provide api key resolver: %w", err)
 	}
 
-	scopes := []struct{ name, description string }{
-		{"tenant:read", "Read the key's own tenant"},
-		{"api-keys:read", "List the tenant's API key metadata"},
+	scopes := []struct {
+		name, description string
+		level             coreaccess.ScopeLevel
+	}{
+		{"tenant:read", "Read the key's own tenant", coreaccess.ScopeTenant},
+		{"api-keys:read", "List the tenant's API key metadata", coreaccess.ScopeTenant},
 	}
 	for _, scope := range scopes {
-		err = b.Scopes().Register(scope.name, scope.description)
+		err = b.Scopes().Register(scope.name, scope.description, scope.level)
 		if err != nil {
 			return fmt.Errorf("register scope: %w", err)
 		}

@@ -349,6 +349,7 @@ func (rt *apiKeyRoutes) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	var p api.Problems
 	name, nameOK := readTrimmedName(body, &p, "name", maxAPIKeyName)
 	scopes, scopesOK := rt.readScopes(body, &p)
+	rt.scopes.CheckMint(&p, "scopes", scopes, principal.TenantID)
 	expiresAt, expiresOK := readExpiresAt(body, &p)
 	err = p.Err()
 	if err != nil || !nameOK || !scopesOK || !expiresOK {

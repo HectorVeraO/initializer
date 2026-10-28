@@ -13,6 +13,9 @@ const (
 	CodePlatformOperatorNeeded Code = "PLATFORM_OPERATOR_REQUIRED"
 	CodeActiveTenantRequired   Code = "ACTIVE_TENANT_REQUIRED"
 	CodeTenantMismatch         Code = "TENANT_MISMATCH"
+	CodeTenantAccessDenied     Code = "TENANT_ACCESS_DENIED"
+	CodeTenantSuspended        Code = "TENANT_SUSPENDED"
+	CodeMembershipRevoked      Code = "MEMBERSHIP_REVOKED"
 	CodeResourceNotFound       Code = "RESOURCE_NOT_FOUND"
 	CodeRouteNotFound          Code = "ROUTE_NOT_FOUND"
 	CodeCredentialConflict     Code = "CREDENTIAL_CONFLICT"
@@ -69,9 +72,9 @@ func Registry() []CodeInfo {
 		{CodePlatformOperatorNeeded, http.StatusForbidden, false, raisedByCore},
 		{CodeActiveTenantRequired, http.StatusForbidden, false, raisedByCore},
 		{CodeTenantMismatch, http.StatusForbidden, false, raisedByCore},
-		{"TENANT_ACCESS_DENIED", http.StatusForbidden, false, raisedByIdentity},
-		{"TENANT_SUSPENDED", http.StatusForbidden, false, raisedByIdentity},
-		{"MEMBERSHIP_REVOKED", http.StatusForbidden, false, raisedByIdentity},
+		{CodeTenantAccessDenied, http.StatusForbidden, false, "core, identity"},
+		{CodeTenantSuspended, http.StatusForbidden, false, raisedByIdentity},
+		{CodeMembershipRevoked, http.StatusForbidden, false, raisedByIdentity},
 		{"ACCOUNT_LOCKED_OR_DISABLED", http.StatusForbidden, false, raisedByIdentity},
 		{"INVITATION_EMAIL_MISMATCH", http.StatusForbidden, false, raisedByIdentity},
 		{CodeResourceNotFound, http.StatusNotFound, false, "core, every module"},

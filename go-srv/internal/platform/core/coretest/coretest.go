@@ -15,6 +15,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/featureflag"
@@ -41,11 +42,14 @@ type Options struct {
 	// Config is merged over the defaults (APP_PUBLIC_BASE_URL=http://localhost:10120).
 	Config map[string]string
 	// Clock is nil for clock.Fixed(2026-01-01T00:00:00Z).
-	Clock           clock.Clock
-	SessionResolver access.SessionResolver
-	APIKeyResolver  access.APIKeyResolver
-	TenantDirectory access.TenantDirectory
-	FlagEvaluator   featureflag.Evaluator
+	Clock              clock.Clock
+	SessionResolver    access.SessionResolver
+	APIKeyResolver     access.APIKeyResolver
+	TenantDirectory    access.TenantDirectory
+	FlagEvaluator      featureflag.Evaluator
+	TenantAccess       access.TenantAccess
+	AccountDirectory   accounts.Directory
+	AccountProvisioner accounts.Provisioner
 	// Logger, when set, receives every record (wrapped by telemetry.NewLogHandler, so
 	// trace_id, span_id, tenant_id and actor_id are attached); nil discards logs.
 	Logger *slog.Logger
@@ -71,14 +75,17 @@ func New(t testing.TB, modules []core.Module, opts Options) http.Handler {
 		clk = clock.Fixed(defaultNow)
 	}
 	app, err := core.Build(context.Background(), core.Options{
-		Logger:          newLogger(opts.Logger),
-		Config:          config.MapSource(settings),
-		Clock:           clk,
-		Pool:            pool,
-		SessionResolver: opts.SessionResolver,
-		APIKeyResolver:  opts.APIKeyResolver,
-		TenantDirectory: opts.TenantDirectory,
-		FlagEvaluator:   opts.FlagEvaluator,
+		Logger:             newLogger(opts.Logger),
+		Config:             config.MapSource(settings),
+		Clock:              clk,
+		Pool:               pool,
+		SessionResolver:    opts.SessionResolver,
+		APIKeyResolver:     opts.APIKeyResolver,
+		TenantDirectory:    opts.TenantDirectory,
+		FlagEvaluator:      opts.FlagEvaluator,
+		TenantAccess:       opts.TenantAccess,
+		AccountDirectory:   opts.AccountDirectory,
+		AccountProvisioner: opts.AccountProvisioner,
 	}, modules)
 	if err != nil {
 		t.Fatalf("coretest: Build: %v", err)
