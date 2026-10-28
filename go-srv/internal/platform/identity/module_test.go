@@ -279,3 +279,117 @@ func TestAPIKeyRoutesBelongToAPIKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestIdentityAloneCreatesOnlyItsOwnTable(t *testing.T) {
+	var host *core.Host
+	probe := core.Module{
+		ID: "table-probe",
+		Mount: func(_ context.Context, h *core.Host) error {
+			host = h
+			return nil
+		},
+	}
+	coretest.New(t, []core.Module{Module(), probe}, coretest.Options{
+		Database: true,
+		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
+	})
+	rows, err := host.Pool().Query(context.Background(),
+		"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE 'cor!_migrations!_%' ESCAPE '!' ORDER BY table_name")
+	if err != nil {
+		t.Fatalf("list tables: %v", err)
+	}
+	defer rows.Close()
+	var tables []string
+	for rows.Next() {
+		var name string
+		scanErr := rows.Scan(&name)
+		if scanErr != nil {
+			t.Fatalf("scan: %v", scanErr)
+		}
+		tables = append(tables, name)
+	}
+	if strings.Join(tables, ",") != "iam_accounts" {
+		t.Errorf("tables = %v, want only iam_accounts", tables)
+	}
+}
+
+func TestMountedRoutesAreExactlyTheSessionRoutesAndTheKratosProxy(t *testing.T) {
+	kratos := newStubKratos(t)
+	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
+		Database: true,
+		Config: map[string]string{
+			"APP_SESSION_KEYS":      randomSessionKeys(t),
+			"APP_KRATOS_PUBLIC_URL": kratos.server.URL,
+		},
+	})
+	serve := func(method, path string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+		return rec
+	}
+	mounted := []struct {
+		method, path string
+		status       int
+		code         string
+	}{
+		{http.MethodGet, "/api/v1/auth/session", http.StatusUnauthorized, "SESSION_INVALID"},
+		{http.MethodPost, "/api/v1/auth/refresh", http.StatusUnauthorized, "SESSION_INVALID"},
+		{http.MethodPost, "/api/v1/auth/logout", http.StatusUnauthorized, "SESSION_INVALID"},
+		{http.MethodPost, "/api/v1/auth/switch-tenant", http.StatusUnauthorized, "SESSION_INVALID"},
+	}
+	for _, route := range mounted {
+		expectError(t, serve(route.method, route.path), route.status, route.code)
+	}
+	if rec := serve(http.MethodGet, "/kratos/self-service/login/browser"); rec.Code != http.StatusOK {
+		t.Errorf("GET /kratos/ answered %d, want the proxied 200", rec.Code)
+	}
+
+	// A method the route does not declare, and a sibling path, are not mounted.
+	unmounted := []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/auth/session"},
+		{http.MethodGet, "/api/v1/auth/refresh"},
+		{http.MethodGet, "/api/v1/auth/logout"},
+		{http.MethodGet, "/api/v1/auth/switch-tenant"},
+		{http.MethodGet, "/api/v1/auth/login"},
+		{http.MethodGet, "/api/v1/accounts"},
+		{http.MethodGet, "/api/v1/parameters"},
+		{http.MethodGet, "/api/v1/feature-flags"},
+	}
+	for _, route := range unmounted {
+		expectError(t, serve(route.method, route.path), http.StatusNotFound, "ROUTE_NOT_FOUND")
+	}
+}
+
+func TestASecondSessionResolverFailsBuild(t *testing.T) {
+	second := core.Module{
+		ID: "second-sessions",
+		Provide: func(_ context.Context, b *core.Builder) error {
+			return b.ProvideSessionResolver(coreaccess.NoSessions)
+		},
+	}
+	for _, modules := range [][]core.Module{{Module(), second}, {second, Module()}} {
+		err := buildModules(t, modules)
+		if err == nil || !strings.Contains(err.Error(), "already provided") {
+			t.Errorf("Build err = %v, want the already provided failure", err)
+		}
+	}
+}
+
+// buildModules runs Build over modules with valid identity settings against
+// an unreachable database and returns the error.
+func buildModules(t *testing.T, modules []core.Module) error {
+	t.Helper()
+	app, err := core.Build(context.Background(), core.Options{
+		Logger: slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		Config: config.MapSource(map[string]string{
+			"APP_PUBLIC_BASE_URL": "http://localhost:10120",
+			"APP_SESSION_KEYS":    randomSessionKeys(t),
+		}),
+		Clock: clock.System{},
+		Pool:  lazyPool(t),
+	}, modules)
+	if err == nil {
+		_ = app.Close(context.Background())
+	}
+	return err
+}
