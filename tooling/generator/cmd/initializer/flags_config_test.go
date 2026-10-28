@@ -228,6 +228,35 @@ func TestGenerateLogsNothingWhenTheSelectionNamesTheRequirement(t *testing.T) {
 	}
 }
 
+// A refused selection announces no pull: the project is never generated.
+func TestGenerateRefusedSelectionLogsNoPull(t *testing.T) {
+	root, catalogPath := realCatalog(t)
+	busy := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(busy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(busy, "existing.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string][]string{
+		"unknown module":   {"--out", filepath.Join(t.TempDir(), "out"), "--modules", "parameters,no-such-module"},
+		"non-empty output": {"--out", busy, "--modules", "parameters"},
+	}
+	for name, extra := range cases {
+		t.Run(name, func(t *testing.T) {
+			args := append([]string{"generate", "--root", root, "--catalog", catalogPath,
+				"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv"}, extra...)
+			code, _, stderr := execute(t, args...)
+			if code != exitIssues {
+				t.Fatalf("generate exit %d, want %d: %s", code, exitIssues, stderr)
+			}
+			if events := moduleRequiredEvents(t, stderr); len(events) != 0 {
+				t.Fatalf("refused selection logged %v", events)
+			}
+		})
+	}
+}
+
 func TestGenerateWithTwoRequirersListsBothSorted(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
