@@ -21,24 +21,24 @@ const (
 	statusSuspended = "suspended"
 )
 
-// Grant is what an account may do once checkAccess passes. Role and
-// TenantSlug are empty when no tenant was checked.
+// Grant is what the session claims need once the account and tenant steps
+// pass. Role and TenantSlug are empty when no tenant was checked.
 type Grant struct {
 	Role             reqctx.Role
 	PlatformOperator bool
 	TenantSlug       string
 }
 
-// access holds the status checks and tenant selection the session routes
-// call. It is package-internal: no other module calls it. Sessions are
-// stateless: each call reads the current rows.
+// access holds the account half of the session checks: the account step and
+// identity linking. The tenant half is the core TenantAccess port. It is
+// package-internal; sessions are stateless: each call reads the current rows.
 type access struct {
 	pool           *pgxpool.Pool
 	clock          clock.Clock
 	operatorEmails []string
 }
 
-// newAccess builds the checks over pool. operatorEmails are the bare,
+// newAccess builds the account checks over pool. operatorEmails are the bare,
 // lower-cased APP_PLATFORM_OPERATOR_EMAILS entries.
 func newAccess(pool *pgxpool.Pool, clk clock.Clock, operatorEmails []string) *access {
 	return &access{pool: pool, clock: clk, operatorEmails: slices.Clone(operatorEmails)}
@@ -48,11 +48,10 @@ func forbidden(code api.Code, message string) *api.Error {
 	return api.NewError(http.StatusForbidden, code, message)
 }
 
-// accountState is the slice of iam_accounts the checks read.
+// accountState is the slice of iam_accounts the account step reads.
 type accountState struct {
-	active             bool
-	platformOperator   bool
-	lastActiveTenantID *string
+	active           bool
+	platformOperator bool
 }
 
 // accountState reads the account; a missing row or an id that is not a UUID
@@ -65,8 +64,8 @@ func (a *access) accountState(ctx context.Context, accountID string) (accountSta
 	var status string
 	var state accountState
 	err := a.pool.QueryRow(ctx,
-		"SELECT status, is_platform_operator, last_active_tenant_id::text FROM iam_accounts WHERE id = $1::uuid",
-		canonical).Scan(&status, &state.platformOperator, &state.lastActiveTenantID)
+		"SELECT status, is_platform_operator FROM iam_accounts WHERE id = $1::uuid",
+		canonical).Scan(&status, &state.platformOperator)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return accountState{}, nil
 	}
@@ -77,104 +76,24 @@ func (a *access) accountState(ctx context.Context, accountID string) (accountSta
 	return state, nil
 }
 
-// checkAccess runs the status checks in order and returns the first failure
-// as a 403 *api.Error. Any other error is operational. A nil tenantID checks
-// the account only.
-func (a *access) checkAccess(ctx context.Context, accountID string, tenantID *string) (Grant, error) {
+// checkAccount is the account step of every session check: a missing,
+// non-UUID, locked or disabled account is 403 ACCOUNT_LOCKED_OR_DISABLED, any
+// other failure is operational. It runs before any tenant access call.
+func (a *access) checkAccount(ctx context.Context, accountID string) (bool, error) {
 	state, err := a.accountState(ctx, accountID)
 	if err != nil {
-		return Grant{}, err
+		return false, err
 	}
 	if !state.active {
-		return Grant{}, forbidden(CodeAccountLockedOrDisabled, "The account is locked or disabled.")
+		return false, forbidden(CodeAccountLockedOrDisabled, "The account is locked or disabled.")
 	}
-	if tenantID == nil {
-		return Grant{PlatformOperator: state.platformOperator}, nil
-	}
-	return a.tenantGrant(ctx, accountID, *tenantID, state.platformOperator)
-}
-
-// tenantGrant is steps 3 to 6 of checkAccess: one query joins the membership
-// to its tenant, so a non-member learns nothing about the tenant.
-func (a *access) tenantGrant(ctx context.Context, accountID, tenantID string, platformOperator bool) (Grant, error) {
-	denied := forbidden(api.CodeTenantAccessDenied, "The account has no access to this tenant.")
-	tenant, tenantOK := canonicalID(tenantID)
-	account, accountOK := canonicalID(accountID)
-	if !tenantOK || !accountOK {
-		return Grant{}, denied
-	}
-	var tenantStatus, slug, membershipStatus, role string
-	err := a.pool.QueryRow(ctx,
-		`SELECT t.status, t.slug, m.status, m.role FROM ten_tenants t
-JOIN ten_memberships m ON m.tenant_id = t.id AND m.account_id = $2::uuid WHERE t.id = $1::uuid`,
-		tenant, account).Scan(&tenantStatus, &slug, &membershipStatus, &role)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Grant{}, denied
-	}
-	if err != nil {
-		return Grant{}, fmt.Errorf("identity: read membership: %w", err)
-	}
-	if tenantStatus == statusSuspended {
-		return Grant{}, forbidden(api.CodeTenantSuspended, "The tenant is suspended.")
-	}
-	if membershipStatus != statusActive {
-		message := "The membership was revoked."
-		if membershipStatus == statusSuspended {
-			message = "The membership is suspended."
-		}
-		return Grant{}, forbidden(api.CodeMembershipRevoked, message)
-	}
-	return Grant{Role: reqctx.Role(role), PlatformOperator: platformOperator, TenantSlug: slug}, nil
+	return state.platformOperator, nil
 }
 
 func isAccessDenial(err error) bool {
 	var apiErr *api.Error
 	isAPIError := errors.As(err, &apiErr)
 	return isAPIError && apiErr.Status == http.StatusForbidden
-}
-
-// selectTenant picks the tenant a new session starts on: the account's last
-// active tenant when checkAccess passes for it, else its oldest active
-// membership of an active tenant, else none. It never returns a 403; an
-// account that is not active gets no tenant.
-func (a *access) selectTenant(ctx context.Context, accountID string) (*string, Grant, error) {
-	state, err := a.accountState(ctx, accountID)
-	if err != nil {
-		return nil, Grant{}, err
-	}
-	if !state.active {
-		return nil, Grant{}, nil
-	}
-	if state.lastActiveTenantID != nil {
-		grant, err := a.tenantGrant(ctx, accountID, *state.lastActiveTenantID, state.platformOperator)
-		if err == nil {
-			return state.lastActiveTenantID, grant, nil
-		}
-		if !isAccessDenial(err) {
-			return nil, Grant{}, err
-		}
-	}
-	return a.oldestActiveTenant(ctx, accountID, state.platformOperator)
-}
-
-// oldestActiveTenant is the fallback of selectTenant.
-func (a *access) oldestActiveTenant(ctx context.Context, accountID string, platformOperator bool) (*string, Grant, error) {
-	account, _ := canonicalID(accountID)
-	var tenantID, role string
-	grant := Grant{PlatformOperator: platformOperator}
-	err := a.pool.QueryRow(ctx,
-		`SELECT t.id::text, t.slug, m.role FROM ten_memberships m
-JOIN ten_tenants t ON t.id = m.tenant_id
-WHERE m.account_id = $1::uuid AND m.status = 'active' AND t.status = 'active'
-ORDER BY m.created_at, m.id LIMIT 1`, account).Scan(&tenantID, &grant.TenantSlug, &role)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, grant, nil
-	}
-	if err != nil {
-		return nil, Grant{}, fmt.Errorf("identity: select tenant: %w", err)
-	}
-	grant.Role = reqctx.Role(role)
-	return &tenantID, grant, nil
 }
 
 // linkIdentity returns the account of a Kratos identity. The first sight
@@ -204,21 +123,4 @@ RETURNING `+accountColumns, identity, normalized, isOperator, now)
 		return Account{}, mapError("link identity", err)
 	}
 	return account, nil
-}
-
-// setLastActiveTenant records the tenant a session last used. It does not
-// check access: callers run checkAccess first.
-func (a *access) setLastActiveTenant(ctx context.Context, accountID, tenantID string) error {
-	account, accountOK := canonicalID(accountID)
-	tenant, tenantOK := canonicalID(tenantID)
-	if !accountOK || !tenantOK {
-		return errors.New("identity: set last active tenant: ids must be UUIDs")
-	}
-	_, err := a.pool.Exec(ctx,
-		"UPDATE iam_accounts SET last_active_tenant_id = $2::uuid, updated_at = $3 WHERE id = $1::uuid",
-		account, tenant, a.clock.Now())
-	if err != nil {
-		return mapError("set last active tenant", err)
-	}
-	return nil
 }
