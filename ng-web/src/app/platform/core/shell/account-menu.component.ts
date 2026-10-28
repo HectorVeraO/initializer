@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { TranslocoModule, provideTranslocoScope } from '@jsverse/transloco';
 import { ButtonModule } from '@openng/optimus-ui/button';
-import { PLATFORM_CORE_I18N } from '../module';
+import { IDENTITY_I18N } from '../i18n/identity/scope';
 import { SessionStore } from '../session/session-store.service';
 
 /** Topbar account block: email, role or operator badge and Sign out. Renders nothing while the session is not authenticated. */
 @Component({
   selector: 'app-account-menu',
   imports: [ButtonModule, TranslocoModule],
-  providers: [provideTranslocoScope(PLATFORM_CORE_I18N)],
+  providers: [provideTranslocoScope(IDENTITY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './account-menu.component.html'
 })

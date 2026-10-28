@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import { TranslocoModule, provideTranslocoScope } from '@jsverse/transloco';
 import { ButtonModule } from '@openng/optimus-ui/button';
-import { PLATFORM_CORE_I18N } from '../module';
+import { PLATFORM_CORE_I18N } from '../i18n/scope';
 
 /** A button that turns into Confirm / Cancel in place; emits `confirmed` once per confirmation. */
 @Component({

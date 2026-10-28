@@ -15,7 +15,7 @@ import { SantiagoDatePipe } from '@/core/format/santiago-date.pipe';
 import { FormSectionComponent } from '@/core/ui/form-section/form-section.component';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
-import { PLATFORM_CORE_I18N } from '../module';
+import { TENANCY_I18N } from '../i18n/tenancy/scope';
 import { SessionStore } from '../session/session-store.service';
 import type { MembershipRole } from '../session/session.types';
 import { InlineConfirmComponent } from '../ui/inline-confirm.component';
@@ -24,7 +24,7 @@ import { OneTimeSecretDialogComponent } from '../ui/one-time-secret-dialog.compo
 import { InvitationsApi } from './invitations-api.service';
 import type { InvitationView } from './invitations-api.service';
 
-const SCOPE_ALIAS = PLATFORM_CORE_I18N.alias as string;
+const SCOPE_ALIAS = TENANCY_I18N.alias as string;
 
 const FORM_FIELDS: readonly string[] = ['email', 'role'];
 
@@ -51,7 +51,7 @@ const EMAIL_CODES: readonly string[] = [ApiErrorCode.MembershipAlreadyActive, Ap
     InlineConfirmComponent,
     OneTimeSecretDialogComponent
   ],
-  providers: [provideTranslocoScope(PLATFORM_CORE_I18N)],
+  providers: [provideTranslocoScope(TENANCY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './invitations-page.component.html'
 })
@@ -69,7 +69,7 @@ export class InvitationsPage {
     role: new FormControl<MembershipRole>('member', { nonNullable: true })
   });
 
-  protected readonly roleOptions = ROLES.map((role) => ({ value: role, labelKey: `core.shell.roles.${role}` }));
+  protected readonly roleOptions = ROLES.map((role) => ({ value: role, labelKey: `tenancy.roles.${role}` }));
 
   protected readonly rows = signal<InvitationView[]>([]);
   protected readonly totalItems = signal(0);
@@ -178,7 +178,7 @@ export class InvitationsPage {
 
     const isGone = failure.status() === 404 || failure.status() === 409;
 
-    const summary = isGone ? this.transloco.translate('core.errors.rowGone') : errorMessage(this.transloco, error);
+    const summary = isGone ? this.transloco.translate('tenancy.errors.rowGone') : errorMessage(this.transloco, error);
 
     this.messages.add({ severity: 'warn', summary });
   }

@@ -1,18 +1,18 @@
 <div class="flex items-center justify-center min-h-screen">
   <form [formGroup]="form" class="card w-full max-w-md flex flex-col gap-4" data-testid="login-form" (ngSubmit)="submit()">
-    <h1 class="text-2xl font-semibold m-0">{{ 'core.login.title' | transloco }}</h1>
+    <h1 class="text-2xl font-semibold m-0">{{ 'identity.login.title' | transloco }}</h1>
 
     @if (notice(); as noticeText) {
       <div class="text-sm" role="status" data-testid="login-notice">{{ noticeText }}</div>
     }
 
     <div class="flex flex-col gap-2">
-      <label for="login-email">{{ 'core.login.email' | transloco }}</label>
+      <label for="login-email">{{ 'identity.login.email' | transloco }}</label>
       <input pInputText id="login-email" formControlName="email" type="email" autocomplete="username" required data-testid="login-email" />
     </div>
 
     <div class="flex flex-col gap-2">
-      <label for="login-password">{{ 'core.login.password' | transloco }}</label>
+      <label for="login-password">{{ 'identity.login.password' | transloco }}</label>
       <input pInputText id="login-password" formControlName="password" type="password" autocomplete="current-password" required data-testid="login-password" />
     </div>
 
@@ -26,6 +26,6 @@
       </div>
     }
 
-    <button pButton type="submit" data-testid="login-submit" [disabled]="isSubmitting()">{{ (isSubmitting() ? 'core.login.submitting' : 'core.login.submit') | transloco }}</button>
+    <button pButton type="submit" data-testid="login-submit" [disabled]="isSubmitting()">{{ (isSubmitting() ? 'identity.login.submitting' : 'identity.login.submit') | transloco }}</button>
   </form>
 </div>

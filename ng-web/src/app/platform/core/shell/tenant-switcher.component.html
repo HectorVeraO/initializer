@@ -8,8 +8,8 @@
       optionValue="tenant.id"
       appendTo="body"
       [style]="{ minWidth: '12rem' }"
-      [placeholder]="'core.shell.noTenant' | transloco"
-      [ariaLabel]="'core.shell.activeTenant' | transloco"
+      [placeholder]="'tenancy.shell.noTenant' | transloco"
+      [ariaLabel]="'tenancy.shell.activeTenant' | transloco"
     >
       <ng-template #selectedItem let-membership>
         <span class="text-sm font-medium">{{ membership.tenant.name }} ({{ membership.tenant.slug }})</span>

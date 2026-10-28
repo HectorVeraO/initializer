@@ -7,17 +7,17 @@ import { SelectModule } from '@openng/optimus-ui/select';
 import { errorCode, isServerFailure } from '@/core/api/api-error';
 import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { scopedText } from '../i18n/scoped-text';
-import { PLATFORM_CORE_I18N } from '../module';
+import { TENANCY_I18N } from '../i18n/tenancy/scope';
 import { SessionStore } from '../session/session-store.service';
 
-/** Codes of a refused switch that have their own text under `core.errors`. */
+/** Codes of a refused switch that have their own text under `tenancy.errors`. */
 const SWITCH_REFUSALS: readonly string[] = [ApiErrorCode.TenantAccessDenied, ApiErrorCode.TenantSuspended, ApiErrorCode.MembershipRevoked];
 
 /** Topbar select of the active tenant. Renders nothing while the session is not authenticated. */
 @Component({
   selector: 'app-tenant-switcher',
   imports: [FormsModule, SelectModule, TranslocoModule],
-  providers: [provideTranslocoScope(PLATFORM_CORE_I18N)],
+  providers: [provideTranslocoScope(TENANCY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './tenant-switcher.component.html'
 })
@@ -52,7 +52,7 @@ export class TenantSwitcher {
     }
 
     this.pendingTenantId.set(null);
-    this.messages.add({ severity: 'success', summary: await scopedText(this.transloco, 'shell.tenantSwitched') });
+    this.messages.add({ severity: 'success', summary: await scopedText(this.transloco, TENANCY_I18N, 'shell.tenantSwitched') });
 
     const previousUrl = this.router.url;
 
@@ -71,6 +71,6 @@ export class TenantSwitcher {
 
     const key = code !== null && SWITCH_REFUSALS.includes(code) ? `errors.${code}` : 'errors.switchFailed';
 
-    this.messages.add({ severity: 'error', summary: await scopedText(this.transloco, key) });
+    this.messages.add({ severity: 'error', summary: await scopedText(this.transloco, TENANCY_I18N, key) });
   }
 }

@@ -14,7 +14,7 @@ import { SantiagoDatePipe } from '@/core/format/santiago-date.pipe';
 import { FormSectionComponent } from '@/core/ui/form-section/form-section.component';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
-import { PLATFORM_CORE_I18N } from '../module';
+import { TENANCY_I18N } from '../i18n/tenancy/scope';
 import type { TenantStatus } from '../session/session.types';
 import { InlineConfirmComponent } from '../ui/inline-confirm.component';
 import { fieldIssueMessages, unmatchedIssueMessages } from '../ui/issue-message';
@@ -22,7 +22,7 @@ import { OneTimeSecretDialogComponent } from '../ui/one-time-secret-dialog.compo
 import { TenantsApi } from './tenants-api.service';
 import type { TenantView } from './tenants-api.service';
 
-const SCOPE_ALIAS = PLATFORM_CORE_I18N.alias as string;
+const SCOPE_ALIAS = TENANCY_I18N.alias as string;
 
 const FORM_FIELDS: readonly string[] = ['slug', 'name', 'adminEmail'];
 
@@ -30,7 +30,7 @@ const FORM_FIELDS: readonly string[] = ['slug', 'name', 'adminEmail'];
 @Component({
   selector: 'app-operator-tenants-page',
   imports: [ReactiveFormsModule, ButtonModule, InputTextModule, MessageModule, TableModule, TranslocoModule, SantiagoDatePipe, FormSectionComponent, ListStateComponent, PageHeaderComponent, InlineConfirmComponent, OneTimeSecretDialogComponent],
-  providers: [provideTranslocoScope(PLATFORM_CORE_I18N)],
+  providers: [provideTranslocoScope(TENANCY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './operator-tenants-page.component.html'
 })
@@ -147,7 +147,7 @@ export class OperatorTenantsPage {
 
     const isGone = failure.status() === 404 || failure.status() === 409;
 
-    const summary = isGone ? this.transloco.translate('core.errors.rowGone') : errorMessage(this.transloco, error);
+    const summary = isGone ? this.transloco.translate('tenancy.errors.rowGone') : errorMessage(this.transloco, error);
 
     this.messages.add({ severity: 'warn', summary });
   }

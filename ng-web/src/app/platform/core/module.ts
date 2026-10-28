@@ -1,15 +1,8 @@
-import type { ProviderScope } from '@jsverse/transloco';
 import { configGuard } from '@/core/config/config.guard';
 import { anonymousGuard, requireSession } from './guards/guards';
 import type { WebModule } from './composition/web-module';
 import type { SessionRequirement } from './guards/requirement';
-
-/** Transloco scope of the core module; keys are read as `core.<key>`. */
-export const PLATFORM_CORE_I18N: ProviderScope = {
-  scope: 'core',
-  alias: 'core',
-  loader: { en: () => import('./i18n/en.json').then((m) => m.default), es: () => import('./i18n/es.json').then((m) => m.default) }
-};
+import { PLATFORM_CORE_I18N } from './i18n/scope';
 
 const ADMIN_OF_TENANT: SessionRequirement = { tenant: 'required', roles: ['admin'] };
 
