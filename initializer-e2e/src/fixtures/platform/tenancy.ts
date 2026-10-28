@@ -12,12 +12,14 @@ import { AcceptInvitationPage } from '../../pages/platform/tenancy/AcceptInvitat
 import { InvitationsPage } from '../../pages/platform/tenancy/InvitationsPage';
 import { MembershipsPage } from '../../pages/platform/tenancy/MembershipsPage';
 import { OperatorTenantsPage } from '../../pages/platform/tenancy/OperatorTenantsPage';
+import { TenantSwitcher } from '../../pages/platform/tenancy/TenantSwitcher';
 
 type TenancyFixtures = {
   acceptInvitationPage: AcceptInvitationPage;
   invitationsPage: InvitationsPage;
   membershipsPage: MembershipsPage;
   operatorTenantsPage: OperatorTenantsPage;
+  tenantSwitcher: TenantSwitcher;
   /** Creates tenant e2e-<id> whose first admin is a fresh user created through accept-new, and signs that user in over the API. */
   newTenantAdmin: () => Promise<{
     readonly tenant: SeedTenant;
@@ -39,6 +41,9 @@ export const test = base.extend<TenancyFixtures>({
   },
   operatorTenantsPage: async ({ page }, use) => {
     await use(new OperatorTenantsPage(page));
+  },
+  tenantSwitcher: async ({ page }, use) => {
+    await use(new TenantSwitcher(page));
   },
   newTenantAdmin: async ({ playwright, operator }, use, testInfo) => {
     const env = loadEnv();

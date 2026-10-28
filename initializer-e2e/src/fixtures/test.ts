@@ -1,12 +1,10 @@
 import { test as base, expect } from '@playwright/test';
 import { ExamplePage } from '../pages/ExamplePage';
 import { OneTimeSecretDialog } from '../pages/platform/core/OneTimeSecretDialog';
-import { TenantSwitcher } from '../pages/platform/tenancy/TenantSwitcher';
 
 type Pages = {
   examplePage: ExamplePage;
   secretDialog: OneTimeSecretDialog;
-  tenantSwitcher: TenantSwitcher;
 };
 
 // Custom test that injects Page Objects. Specs import { test, expect } from here or from a
@@ -18,9 +16,6 @@ export const test = base.extend<Pages>({
   },
   secretDialog: async ({ page }, use) => {
     await use(new OneTimeSecretDialog(page));
-  },
-  tenantSwitcher: async ({ page }, use) => {
-    await use(new TenantSwitcher(page));
   },
 });
 
