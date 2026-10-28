@@ -401,7 +401,10 @@ func TestBaseChecks(t *testing.T) {
 			put(t, root, prefix+"20260101120000_sys_one.sql", upLine+"CREATE TABLE sys_one (id int, a int);\n")
 		}, []string{"MIGRATION_MODIFIED@" + prefix + "20260101120000_sys_one.sql:0"}},
 		"deleted": {func(t *testing.T, root string) {
-			_ = os.Remove(filepath.Join(root, filepath.FromSlash(prefix+"20260101120000_sys_one.sql")))
+			err := os.Remove(filepath.Join(root, filepath.FromSlash(prefix+"20260101120000_sys_one.sql")))
+			if err != nil {
+				t.Fatal(err)
+			}
 		}, []string{"MIGRATION_MODIFIED@" + prefix + "20260101120000_sys_one.sql:0"}},
 		"renamed": {func(t *testing.T, root string) {
 			err := os.Rename(filepath.Join(root, filepath.FromSlash(prefix+"20260201120000_sys_two.sql")),
@@ -483,7 +486,10 @@ func TestPreReleaseBaseComparisonIsOff(t *testing.T) {
 			put(t, root, prefix+"20260101120000_sys_one.sql", upLine+"CREATE TABLE sys_one (id int, a int);\n")
 		},
 		"deleted": func(t *testing.T, root string) {
-			_ = os.Remove(filepath.Join(root, filepath.FromSlash(prefix+"20260101120000_sys_one.sql")))
+			err := os.Remove(filepath.Join(root, filepath.FromSlash(prefix+"20260101120000_sys_one.sql")))
+			if err != nil {
+				t.Fatal(err)
+			}
 		},
 		"moved to another module": func(t *testing.T, root string) {
 			err := os.Remove(filepath.Join(root, filepath.FromSlash(prefix+"20260201120000_sys_two.sql")))

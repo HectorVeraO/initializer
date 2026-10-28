@@ -40,10 +40,12 @@ func Load(root string) (bool, error) {
 	dec.DisallowUnknownFields()
 	err = dec.Decode(&doc)
 	if err != nil {
-		// A type mismatch still leaves the other fields decoded, so the
-		// message below can name every problem at once.
+		// An unknown key or a type mismatch stops the decoder at the first
+		// problem, so the message below re-reads the document to name every
+		// problem at once. Malformed JSON keeps the decoder's own message.
 		var typeErr *json.UnmarshalTypeError
-		if !errors.As(err, &typeErr) {
+		isUnknownField := strings.HasPrefix(err.Error(), "json: unknown field ")
+		if !errors.As(err, &typeErr) && !isUnknownField {
 			return false, fmt.Errorf("%s: %v", FileName, err)
 		}
 		return false, fmt.Errorf("%s: %s", FileName, strings.Join(grammarProblems(raw), "; "))

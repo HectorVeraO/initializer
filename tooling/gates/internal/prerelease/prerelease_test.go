@@ -105,6 +105,18 @@ func TestLoadTypeMismatchAlsoReportsUnknownKeyAndTrailingData(t *testing.T) {
 	}
 }
 
+func TestLoadUnknownKeyBeforeMistypedFieldReportsBoth(t *testing.T) {
+	_, err := Load(writeSetting(t, `{ "extra": 1, "schema": 1, "preRelease": "yes" }`))
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	for _, want := range []string{"preRelease must be a JSON boolean", `unknown field "extra"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q misses %q", err, want)
+		}
+	}
+}
+
 // FuzzLoad checks that any bytes never panic, that errors name the file and
 // that a true result only comes from valid JSON.
 func FuzzLoad(f *testing.F) {
