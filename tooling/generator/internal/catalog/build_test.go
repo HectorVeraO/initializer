@@ -729,6 +729,10 @@ func TestRequirementParityMessageNamesMissingAndExtra(t *testing.T) {
 			tc.mutate(t, repo)
 			_, issues := buildRepo(t, repo)
 			assertCodes(t, issues, "REQUIRES_STACK_MISMATCH")
+			wantManifest := ngRoot + "parameters/module.manifest.json#/requiresModules"
+			if issues[0].Path != wantManifest {
+				t.Fatalf("path = %q, want %q", issues[0].Path, wantManifest)
+			}
 			if !strings.Contains(issues[0].Message, tc.wantMessage) {
 				t.Fatalf("message = %q, want it to contain %q", issues[0].Message, tc.wantMessage)
 			}
