@@ -3,11 +3,15 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
-import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
-import { CONFIG_URL, SESSION_URL, fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
+import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
+import { sessionView } from '../../../../testing/fixtures/session-view';
+import { SESSION_URL, fakeLocation, loadSession } from '../../../../testing/fixtures/session-testing';
+import { CONFIG_URL, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
 import { BROWSER_LOCATION } from '../session/browser-location';
-import { anonymousGuard, authGuard, flagGuard, requireSession } from './guards';
+import { FLAG_SOURCE } from '../flags/flag-source.port';
+import { flagGuard } from '../flags/flag-guard';
+import { SessionAccess } from '../session/session-access';
+import { anonymousGuard, authGuard, requireSession } from './guards';
 
 const OPERATOR = { id: 'a', email: 'op@example.com', fullName: null, role: null, isPlatformOperator: true };
 
@@ -42,7 +46,8 @@ describe('session guards', () => {
       ],
       [
         { provide: MessageService, useValue: { add: vi.fn() } },
-        { provide: BROWSER_LOCATION, useValue: fakeLocation() }
+        { provide: BROWSER_LOCATION, useValue: fakeLocation() },
+        { provide: FLAG_SOURCE, useExisting: SessionAccess }
       ]
     );
     http = TestBed.inject(HttpTestingController);

@@ -3,6 +3,9 @@ import { anonymousGuard, requireSession } from './guards/guards';
 import type { WebModule } from './composition/web-module';
 import type { SessionRequirement } from './guards/requirement';
 import { PLATFORM_CORE_I18N } from './i18n/scope';
+import { SessionAccess } from './session/session-access';
+import { TenancySelection } from './tenants/tenancy-selection';
+import { TenantsApi } from './tenants/tenants-api.service';
 
 const ADMIN_OF_TENANT: SessionRequirement = { tenant: 'required', roles: ['admin'] };
 
@@ -59,5 +62,6 @@ export const coreModule: WebModule = {
     { id: 'api-keys', labelKey: 'nav.apiKeys', icon: 'menu-icon menu-icon-layers', path: '/api-keys', requires: ADMIN_OF_TENANT },
     { id: 'operator-tenants', labelKey: 'nav.operatorTenants', icon: 'menu-icon menu-icon-building', path: '/operator/tenants', requires: PLATFORM_OPERATOR }
   ],
-  i18n: PLATFORM_CORE_I18N
+  i18n: PLATFORM_CORE_I18N,
+  ports: { access: SessionAccess, flags: SessionAccess, tenants: TenantsApi, tenantSelection: TenancySelection }
 };

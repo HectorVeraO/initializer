@@ -1,12 +1,8 @@
-import type { MembershipRole, SessionView } from '../session/session.types';
+import type { AccessRequirement } from '../access/access.types';
+import type { SessionView } from '../session/session.types';
 
-/** What a route or a nav entry requires from the session. Empty object = authenticated only. */
-export interface SessionRequirement {
-  readonly tenant?: 'required' | 'required-unless-operator';
-  readonly roles?: readonly MembershipRole[];
-  readonly platformOperator?: true;
-  readonly flag?: string;
-}
+/** What a route or a nav entry requires from the session: the core access requirement. */
+export type SessionRequirement = AccessRequirement;
 
 export type UnmetRequirement = 'tenant' | 'platformOperator' | 'roles' | 'flag';
 
@@ -16,7 +12,10 @@ export function firstUnmetRequirement(session: SessionView, requirement: Session
 
   const isOperator = session.account.isPlatformOperator;
 
-  if (requirement.tenant === 'required' && !hasTenant) {
+  // A tenantless operator meets the tenant and roles clauses, as in requireAccess.
+  const isTenantlessOperator = requirement.orTenantlessOperator === true && !hasTenant && isOperator;
+
+  if (requirement.tenant === 'required' && !hasTenant && !isTenantlessOperator) {
     return 'tenant';
   }
 
@@ -30,7 +29,7 @@ export function firstUnmetRequirement(session: SessionView, requirement: Session
 
   const role = session.account.role;
 
-  if (requirement.roles !== undefined && (role === null || !requirement.roles.includes(role))) {
+  if (requirement.roles !== undefined && !isTenantlessOperator && (role === null || !requirement.roles.includes(role))) {
     return 'roles';
   }
 

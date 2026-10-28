@@ -3,9 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import es from '../../../../assets/i18n/es.json';
-import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
-import { fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
+import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
+import { sessionView } from '../../../../testing/fixtures/session-view';
+import { fakeLocation, loadSession } from '../../../../testing/fixtures/session-testing';
+import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
 import { BROWSER_LOCATION } from '../session/browser-location';
 import { OperatorTenantsPage } from './operator-tenants-page.component';
 

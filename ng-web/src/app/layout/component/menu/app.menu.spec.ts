@@ -10,8 +10,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MessageService } from '@openng/optimus-ui/api';
 import { WebModule, SessionStore, coreModule, providePlatform } from '@/platform/core';
-import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
+import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
+import { sessionView } from '../../../../testing/fixtures/session-view';
 import { AppMenu } from './app.menu';
 
 function routePaths(routes: Routes, prefix = ''): string[] {

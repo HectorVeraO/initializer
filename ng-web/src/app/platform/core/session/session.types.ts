@@ -1,6 +1,8 @@
-export type MembershipRole = 'admin' | 'member' | 'viewer';
-export type TenantStatus = 'active' | 'suspended';
-export type MembershipStatus = 'active' | 'suspended' | 'revoked';
+import type { MembershipStatus, TenantRef, TenantRole } from '../access/access.types';
+
+export type { MembershipStatus, TenantStatus } from '../access/access.types';
+
+export type MembershipRole = TenantRole;
 
 /** One invitation as the API lists it (`InvitationView`). The token never appears here. */
 export interface InvitationView {
@@ -14,12 +16,7 @@ export interface InvitationView {
   readonly revokedAt: string | null;
 }
 
-export interface TenantSummary {
-  readonly id: string;
-  readonly slug: string;
-  readonly name: string;
-  readonly status: TenantStatus;
-}
+export type TenantSummary = TenantRef;
 
 /** The one membership item shape. */
 export interface SessionMembership {

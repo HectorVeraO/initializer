@@ -84,8 +84,3 @@ export function requireSession(requirement: SessionRequirement): CanMatchFn {
     }
   };
 }
-
-/** `requireSession({ flag })` without the auth part; an unknown key is false. */
-export function flagGuard(flagKey: string): CanMatchFn {
-  return () => inject(SessionStore).isEnabled(flagKey);
-}

@@ -10,8 +10,3 @@ export function sessionView(overrides: Record<string, unknown> = {}): Record<str
     ...overrides
   };
 }
-
-/** Success envelope around `data`. */
-export function okEnvelope(data: unknown): object {
-  return { data, meta: { traceId: 'abc', timestamp: '2026-01-01T00:00:00Z' }, error: null };
-}

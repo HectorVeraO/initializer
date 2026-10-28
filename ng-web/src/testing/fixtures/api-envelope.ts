@@ -4,3 +4,8 @@
 export function errorEnvelope(code: string, issues: unknown[] = [], traceId = 'abc'): object {
   return { data: null, meta: { traceId, timestamp: '2026-01-01T00:00:00Z' }, error: { code, message: 'text', issues } };
 }
+
+/** Success envelope around `data`. */
+export function okEnvelope(data: unknown): object {
+  return { data, meta: { traceId: 'abc', timestamp: '2026-01-01T00:00:00Z' }, error: null };
+}
