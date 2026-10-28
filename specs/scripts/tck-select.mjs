@@ -16,7 +16,10 @@ export class TckError extends Error {
 /**
  * Reads every `<root>/<spec>/spec.manifest.json`, sorted by spec folder name.
  * @param {string} root directory holding the spec folders
- * @returns {{ spec: string, tckTags: string[], tckEnv: Record<string, string> }[]}
+ * tckTags and cooperatesWith must be arrays when present (TckError exit 2); a
+ * cooperatesWith item must match the tag pattern and must not be one of the
+ * spec's own tckTags (TckError exit 2).
+ * @returns {{ spec: string, tckTags: string[], tckEnv: Record<string, string>, cooperatesWith: string[] }[]}
  */
 export function loadManifests(root) {
   if (typeof root !== 'string' || root === '') {
@@ -39,10 +42,25 @@ export function loadManifests(root) {
     if (raw.tckTags !== undefined && !Array.isArray(raw.tckTags)) {
       throw new TckError(`tckTags must be an array in ${path}`, 2);
     }
+    const spec = typeof raw.spec === 'string' ? raw.spec : folder;
+    const tckTags = raw.tckTags ?? [];
+    if (raw.cooperatesWith !== undefined && !Array.isArray(raw.cooperatesWith)) {
+      throw new TckError(`cooperatesWith must be an array in ${path} (spec ${spec})`, 2);
+    }
+    const cooperatesWith = raw.cooperatesWith ?? [];
+    for (const tag of cooperatesWith) {
+      if (typeof tag !== 'string' || !TAG_PATTERN.test(tag)) {
+        throw new TckError(`invalid cooperatesWith tag ${JSON.stringify(tag)} in spec ${spec}`, 2);
+      }
+      if (tckTags.includes(tag)) {
+        throw new TckError(`cooperatesWith tag ${tag} is one of the own tckTags of spec ${spec}`, 2);
+      }
+    }
     manifests.push({
-      spec: typeof raw.spec === 'string' ? raw.spec : folder,
-      tckTags: raw.tckTags ?? [],
+      spec,
+      tckTags,
       tckEnv: raw.tckEnv && typeof raw.tckEnv === 'object' ? raw.tckEnv : {},
+      cooperatesWith,
     });
   }
   return manifests;
@@ -115,26 +133,54 @@ export function tagPattern(tags) {
 }
 
 /**
- * Plans the Playwright passes for a tag set. Pass 1 holds every tag except
- * `@feature-flags`; pass 2 runs `@feature-flags` alone on one worker.
- * @param {string[]} tags
+ * Cooperating tags whose spec is not installed: the union of every manifest's
+ * cooperatesWith minus `installed`, sorted bytewise, without duplicates.
+ * @param {{ cooperatesWith: string[] }[]} manifests
+ * @param {string[]} installed
+ * @returns {string[]}
+ */
+export function collectInvertTags(manifests, installed) {
+  if (!Array.isArray(manifests) || !Array.isArray(installed)) {
+    throw new TypeError('collectInvertTags: manifests and installed must be arrays');
+  }
+  const missing = new Set();
+  for (const manifest of manifests) {
+    for (const tag of manifest.cooperatesWith ?? []) {
+      if (!installed.includes(tag)) {
+        missing.add(tag);
+      }
+    }
+  }
+  const sorted = [...missing].sort();
+  return sorted;
+}
+
+/**
+ * Plans the Playwright passes. Pass 1 holds every tag except `@feature-flags` and
+ * inverts `@feature-flags` plus invertTags; pass 2 runs `@feature-flags` alone on
+ * one worker and inverts invertTags when there are any.
+ * @param {string[]} tags selected tags
+ * @param {string[]} [invertTags] uninstalled cooperating tags
  * @returns {{ name: string, args: string[] }[]}
  */
-export function planPasses(tags) {
+export function planPasses(tags, invertTags = []) {
   const hasFlags = tags.includes(FLAGS_TAG);
   const rest = tags.filter((tag) => tag !== FLAGS_TAG);
   const passes = [];
   if (rest.length > 0) {
+    const mainInvert = [FLAGS_TAG, ...invertTags.filter((tag) => tag !== FLAGS_TAG)];
     passes.push({
       name: 'main',
-      args: ['test', '--grep', tagPattern(rest), '--grep-invert', tagPattern([FLAGS_TAG])],
+      args: ['test', '--grep', tagPattern(rest), '--grep-invert', tagPattern(mainInvert)],
     });
   }
   if (hasFlags) {
-    passes.push({
-      name: 'feature-flags',
-      args: ['test', '--grep', tagPattern([FLAGS_TAG]), '--workers', '1'],
-    });
+    const args = ['test', '--grep', tagPattern([FLAGS_TAG])];
+    if (invertTags.length > 0) {
+      args.push('--grep-invert', tagPattern(invertTags));
+    }
+    args.push('--workers', '1');
+    passes.push({ name: 'feature-flags', args });
   }
   if (passes.length === 0) {
     throw new TckError('no tags to select', 2);

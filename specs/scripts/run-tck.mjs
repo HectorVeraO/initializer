@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { mergeTckEnv } from './tck-env.mjs';
-import { collectTags, loadManifests, narrowTags, parseTagList, planPasses, TckError } from './tck-select.mjs';
+import { collectInvertTags, collectTags, loadManifests, narrowTags, parseTagList, planPasses, TckError } from './tck-select.mjs';
 
 const SPECS_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -23,8 +23,10 @@ export function planRun({ specsDir, tags }) {
   if (manifests.length === 0) {
     throw new TckError(`no spec.manifest.json found under ${specsDir}/*/`, 1);
   }
-  const selected = narrowTags(collectTags(manifests), parseTagList(tags));
-  return planPasses(selected);
+  const installed = collectTags(manifests);
+  const selected = narrowTags(installed, parseTagList(tags));
+  const invert = collectInvertTags(manifests, installed);
+  return planPasses(selected, invert);
 }
 
 function main() {

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
-import { collectTags, loadManifests, narrowTags, TckError } from './tck-select.mjs';
+import { collectInvertTags, collectTags, loadManifests, narrowTags, TckError } from './tck-select.mjs';
 import { buildExports } from './tck-env.mjs';
 import { planRun } from './run-tck.mjs';
 import { checkTests } from './check-tags.mjs';
@@ -261,4 +261,141 @@ test('run-tck keeps a value the caller already exported', () => {
   const env = { ...process.env, TCK_FIXTURE_VALUE: 'from-caller', TCK_FIXTURE_EXPECTED: 'from-caller' };
   const result = runNode('run-tck.mjs', ['--specs-dir', root], { stdio: 'pipe', env });
   assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+});
+
+const coopRoot = (name) => join(fixtures, 'cooperation', name);
+
+function invertOf(pass) {
+  const index = pass.args.indexOf('--grep-invert');
+  const invert = index === -1 ? undefined : new RegExp(pass.args[index + 1]);
+  return invert;
+}
+
+test('loadManifests reads cooperatesWith and defaults it to an empty list', () => {
+  const [alpha] = loadManifests(coopRoot('absent'));
+  assert.deepEqual(alpha.cooperatesWith, ['@beta']);
+  const [core] = manifestsOf('core');
+  assert.deepEqual(core.cooperatesWith, []);
+});
+
+function assertCooperatesWithRejected(cooperatesWith, message) {
+  const root = mkdtempSync(join(tmpdir(), 'tck-coop-'));
+  try {
+    mkdirSync(join(root, 'bad'));
+    writeFileSync(
+      join(root, 'bad', 'spec.manifest.json'),
+      JSON.stringify({ spec: 'bad', tckTags: ['@bad'], cooperatesWith }),
+    );
+    assert.throws(
+      () => loadManifests(root),
+      (error) => error instanceof TckError && error.exitCode === 2 && message.test(error.message),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test('loadManifests rejects a non-array cooperatesWith with exit code 2', () => {
+  assertCooperatesWithRejected('@beta', /cooperatesWith must be an array.*bad/);
+});
+
+test('loadManifests rejects a malformed cooperatesWith tag with exit code 2', () => {
+  assertCooperatesWithRejected(['Beta'], /invalid cooperatesWith tag "Beta".*bad/);
+});
+
+test('loadManifests rejects a cooperatesWith tag that is an own tckTag with exit code 2', () => {
+  assertCooperatesWithRejected(['@bad'], /cooperatesWith tag @bad is one of the own tckTags of spec bad/);
+});
+
+test('collectInvertTags returns the uninstalled cooperating tags, sorted and unique', () => {
+  const manifests = [{ cooperatesWith: ['@b', '@a'] }, { cooperatesWith: ['@a'] }];
+  assert.deepEqual(collectInvertTags(manifests, ['@a']), ['@b']);
+  assert.deepEqual(collectInvertTags(manifests, ['@a', '@b']), []);
+});
+
+test('an uninstalled cooperating tag is inverted in the main pass', () => {
+  const [main] = planRun({ specsDir: coopRoot('absent') });
+  const invert = invertOf(main);
+  assert.match('x @alpha @beta', invert);
+  assert.match('x @feature-flags', invert);
+  assert.doesNotMatch('x @alpha', invert);
+  assert.match('x @alpha', grepOf(main));
+});
+
+test('an installed cooperating tag is not inverted', () => {
+  const [main] = planRun({ specsDir: coopRoot('installed') });
+  assert.doesNotMatch('x @alpha @beta', invertOf(main));
+});
+
+test('the invert keeps the tag boundary', () => {
+  const [main] = planRun({ specsDir: coopRoot('absent') });
+  assert.doesNotMatch('x @alpha @beta-x', invertOf(main));
+});
+
+test('the serial pass inverts uninstalled cooperating tags', () => {
+  const [main, serial] = planRun({ specsDir: coopRoot('flags') });
+  assert.equal(workersOf(serial), '1');
+  const invert = invertOf(serial);
+  assert.match('x @feature-flags @beta', invert);
+  assert.doesNotMatch('x @feature-flags', invert);
+  assert.match('x @feature-flags', invertOf(main));
+});
+
+test('narrowing keeps a co-tagged test whose tags are all installed', () => {
+  const [main] = planRun({ specsDir: coopRoot('installed'), tags: '@alpha' });
+  assert.match('x @alpha @beta', grepOf(main));
+  assert.doesNotMatch('x @alpha @beta', invertOf(main));
+});
+
+test('narrowing still inverts an uninstalled cooperating tag', () => {
+  const [main] = planRun({ specsDir: coopRoot('absent'), tags: '@alpha' });
+  assert.match('x @alpha', grepOf(main));
+  assert.match('x @alpha @beta', invertOf(main));
+  assert.doesNotMatch('x @alpha', invertOf(main));
+});
+
+test('run-tck --dry-run prints the invert of the cooperating tag', () => {
+  const result = runNode('run-tck.mjs', ['--dry-run', '--specs-dir', coopRoot('absent')]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /--grep-invert .*beta/);
+});
+
+test('run-tck does not run a co-tagged test whose cooperating spec is absent', () => {
+  const result = runNode('run-tck.mjs', ['--specs-dir', coopRoot('absent')], { stdio: 'pipe' });
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+});
+
+test('checkTests accepts a declared cooperating tag, installed or not', () => {
+  const alpha = { spec: 'alpha', tckTags: ['@alpha'], cooperatesWith: ['@beta'] };
+  const beta = { spec: 'beta', tckTags: ['@beta'], cooperatesWith: [] };
+  const tests = [{ file: 'alpha/tck/a.spec.ts', line: 3, title: 'both', tags: ['@alpha', '@beta'] }];
+  assert.deepEqual(checkTests(tests, [alpha, beta]), []);
+  assert.deepEqual(checkTests(tests, [alpha]), []);
+});
+
+test('checkTests reports an undeclared foreign tag and an unknown tag', () => {
+  const alpha = { spec: 'alpha', tckTags: ['@alpha'], cooperatesWith: [] };
+  const beta = { spec: 'beta', tckTags: ['@beta'], cooperatesWith: [] };
+  const foreign = [{ file: 'alpha/tck/a.spec.ts', line: 3, title: 'both', tags: ['@alpha', '@beta'] }];
+  const unknown = [{ file: 'alpha/tck/a.spec.ts', line: 4, title: 'gamma', tags: ['@alpha', '@gamma'] }];
+  const [foreignProblem] = checkTests(foreign, [alpha, beta]);
+  assert.match(foreignProblem, /^TCK_TAG_FOREIGN: .* carries @beta of specs\/beta$/);
+  const [unknownProblem] = checkTests(unknown, [alpha, beta]);
+  assert.match(unknownProblem, /^TCK_TAG_FOREIGN: .* carries @gamma, which no installed spec declares$/);
+});
+
+test('check-tags passes on a declared cooperation, with and without the cooperating spec', () => {
+  for (const name of ['cooperation', 'cooperation-absent']) {
+    const result = checkRoot(name);
+    assert.equal(result.status, 0, result.stderr);
+  }
+});
+
+test('check-tags fails an unknown tag', () => {
+  const result = checkRoot('unknown');
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /TCK_TAG_FOREIGN: alpha\/tck\/a\.spec\.ts:\d+ ".*" carries @gamma, which no installed spec declares/,
+  );
 });
