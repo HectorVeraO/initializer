@@ -28,7 +28,8 @@ test.describe('Console with api-keys and no tenancy', () => {
       await apiKeysPage.create('console-global-key', 'api-keys:read');
 
       await expect(apiKeysPage.scopesError).toHaveText(SCOPE_LEVEL_MISMATCH);
-      await expect(apiKeysPage.secretDialog).toHaveCount(0);
+      // The dialog host is always mounted; the value input renders only while a secret shows.
+      await expect(apiKeysPage.secretValue).toHaveCount(0);
       await expect(apiKeysPage.row('console-global-key')).toHaveCount(0);
     },
   );

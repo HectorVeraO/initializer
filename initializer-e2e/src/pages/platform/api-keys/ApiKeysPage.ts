@@ -9,6 +9,7 @@ export class ApiKeysPage {
   readonly scopesError: Locator;
   readonly rows: Locator;
   readonly secretDialog: Locator;
+  readonly secretValue: Locator;
 
   constructor(private readonly page: Page) {
     this.name = page.getByTestId('api-key-name');
@@ -17,6 +18,7 @@ export class ApiKeysPage {
     this.scopesError = page.getByTestId('api-key-scopes-error');
     this.rows = page.getByTestId('api-keys-row');
     this.secretDialog = page.getByTestId('one-time-secret-dialog');
+    this.secretValue = page.getByTestId('one-time-secret-value');
   }
 
   /** Fills the create form with one scope and submits it. */
