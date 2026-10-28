@@ -130,7 +130,7 @@ func TestMissingSessionKeysFailBuild(t *testing.T) {
 	}
 }
 
-func TestProvideRegistersTheAPIKeyScopeAndNotTheTenantScope(t *testing.T) {
+func TestProvideRegistersNoScope(t *testing.T) {
 	var registry *coreaccess.ScopeRegistry
 	probe := core.Module{
 		ID: "scope-probe",
@@ -143,8 +143,8 @@ func TestProvideRegistersTheAPIKeyScopeAndNotTheTenantScope(t *testing.T) {
 		Database: true,
 		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
 	})
-	if !registry.Known("api-keys:read") {
-		t.Error("scope api-keys:read is not registered")
+	if registry.Known("api-keys:read") {
+		t.Error("scope api-keys:read is registered by identity, it is api-keys'")
 	}
 	if registry.Known("tenant:read") {
 		t.Error("scope tenant:read is registered by identity, it is tenancy's")
@@ -263,5 +263,19 @@ func TestSeedKeyIsAcceptedUnderAnHTTPSPublicURL(t *testing.T) {
 	hasKeyProblem := err != nil && strings.Contains(err.Error(), "APP_SESSION_KEYS")
 	if hasKeyProblem {
 		t.Fatalf("want Build to accept the session keys, got %v", err)
+	}
+}
+
+func TestAPIKeyRoutesBelongToAPIKeys(t *testing.T) {
+	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
+		Database: true,
+		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
+	})
+	for _, path := range []string{"/api/v1/api-keys", "/api/v1/api-key-scopes"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s answered %d, want 404: identity alone mounts no api-keys route", path, rec.Code)
+		}
 	}
 }

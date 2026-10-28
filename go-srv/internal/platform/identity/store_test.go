@@ -53,8 +53,8 @@ func TestMigrationsCreateOnlyIdentityTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collect tables: %v", err)
 	}
-	if strings.Join(tables, ",") != "iam_accounts,iam_api_keys" {
-		t.Fatalf("tables = %v, want only iam_accounts and iam_api_keys (no ten_* table)", tables)
+	if strings.Join(tables, ",") != "iam_accounts" {
+		t.Fatalf("tables = %v, want only iam_accounts (no ten_* or apk_* table)", tables)
 	}
 }
 
@@ -118,66 +118,5 @@ func TestUpperCaseEmailIsRejectedByTheSchema(t *testing.T) {
 	isCheckViolation := errors.As(err, &pgErr) && pgErr.Code == "23514"
 	if !isCheckViolation {
 		t.Fatalf("want check_violation, got %v", err)
-	}
-}
-
-// insertAPIKey stores a key row; a nil tenantID is a key without a tenant.
-func insertAPIKey(pool *pgxpool.Pool, tenantID any, createdBy, prefix string, scopes []string) error {
-	_, err := pool.Exec(context.Background(),
-		`INSERT INTO iam_api_keys (tenant_id, name, key_prefix, secret_hash, scopes, created_by_account_id)
-VALUES ($1::uuid, 'ci', $2, $3, $4, $5::uuid)`,
-		tenantID, prefix, make([]byte, 32), scopes, createdBy)
-	return err
-}
-
-func isCheckViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23514"
-}
-
-func TestAPIKeyConstraints(t *testing.T) {
-	s, pool := newTestStore(t)
-	tenant := randomUUID(t)
-	admin := mustAccount(t, s, "admin@example.com")
-	valid := apiKeyPrefixLabel + strings.Repeat("a", apiKeyIDChars)
-
-	err := insertAPIKey(pool, tenant, admin.ID, valid, []string{})
-	if !isCheckViolation(err) {
-		t.Errorf("empty scopes: want check_violation, got %v", err)
-	}
-	err = insertAPIKey(pool, tenant, admin.ID, apiKeyPrefixLabel+strings.Repeat("A", apiKeyIDChars), []string{"tenant:read"})
-	if !isCheckViolation(err) {
-		t.Errorf("upper-case prefix: want check_violation, got %v", err)
-	}
-	err = insertAPIKey(pool, tenant, admin.ID, "ak_test_"+strings.Repeat("a", apiKeyIDChars), []string{"tenant:read"})
-	if !isCheckViolation(err) {
-		t.Errorf("other label: want check_violation, got %v", err)
-	}
-	err = insertAPIKey(pool, tenant, admin.ID, apiKeyPrefixLabel+strings.Repeat("a", apiKeyIDChars+1), []string{"tenant:read"})
-	if !isCheckViolation(err) {
-		t.Errorf("long prefix: want check_violation, got %v", err)
-	}
-	err = insertAPIKey(pool, tenant, admin.ID, valid, []string{"tenant:read"})
-	if err != nil {
-		t.Fatalf("valid key: %v", err)
-	}
-	err = insertAPIKey(pool, tenant, admin.ID, valid, []string{"tenant:read"})
-	if err == nil {
-		t.Error("duplicate prefix accepted")
-	}
-}
-
-func TestAPIKeyRowsCarryNoForeignKeys(t *testing.T) {
-	_, pool := newTestStore(t)
-	global := apiKeyPrefixLabel + strings.Repeat("b", apiKeyIDChars)
-	foreign := apiKeyPrefixLabel + strings.Repeat("c", apiKeyIDChars)
-
-	err := insertAPIKey(pool, nil, randomUUID(t), global, []string{"tenant:read"})
-	if err != nil {
-		t.Errorf("a key without a tenant: %v", err)
-	}
-	err = insertAPIKey(pool, randomUUID(t), randomUUID(t), foreign, []string{"tenant:read"})
-	if err != nil {
-		t.Errorf("a key of a tenant and creator that no table holds: %v", err)
 	}
 }

@@ -1,5 +1,5 @@
 // Package identity is the identity catalog module: accounts, platform
-// operators, the BFF session and API keys on top of Ory Kratos identities.
+// operators and the BFF session on top of Ory Kratos identities.
 package identity
 
 import (
@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
-	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/session"
 )
@@ -25,10 +24,6 @@ type service struct {
 	// public is nil only when APP_KRATOS_PUBLIC_URL is invalid, which fails Build.
 	public *kratos.Public
 	access *access
-	// apiKeys backs the API key routes.
-	apiKeys *apiKeys
-	// keyResolver reads tenants through the host's TenantDirectory, set in Mount.
-	keyResolver *apiKeyResolver
 }
 
 // provideSession builds the token codec and the cookie helpers. A bad
@@ -73,15 +68,13 @@ func Module() core.Module {
 }
 
 // provide parses the configuration (every problem goes to the shared reader,
-// so core reports them together), keeps the pool without querying it, and
-// registers the scopes later routes declare in their policies.
+// so core reports them together), and keeps the pool without querying it.
 func (s *service) provide(_ context.Context, b *core.Builder) error {
 	s.cfg = parseConfig(b.Config(), b.PublicBaseURL())
 	s.store = newStore(b.Pool(), b.Clock())
 	s.access = newAccess(b.Pool(), b.Clock(), s.cfg.PlatformOperatorEmails)
 	s.provideSession(b)
 	s.provideKratos(b)
-	s.apiKeys = newAPIKeys(b.Pool(), b.Clock())
 	accountsPort := newAccountDirectory(b.Pool(), b.Clock(), s.admin, s.cfg.PlatformOperatorEmails)
 	err := b.ProvideAccountDirectory(accountsPort)
 	if err != nil {
@@ -90,24 +83,6 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 	err = b.ProvideAccountProvisioner(accountsPort)
 	if err != nil {
 		return fmt.Errorf("provide account provisioner: %w", err)
-	}
-	s.keyResolver = newAPIKeyResolver(b.Pool(), b.Clock(), b.Scopes(), b.Logger())
-	err = b.ProvideAPIKeyResolver(s.keyResolver)
-	if err != nil {
-		return fmt.Errorf("provide api key resolver: %w", err)
-	}
-
-	scopes := []struct {
-		name, description string
-		level             coreaccess.ScopeLevel
-	}{
-		{"api-keys:read", "List the tenant's API key metadata", coreaccess.ScopeTenant},
-	}
-	for _, scope := range scopes {
-		err = b.Scopes().Register(scope.name, scope.description, scope.level)
-		if err != nil {
-			return fmt.Errorf("register scope: %w", err)
-		}
 	}
 	return nil
 }
@@ -128,11 +103,8 @@ func (s *service) provideKratos(b *core.Builder) {
 	}
 }
 
-// mount wires the API key resolver to the host tenant directory and registers
-// the session and API key routes.
+// mount registers the session routes.
 func (s *service) mount(_ context.Context, h *core.Host) error {
-	s.keyResolver.tenants = h.TenantDirectory()
 	s.mountSession(h)
-	s.mountAPIKeys(h)
 	return nil
 }

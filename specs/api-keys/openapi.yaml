@@ -23,7 +23,7 @@ paths:
     get:
       operationId: listApiKeys
       tags: [api-keys]
-      description: Admin session, or an API key holding api-keys:read. Never a secret or hash.
+      description: Admin session, a platform operator without an active tenant (lists the global keys), or an API key holding api-keys:read. A key without a tenant answers 403 ACTIVE_TENANT_REQUIRED. Never a secret or hash.
       security: [{ sessionCookie: [] }, { apiKey: [] }]
       x-initializer-scope: api-keys:read
       parameters:
@@ -48,7 +48,7 @@ paths:
     post:
       operationId: createApiKey
       tags: [api-keys]
-      description: Admin session only. plainTextKey is shown once and never stored.
+      description: Admin session, or a platform operator without an active tenant (global keys). plainTextKey is shown once and never stored.
       security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: '#/components/parameters/XsrfToken' }
@@ -68,7 +68,7 @@ paths:
     delete:
       operationId: revokeApiKey
       tags: [api-keys]
-      description: Admin session only. Idempotent; a foreign, unknown or malformed id is 404.
+      description: Admin session, or a platform operator without an active tenant (global keys). Idempotent; a foreign, unknown or malformed id is 404.
       security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: '#/components/parameters/Id' }
@@ -84,7 +84,7 @@ paths:
     get:
       operationId: listApiKeyScopes
       tags: [api-keys]
-      description: Admin session only. The scopes registered by installed modules, ordered by name.
+      description: Admin session, or a platform operator without an active tenant. The scopes registered by installed modules, ordered by name.
       security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: '#/components/parameters/ActiveTenantId' }
