@@ -647,8 +647,9 @@ func TestAcceptNewDoesNotGrantOperatorWhenTheEmailIsNotListed(t *testing.T) {
 		t.Fatalf("accept new: %v", err)
 	}
 	holders, err := e.accounts.Get(context.Background(), []reqctx.AccountID{reqctx.AccountID(got.Account.ID)})
-	if err != nil || holders[reqctx.AccountID(got.Account.ID)].PlatformOperator {
-		t.Fatalf("holders = %+v err=%v, want no operator flag", holders, err)
+	holder, found := holders[reqctx.AccountID(got.Account.ID)]
+	if err != nil || !found || holder.PlatformOperator {
+		t.Fatalf("holders = %+v err=%v, want the account present without the operator flag", holders, err)
 	}
 }
 

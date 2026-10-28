@@ -121,6 +121,29 @@ func TestGetTenantRequiresTheTenantReadScopeOnAnAPIKey(t *testing.T) {
 	}
 }
 
+func TestTenantRoutesRefuseAnAPIKeyOnSessionOnlyRoutes(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	key := e.apiKey(tenant, []string{"tenant:read"})
+	routes := []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/tenants"},
+		{http.MethodPost, "/api/v1/tenants"},
+		{http.MethodPatch, "/api/v1/tenants/" + randomUUID(t) + "/status"},
+		{http.MethodPatch, "/api/v1/memberships/" + randomUUID(t)},
+		{http.MethodPost, "/api/v1/invitations"},
+		{http.MethodDelete, "/api/v1/invitations/" + randomUUID(t)},
+		{http.MethodPost, "/api/v1/invitations/accept"},
+		{http.MethodGet, "/api/v1/memberships"},
+		{http.MethodGet, "/api/v1/invitations"},
+	}
+	for _, route := range routes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			rec := e.client().doBody(route.method, route.path, map[string]string{apiKeyHeader: key}, `{}`)
+			expectError(t, rec, http.StatusUnauthorized, "SESSION_INVALID")
+		})
+	}
+}
+
 func TestGetTenantRefusals(t *testing.T) {
 	e := newInvEnv(t, "")
 	tenant := e.tenant("tenant-a", "active")
