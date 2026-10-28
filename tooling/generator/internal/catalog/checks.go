@@ -230,6 +230,14 @@ func (b *builder) checkSpecSet(backendImplemented map[string]bool) {
 			tagOwner[tag] = spec
 		}
 	}
+	for _, spec := range b.specs {
+		for i, tag := range spec.spec.CooperatesWith {
+			if _, owned := tagOwner[tag]; !owned {
+				b.add(CodeTCKTagUnknown, spec.path, fmt.Sprintf("/cooperatesWith/%d", i),
+					fmt.Sprintf("cooperatesWith names %s, which no spec declares in tckTags", tag))
+			}
+		}
+	}
 }
 
 // checkCycles reports each group of modules that require each other, once.

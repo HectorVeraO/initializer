@@ -113,6 +113,7 @@ func (b *builder) run() (Project, error) {
 		Selection:     p.Selection,
 		TCKTags:       p.TCKTags,
 		TCKGrep:       p.TCKGrep,
+		TCKGrepInvert: p.TCKGrepInvert,
 		TCKEnv:        p.TCKEnv,
 	}
 	for _, spec := range p.Specs {

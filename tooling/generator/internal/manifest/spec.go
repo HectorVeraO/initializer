@@ -13,9 +13,12 @@ type Spec struct {
 	Version semver.Version
 	TCKTags []string
 	TCKEnv  map[string]string
+	// CooperatesWith lists the tags of other specs whose routes this spec's
+	// cooperation scenarios call; empty when the key is absent.
+	CooperatesWith []string
 }
 
-var specKeys = []string{"schema", "spec", "version", "tckTags", "tckEnv"}
+var specKeys = []string{"schema", "spec", "version", "tckTags", "tckEnv", "cooperatesWith"}
 
 // DecodeSpec decodes and validates a spec manifest. path is the manifest file
 // path used in issue paths; folder is the name of the spec folder, which must
@@ -51,6 +54,10 @@ func DecodeSpec(path, folder string, data []byte) (Spec, []issue.Issue) {
 	if raw, ok := d.required(members, "", "tckEnv"); ok {
 		spec.TCKEnv = d.tckEnv(raw)
 	}
+	spec.CooperatesWith = []string{}
+	if raw, present := members["cooperatesWith"]; present {
+		spec.CooperatesWith = d.cooperatesWith(raw, spec.TCKTags)
+	}
 	return spec, d.result()
 }
 
@@ -60,12 +67,15 @@ func (d *decoder) tckTags(raw []byte) []string {
 		return nil
 	}
 	tags := []string{}
+	if len(values) == 0 {
+		d.add("/tckTags", "must list at least one tag")
+	}
 	for i, value := range values {
 		if !valid[i] {
 			continue
 		}
-		if !tckTagTable[value] {
-			d.add(fmt.Sprintf("/tckTags/%d", i), "must be one of the known TCK tags")
+		if !TagPattern.MatchString(value) {
+			d.add(fmt.Sprintf("/tckTags/%d", i), "must match ^@[a-z][a-z0-9-]*$")
 			valid[i] = false
 			continue
 		}
@@ -92,4 +102,35 @@ func (d *decoder) tckEnv(raw []byte) map[string]string {
 		}
 	}
 	return env
+}
+
+// cooperatesWith decodes the optional /cooperatesWith array: each item matches
+// the tag pattern, items are sorted bytewise and unique, and none is one of own.
+func (d *decoder) cooperatesWith(raw []byte, own []string) []string {
+	values, valid, ok := d.strings(raw, "/cooperatesWith")
+	if !ok {
+		return []string{}
+	}
+	ownSet := map[string]bool{}
+	for _, tag := range own {
+		ownSet[tag] = true
+	}
+	tags := []string{}
+	for i, value := range values {
+		if !valid[i] {
+			continue
+		}
+		pointer := fmt.Sprintf("/cooperatesWith/%d", i)
+		if !TagPattern.MatchString(value) {
+			d.add(pointer, "must match ^@[a-z][a-z0-9-]*$")
+			valid[i] = false
+			continue
+		}
+		if ownSet[value] {
+			d.add(pointer, "must name another spec's tag, not this spec's own")
+		}
+		tags = append(tags, value)
+	}
+	d.checkOrder("/cooperatesWith", values, valid)
+	return tags
 }

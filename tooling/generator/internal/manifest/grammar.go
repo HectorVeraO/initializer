@@ -13,6 +13,9 @@ const (
 
 const maxIDLength = 31
 
+// TagPattern is the grammar of a TCK tag.
+var TagPattern = regexp.MustCompile(`^@[a-z][a-z0-9-]*$`)
+
 var (
 	idPattern          = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 	tablePrefixPattern = regexp.MustCompile(`^[a-z]{2,4}$`)
@@ -20,14 +23,6 @@ var (
 	projectNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 	goSegmentPattern   = regexp.MustCompile(`^[A-Za-z0-9._~-]+$`)
 )
-
-var tckTagTable = map[string]bool{
-	"@core":          true,
-	"@identity":      true,
-	"@otel":          true,
-	"@parameters":    true,
-	"@feature-flags": true,
-}
 
 // IsBackendStack reports whether stack is a backend stack of the stack table.
 func IsBackendStack(stack string) bool {
