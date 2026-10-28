@@ -1,4 +1,4 @@
-import { Location } from '@angular/common';
+import { BrowserPlatformLocation, Location, PlatformLocation } from '@angular/common';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
@@ -31,6 +31,8 @@ describe('AcceptInvitationPage router URL', () => {
           { path: 'login', component: BlankComponent },
           { path: 'invitations/accept', component: AcceptInvitationPage }
         ]),
+        // The real browser location: replaceState really empties document.location.hash, unlike TestBed's mock.
+        { provide: PlatformLocation, useClass: BrowserPlatformLocation },
         provideOptimus({}),
         ConfirmationService,
         { provide: MessageService, useValue: { add: vi.fn() } },
@@ -52,13 +54,14 @@ describe('AcceptInvitationPage router URL', () => {
 
     const harness = await RouterTestingHarness.create();
 
-    // TestBed's Location is a mock; the page reads the fragment from the document, so the document carries the same URL as a real browser would.
+    // The page reads the fragment from the document, so the document carries the URL of the invitation link.
     history.replaceState(null, '', `/invitations/accept#token=${TOKEN}`);
 
     await harness.navigateByUrl(`/invitations/accept#token=${TOKEN}`);
     harness.detectChanges();
 
     expect(location.path(true)).toBe('/invitations/accept');
+    expect(document.location.href).not.toContain(TOKEN);
     await vi.waitFor(() => expect(router.url).toBe('/invitations/accept'));
 
     const submit = await vi.waitFor(() => {
@@ -71,11 +74,16 @@ describe('AcceptInvitationPage router URL', () => {
 
     submit.click();
 
-    (await nextCall('POST', '/api/v1/invitations/accept')).flush(errorEnvelope('INVITATION_INVALID'), { status: 404, statusText: 'Not Found' });
+    const accept = await nextCall('POST', '/api/v1/invitations/accept');
+
+    expect(accept.request.body).toEqual({ token: TOKEN });
+
+    accept.flush(errorEnvelope('INVITATION_INVALID'), { status: 404, statusText: 'Not Found' });
 
     await vi.waitFor(() => expect(document.querySelector('[data-testid="accept-error"]')).not.toBeNull());
 
     expect(router.url).not.toContain(TOKEN);
     expect(location.path(true)).not.toContain(TOKEN);
+    expect(document.location.href).not.toContain(TOKEN);
   });
 });
