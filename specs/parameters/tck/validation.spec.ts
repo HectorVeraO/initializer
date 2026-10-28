@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { bootstrapOperator, expectData, expectError, mutate, seedTenant } from '../../tck-support/actors';
+import { bootstrapOperator, expectData, expectError, mutate } from '../../tck-support/actors';
+import { seedTenant } from '../../tck-support/actors/tenants';
 import { defineParameter, expectView, issueSet, overridePath, paramKey, rawMutate, readParameter } from './support';
 
 test('P6 an override must match the type and the range', { tag: '@parameters' }, async ({ playwright }) => {

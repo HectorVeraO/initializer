@@ -2,7 +2,9 @@ import { strict as assert } from 'node:assert';
 import { randomBytes } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import type { APIResponse } from '@playwright/test';
-import { apiKeyClient, bootstrapOperator, expectData, expectError, mutate, seedTenant } from '../../tck-support/actors';
+import { bootstrapOperator, expectData, expectError, mutate } from '../../tck-support/actors';
+import { seedTenant } from '../../tck-support/actors/tenants';
+import { apiKeyClient } from '../../tck-support/actors/api-keys';
 import type { Actor } from '../../tck-support/actors';
 
 interface ApiKeyView {
