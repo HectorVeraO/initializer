@@ -7,11 +7,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/db"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 )
 
@@ -20,11 +18,10 @@ import (
 const bootstrapLockKey int64 = 7142001001
 
 const (
-	bootstrapRole      = "admin"
-	initialBackoff     = time.Second
-	maxBackoff         = 8 * time.Second
-	unlockTimeout      = 5 * time.Second
-	reasonTenantsExist = "tenants_exist"
+	initialBackoff      = time.Second
+	maxBackoff          = 8 * time.Second
+	unlockTimeout       = 5 * time.Second
+	reasonAccountsExist = "accounts_exist"
 )
 
 // BootstrapOutcome reports what Bootstrap did; it carries no secret.
@@ -32,7 +29,6 @@ type BootstrapOutcome struct {
 	Skipped        bool
 	IdentityReused bool
 	AccountID      string
-	TenantID       string
 }
 
 // start is the Start hook: the Day-0 bootstrap, then the platform operator
@@ -52,8 +48,8 @@ func (s *service) start(ctx context.Context, h *core.Host) error {
 	return nil
 }
 
-// bootstrap provisions the first tenant and its operator-admin idempotently.
-// It is a no-op once any tenant exists. The whole run, lock wait included, is
+// bootstrap provisions the operator account idempotently. It is a no-op once
+// any account exists; the first tenant is tenancy's. The whole run, lock wait included, is
 // bounded by cfg.Timeout. A failure is returned, not logged: core logs it once
 // as server_failed.
 func (s *service) bootstrap(ctx context.Context, logger *slog.Logger, cfg BootstrapConfig) (BootstrapOutcome, error) {
@@ -78,13 +74,13 @@ func (s *service) runBootstrap(ctx context.Context, logger *slog.Logger, cfg Boo
 	}
 	defer unlock(conn)
 
-	var hasTenants bool
-	err = conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM ten_tenants)").Scan(&hasTenants)
+	var hasAccounts bool
+	err = conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM iam_accounts)").Scan(&hasAccounts)
 	if err != nil {
-		return BootstrapOutcome{}, fmt.Errorf("check tenants: %w", err)
+		return BootstrapOutcome{}, fmt.Errorf("check accounts: %w", err)
 	}
-	if hasTenants {
-		logger.InfoContext(ctx, "bootstrap_skipped", slog.String("reason", reasonTenantsExist))
+	if hasAccounts {
+		logger.InfoContext(ctx, "bootstrap_skipped", slog.String("reason", reasonAccountsExist))
 		return BootstrapOutcome{Skipped: true}, nil
 	}
 
@@ -96,13 +92,12 @@ func (s *service) runBootstrap(ctx context.Context, logger *slog.Logger, cfg Boo
 		logger.InfoContext(ctx, "bootstrap_identity_reused", slog.String("identity_id", identity.ID))
 	}
 
-	accountID, tenantID, err := s.createAdmin(ctx, cfg, identity.ID)
+	accountID, err := s.createAdmin(ctx, cfg, identity.ID)
 	if err != nil {
 		return BootstrapOutcome{}, err
 	}
-	logger.InfoContext(ctx, "bootstrap_admin_created",
-		slog.String("account_id", accountID), slog.String("tenant_id", tenantID))
-	return BootstrapOutcome{IdentityReused: reused, AccountID: accountID, TenantID: tenantID}, nil
+	logger.InfoContext(ctx, "bootstrap_admin_created", slog.String("account_id", accountID))
+	return BootstrapOutcome{IdentityReused: reused, AccountID: accountID}, nil
 }
 
 // unlock releases the advisory lock and the connection. A connection whose
@@ -168,39 +163,21 @@ func (s *service) findOrCreateIdentity(ctx context.Context, cfg BootstrapConfig)
 	return identity, true, nil
 }
 
-// createAdmin writes the account, the tenant and the admin membership in one
-// transaction; the membership starts as the account's last selected tenant.
-func (s *service) createAdmin(ctx context.Context, cfg BootstrapConfig, identityID string) (string, string, error) {
-	var accountID, tenantID string
+// createAdmin writes the operator account in one statement; an account that
+// already has the Kratos identity is promoted to platform operator.
+func (s *service) createAdmin(ctx context.Context, cfg BootstrapConfig, identityID string) (string, error) {
+	var accountID string
 	now := s.store.clock.Now()
-	err := db.InTx(ctx, s.store.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx,
-			`INSERT INTO iam_accounts (kratos_identity_id, email, is_platform_operator, created_at, updated_at)
+	err := s.store.pool.QueryRow(ctx,
+		`INSERT INTO iam_accounts (kratos_identity_id, email, is_platform_operator, created_at, updated_at)
 VALUES ($1::uuid, lower($2), true, $3, $3)
 ON CONFLICT (kratos_identity_id) DO UPDATE
 SET email = EXCLUDED.email, is_platform_operator = true, updated_at = EXCLUDED.updated_at
 RETURNING id::text`, identityID, cfg.AdminEmail, now).Scan(&accountID)
-		if err != nil {
-			return fmt.Errorf("upsert account: %w", err)
-		}
-		err = tx.QueryRow(ctx,
-			`INSERT INTO ten_tenants (slug, name, created_at, updated_at) VALUES ($1, $2, $3, $3) RETURNING id::text`,
-			cfg.TenantSlug, cfg.TenantName, now).Scan(&tenantID)
-		if err != nil {
-			return fmt.Errorf("insert tenant: %w", err)
-		}
-		_, err = tx.Exec(ctx,
-			`INSERT INTO ten_memberships (tenant_id, account_id, role, last_selected_at, created_at, updated_at)
-VALUES ($1::uuid, $2::uuid, $3, $4, $4, $4)`, tenantID, accountID, bootstrapRole, now)
-		if err != nil {
-			return fmt.Errorf("insert membership: %w", err)
-		}
-		return nil
-	})
 	if err != nil {
-		return "", "", err
+		return "", fmt.Errorf("upsert account: %w", err)
 	}
-	return accountID, tenantID, nil
+	return accountID, nil
 }
 
 // applyPlatformOperators grants the operator flag to existing accounts whose

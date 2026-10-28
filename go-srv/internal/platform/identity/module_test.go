@@ -30,7 +30,6 @@ func exampleEnvSettings(t *testing.T) map[string]string {
 	}
 	wanted := map[string]bool{
 		"APP_SESSION_KEYS":             true,
-		"APP_BOOTSTRAP_TENANT_SLUG":    true,
 		"APP_BOOTSTRAP_ADMIN_EMAIL":    true,
 		"APP_BOOTSTRAP_ADMIN_PASSWORD": true,
 		"APP_KRATOS_PUBLIC_URL":        true,
@@ -93,9 +92,7 @@ func TestBuildFailsWithOneErrorNamingEveryBadKey(t *testing.T) {
 			"APP_PUBLIC_BASE_URL":          "http://localhost:10120",
 			"APP_SESSION_KEYS":             randomSessionKeys(t),
 			"APP_SESSION_TTL":              "99h",
-			"APP_INVITATION_TTL":           "1s",
 			"APP_KRATOS_ADMIN_URL":         "not a url",
-			"APP_BOOTSTRAP_TENANT_SLUG":    "acme",
 			"APP_BOOTSTRAP_ADMIN_PASSWORD": secret,
 		}),
 		Clock: clock.System{},
@@ -106,7 +103,7 @@ func TestBuildFailsWithOneErrorNamingEveryBadKey(t *testing.T) {
 	}
 	text := err.Error()
 	keys := []string{
-		"APP_SESSION_TTL", "APP_INVITATION_TTL", "APP_KRATOS_ADMIN_URL",
+		"APP_SESSION_TTL", "APP_KRATOS_ADMIN_URL",
 		"APP_BOOTSTRAP_ADMIN_EMAIL", "APP_BOOTSTRAP_ADMIN_PASSWORD",
 	}
 	for _, key := range keys {
@@ -133,7 +130,7 @@ func TestMissingSessionKeysFailBuild(t *testing.T) {
 	}
 }
 
-func TestProvideRegistersTheCoreScopes(t *testing.T) {
+func TestProvideRegistersTheAPIKeyScopeAndNotTheTenantScope(t *testing.T) {
 	var registry *coreaccess.ScopeRegistry
 	probe := core.Module{
 		ID: "scope-probe",
@@ -146,14 +143,15 @@ func TestProvideRegistersTheCoreScopes(t *testing.T) {
 		Database: true,
 		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
 	})
-	for _, name := range []string{"tenant:read", "api-keys:read"} {
-		if !registry.Known(name) {
-			t.Errorf("scope %s is not registered", name)
-		}
+	if !registry.Known("api-keys:read") {
+		t.Error("scope api-keys:read is not registered")
+	}
+	if registry.Known("tenant:read") {
+		t.Error("scope tenant:read is registered by identity, it is tenancy's")
 	}
 }
 
-func TestModuleProvidesTheCorePorts(t *testing.T) {
+func TestModuleProvidesTheAccountPortsOnly(t *testing.T) {
 	var host *core.Host
 	probe := core.Module{
 		ID: "port-probe",
@@ -168,36 +166,36 @@ func TestModuleProvidesTheCorePorts(t *testing.T) {
 	})
 	ctx := context.Background()
 	st := newStore(host.Pool(), host.Clock())
-	tenant := mustTenant(t, st, "tenant-a")
 	account := mustAccount(t, st, "member@example.com")
-	if _, err := st.InsertMembership(ctx, tenant.ID, account.ID, "member"); err != nil {
-		t.Fatalf("insert membership: %v", err)
-	}
 
-	if _, found, err := host.TenantDirectory().Tenant(ctx, reqctx.TenantID(tenant.ID)); err != nil || !found {
-		t.Errorf("tenant directory found=%v err=%v, want the stored tenant", found, err)
-	}
-	if _, err := host.TenantAccess().Grant(ctx, reqctx.AccountID(account.ID), reqctx.TenantID(tenant.ID)); err != nil {
-		t.Errorf("tenant access grant: %v, want the stored membership granted", err)
-	}
 	refs, err := host.AccountDirectory().ByEmail(ctx, "member@example.com")
-	if err != nil || len(refs) != 1 {
+	if err != nil || len(refs) != 1 || string(refs[0].ID) != account.ID {
 		t.Errorf("account directory refs=%v err=%v, want the stored account", refs, err)
 	}
 	if host.AccountProvisioner().GrantsOperator("someone@example.com") {
 		t.Error("account provisioner grants operator to an unlisted email, want identity's operator list")
 	}
+	tenant := reqctx.TenantID(randomUUID(t))
+	if _, found, tenantErr := host.TenantDirectory().Tenant(ctx, tenant); tenantErr != nil || found {
+		t.Errorf("tenant directory found=%v err=%v, want the absent default: identity provides no tenants", found, tenantErr)
+	}
+	_, grantErr := host.TenantAccess().Grant(ctx, reqctx.AccountID(account.ID), tenant)
+	if !isAccessDenial(grantErr) {
+		t.Errorf("tenant access grant err=%v, want the fail-closed 403 default: identity provides no tenant access", grantErr)
+	}
 }
 
-func TestTenantRouteIsMountedAndNeedsACredential(t *testing.T) {
+func TestTenantRoutesBelongToTenancy(t *testing.T) {
 	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
 		Database: true,
 		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
 	})
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/tenant", nil))
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("GET /api/v1/tenant answered %d, want 401", rec.Code)
+	for _, path := range []string{"/api/v1/tenant", "/api/v1/tenants", "/api/v1/memberships", "/api/v1/invitations"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s answered %d, want 404: identity alone mounts no tenancy route", path, rec.Code)
+		}
 	}
 }
 

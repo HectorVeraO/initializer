@@ -1,4 +1,4 @@
-package identity
+package tenancy
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 )
 
-// TenantView is the TenantView schema of the identity contract.
+// TenantView is the TenantView schema of the tenancy contract.
 type TenantView struct {
 	ID        string    `json:"id"`
 	Slug      string    `json:"slug"`
@@ -69,7 +69,7 @@ func conflict(code api.Code, message string) *api.Error {
 func (s *tenancy) CreateTenant(ctx context.Context, operatorID, slug, name, adminEmail string) (TenantCreated, error) {
 	operator, isUUID := canonicalID(operatorID)
 	if !isUUID || slug == "" || name == "" || adminEmail == "" {
-		return TenantCreated{}, errors.New("identity: create tenant: operator id, slug, name and admin email are required")
+		return TenantCreated{}, errors.New("tenancy: create tenant: operator id, slug, name and admin email are required")
 	}
 	email := strings.ToLower(adminEmail)
 	var result TenantCreated
@@ -97,7 +97,7 @@ func (s *tenancy) CreateTenant(ctx context.Context, operatorID, slug, name, admi
 		return TenantCreated{}, conflict(CodeTenantSlugTaken, "The tenant slug is already taken.")
 	}
 	if err != nil {
-		return TenantCreated{}, fmt.Errorf("identity: create tenant: %w", err)
+		return TenantCreated{}, fmt.Errorf("tenancy: create tenant: %w", err)
 	}
 	return result, nil
 }
@@ -165,7 +165,7 @@ func (s *tenancy) TenantSummary(ctx context.Context, tenantID string) (tenantSum
 		return tenantSummary{}, api.NotFound()
 	}
 	if err != nil {
-		return tenantSummary{}, fmt.Errorf("identity: read tenant: %w", err)
+		return tenantSummary{}, fmt.Errorf("tenancy: read tenant: %w", err)
 	}
 	return tenantSummary{ID: tenant.ID, Slug: tenant.Slug, Name: tenant.Name, Status: tenant.Status}, nil
 }
@@ -178,12 +178,12 @@ var tenantSortColumns = map[string]string{"createdAt": "created_at", "slug": "sl
 func (s *tenancy) ListTenants(ctx context.Context, status string, q api.PageQuery) ([]TenantView, int64, error) {
 	column, sortOK := tenantSortColumns[q.SortField]
 	if !sortOK || q.Page < 1 || q.Size < 1 {
-		return nil, 0, errors.New("identity: list tenants: a known sort field and a page are required")
+		return nil, 0, errors.New("tenancy: list tenants: a known sort field and a page are required")
 	}
 	var total int64
 	err := s.pool.QueryRow(ctx, "SELECT count(*) FROM ten_tenants WHERE ($1 = '' OR status = $1)", status).Scan(&total)
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: count tenants: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: count tenants: %w", err)
 	}
 	direction := sortDirection(q)
 	rows, err := s.pool.Query(ctx,
@@ -191,13 +191,13 @@ func (s *tenancy) ListTenants(ctx context.Context, status string, q api.PageQuer
 			column+" "+direction+", id "+direction+" LIMIT $2 OFFSET $3",
 		status, q.Size, q.Offset())
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: list tenants: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: list tenants: %w", err)
 	}
 	found, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Tenant, error) {
 		return scanTenant(row)
 	})
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: list tenants: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: list tenants: %w", err)
 	}
 	views := make([]TenantView, 0, len(found))
 	for _, tenant := range found {
@@ -217,7 +217,7 @@ func sortDirection(q api.PageQuery) string {
 // current status writes nothing. An unknown or malformed id is 404.
 func (s *tenancy) SetTenantStatus(ctx context.Context, tenantID, status string) (TenantView, error) {
 	if status != statusActive && status != statusSuspended {
-		return TenantView{}, errors.New("identity: set tenant status: status must be active or suspended")
+		return TenantView{}, errors.New("tenancy: set tenant status: status must be active or suspended")
 	}
 	id, isUUID := api.ParseUUID(tenantID)
 	if !isUUID {
@@ -233,48 +233,9 @@ WHERE id = $1::uuid RETURNING `+tenantColumns,
 		return TenantView{}, api.NotFound()
 	}
 	if err != nil {
-		return TenantView{}, fmt.Errorf("identity: set tenant status: %w", err)
+		return TenantView{}, fmt.Errorf("tenancy: set tenant status: %w", err)
 	}
 	return tenantView(tenant), nil
-}
-
-// tenantDirectory is core's coreaccess.TenantDirectory over ten_tenants.
-type tenantDirectory struct {
-	pool *pgxpool.Pool
-}
-
-// TenantExists reports whether the tenant exists, whatever its status.
-func (d *tenantDirectory) TenantExists(ctx context.Context, id reqctx.TenantID) (bool, error) {
-	canonical, isUUID := canonicalID(string(id))
-	if !isUUID {
-		return false, nil
-	}
-	var exists bool
-	err := d.pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM ten_tenants WHERE id = $1::uuid)", canonical).Scan(&exists)
-	if err != nil {
-		return false, fmt.Errorf("identity: tenant exists: %w", err)
-	}
-	return exists, nil
-}
-
-// Tenant returns the tenant of id, whatever its status; false when no tenant
-// has id or id is not a UUID.
-func (d *tenantDirectory) Tenant(ctx context.Context, id reqctx.TenantID) (coreaccess.TenantRef, bool, error) {
-	canonical, isUUID := canonicalID(string(id))
-	if !isUUID {
-		return coreaccess.TenantRef{}, false, nil
-	}
-	var ref coreaccess.TenantRef
-	err := d.pool.QueryRow(ctx,
-		"SELECT id::text, slug, name, status FROM ten_tenants WHERE id = $1::uuid", canonical).Scan(
-		&ref.ID, &ref.Slug, &ref.Name, &ref.Status)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return coreaccess.TenantRef{}, false, nil
-	}
-	if err != nil {
-		return coreaccess.TenantRef{}, false, fmt.Errorf("identity: tenant by id: %w", err)
-	}
-	return ref, true, nil
 }
 
 // getTenant serves GET /api/v1/tenant: the caller's own tenant, never another.

@@ -1,4 +1,4 @@
-package identity
+package tenancy
 
 import (
 	"context"
@@ -14,13 +14,14 @@ import (
 )
 
 type tenantPage = api.Page[TenantView]
+
 type memberPage = api.Page[MemberView]
 
 // memberOf adds a person with the given email to the tenant.
 func (e *invEnv) memberOf(tenantID, email, role, status string, createdAt time.Time) person {
 	e.t.Helper()
 	p := e.person()
-	e.exec("UPDATE iam_accounts SET email = $2 WHERE id = $1::uuid", p.accountID, email)
+	e.accounts.setEmail(p.accountID, email)
 	e.member(tenantID, p.accountID, role, status, createdAt)
 	return p
 }
@@ -103,9 +104,9 @@ func TestGetTenantRequiresTheTenantReadScopeOnAnAPIKey(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			e := newSessEnv(t, sessEnvOptions{})
+			e := newInvEnv(t, "")
 			tenant := e.tenant("tenant-a", "active")
-			plain := e.apiKey(tenant, tc.scopes, nil)
+			plain := e.apiKey(tenant, tc.scopes)
 
 			rec := e.client().do(http.MethodGet, "/api/v1/tenant", map[string]string{apiKeyHeader: plain})
 
@@ -116,6 +117,29 @@ func TestGetTenantRequiresTheTenantReadScopeOnAnAPIKey(t *testing.T) {
 			if rec.Code != tc.status {
 				t.Fatalf("status = %d, want %d: %s", rec.Code, tc.status, rec.Body.String())
 			}
+		})
+	}
+}
+
+func TestTenantRoutesRefuseAnAPIKeyOnSessionOnlyRoutes(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	key := e.apiKey(tenant, []string{"tenant:read"})
+	routes := []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/tenants"},
+		{http.MethodPost, "/api/v1/tenants"},
+		{http.MethodPatch, "/api/v1/tenants/" + randomUUID(t) + "/status"},
+		{http.MethodPatch, "/api/v1/memberships/" + randomUUID(t)},
+		{http.MethodPost, "/api/v1/invitations"},
+		{http.MethodDelete, "/api/v1/invitations/" + randomUUID(t)},
+		{http.MethodPost, "/api/v1/invitations/accept"},
+		{http.MethodGet, "/api/v1/memberships"},
+		{http.MethodGet, "/api/v1/invitations"},
+	}
+	for _, route := range routes {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			rec := e.client().doBody(route.method, route.path, map[string]string{apiKeyHeader: key}, `{}`)
+			expectError(t, rec, http.StatusUnauthorized, "SESSION_INVALID")
 		})
 	}
 }
@@ -136,7 +160,7 @@ func TestGetTenantRefusals(t *testing.T) {
 		if last == 'A' {
 			replacement = 'B'
 		}
-		altered := &sessClient{e: e.sessEnv, cookies: map[string]string{viewer.sessionCookieName(): cookie[:len(cookie)-1] + string(replacement)}}
+		altered := &sessClient{e: e.tenantsRoot, cookies: map[string]string{viewer.sessionCookieName(): cookie[:len(cookie)-1] + string(replacement)}}
 
 		expectError(t, altered.send(http.MethodGet, "/api/v1/tenant", ""), http.StatusUnauthorized, "SESSION_INVALID")
 	})
@@ -257,6 +281,21 @@ func TestSetTenantStatusSuspendsAndReactivates(t *testing.T) {
 	}
 }
 
+func TestSuspendingATenantMakesItsMembersGrantsFail(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	member, _ := e.actor(tenant, "member", false)
+	_, operator := e.actor("", "", true)
+
+	rec := operator.send(http.MethodPatch, "/api/v1/tenants/"+tenant+"/status", statusBody("suspended"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("suspend answered %d: %s", rec.Code, rec.Body.String())
+	}
+
+	_, err := e.access.Grant(context.Background(), reqctx.AccountID(member.accountID), reqctx.TenantID(tenant))
+	requireAPIError(t, err, http.StatusForbidden, api.CodeTenantSuspended)
+}
+
 func TestSetTenantStatusToTheCurrentStatusIsANoOp(t *testing.T) {
 	e := newInvEnv(t, "")
 	tenant := e.tenant("tenant-a", "suspended")
@@ -314,28 +353,6 @@ func TestSetTenantStatusAnswersTheSameNotFoundForUnknownAndMalformedIDs(t *testi
 	expectIssues(t, invalid, []wantIssue{{"status", "FIELD_REQUIRED"}})
 }
 
-func TestSuspendingATenantRefusesItsSessionsAtTheNextRefreshAndSwitch(t *testing.T) {
-	e := newInvEnv(t, "")
-	tenant := e.tenant("tenant-a", "active")
-	other := e.tenant("tenant-b", "active")
-	member, memberClient := e.actor(tenant, "member", false)
-	e.member(other, member.accountID, "member", "active", invStart)
-	_, operator := e.actor("", "", true)
-
-	rec := operator.send(http.MethodPatch, "/api/v1/tenants/"+tenant+"/status", statusBody("suspended"))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("suspend answered %d: %s", rec.Code, rec.Body.String())
-	}
-
-	expectError(t, memberClient.mutate(http.MethodPost, "/api/v1/auth/refresh"), http.StatusForbidden, "TENANT_SUSPENDED")
-
-	second := e.signIn(member)
-	e.exec("UPDATE ten_tenants SET status = 'active' WHERE id = $1::uuid", tenant)
-	e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", other)
-	switchRec := second.send(http.MethodPost, "/api/v1/auth/switch-tenant", fmt.Sprintf(`{"tenantId":%q}`, other))
-	expectError(t, switchRec, http.StatusForbidden, "TENANT_SUSPENDED")
-}
-
 func TestListMembershipsShowsActiveAndSuspendedMembersOfTheActiveTenantOnly(t *testing.T) {
 	e := newInvEnv(t, "")
 	tenant := e.tenant("tenant-a", "active")
@@ -346,7 +363,7 @@ func TestListMembershipsShowsActiveAndSuspendedMembersOfTheActiveTenantOnly(t *t
 	e.memberOf(tenant, "alice@example.com", "viewer", "revoked", invStart.Add(2*time.Hour))
 	e.memberOf(other, "dave@example.com", "admin", "active", invStart)
 	client := e.signIn(admin)
-	e.exec("UPDATE iam_accounts SET email = 'carol@example.com' WHERE id = $1::uuid", admin.accountID)
+	e.accounts.setEmail(admin.accountID, "carol@example.com")
 
 	rec := client.send(http.MethodGet, "/api/v1/memberships", "")
 
@@ -385,7 +402,7 @@ func TestListMembershipsFiltersSortsAndPages(t *testing.T) {
 	e.memberOf(tenant, "b@example.com", "member", "revoked", invStart.Add(time.Hour))
 	e.memberOf(tenant, "d@example.com", "viewer", "suspended", invStart.Add(3*time.Hour))
 	client := e.signIn(admin)
-	e.exec("UPDATE iam_accounts SET email = 'c@example.com' WHERE id = $1::uuid", admin.accountID)
+	e.accounts.setEmail(admin.accountID, "c@example.com")
 	emails := func(items []MemberView) string {
 		var out []string
 		for _, item := range items {
@@ -683,11 +700,11 @@ func TestListMembershipsIsReadableByEveryRole(t *testing.T) {
 	}
 }
 
-func TestRevokingAMembershipRefusesTheMembersNextRefresh(t *testing.T) {
+func TestRevokingAMembershipMakesItsGrantFail(t *testing.T) {
 	e := newInvEnv(t, "")
 	tenant := e.tenant("tenant-a", "active")
 	_, admin := e.actor(tenant, "admin", false)
-	member, memberClient := e.actor(tenant, "member", false)
+	member, _ := e.actor(tenant, "member", false)
 	id := e.membershipID(tenant, member.accountID)
 
 	rec := admin.send(http.MethodPatch, "/api/v1/memberships/"+id, `{"status":"revoked"}`)
@@ -695,7 +712,8 @@ func TestRevokingAMembershipRefusesTheMembersNextRefresh(t *testing.T) {
 		t.Fatalf("revoke answered %d: %s", rec.Code, rec.Body.String())
 	}
 
-	expectError(t, memberClient.mutate(http.MethodPost, "/api/v1/auth/refresh"), http.StatusForbidden, "MEMBERSHIP_REVOKED")
+	_, err := e.access.Grant(context.Background(), reqctx.AccountID(member.accountID), reqctx.TenantID(tenant))
+	requireAPIError(t, err, http.StatusForbidden, api.CodeMembershipRevoked)
 }
 
 func TestTenantDirectoryTellsExistingFromUnknownWhateverTheStatus(t *testing.T) {

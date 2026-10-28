@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -148,4 +149,18 @@ VALUES ($1::uuid, $2, $3, $4, $5, $5) RETURNING `+accountRefColumns,
 		return accounts.Ref{}, fmt.Errorf("identity: provision account: %w", errors.Join(err, cleanupErr))
 	}
 	return ref, nil
+}
+
+func conflict(code api.Code, message string) *api.Error {
+	return api.NewError(http.StatusConflict, code, message)
+}
+
+// identityError maps an unreachable Kratos to 503. The cause is kept for the
+// log line and carries no password or email.
+func identityError(err error) error {
+	if errors.Is(err, kratos.ErrUnavailable) {
+		return api.Wrap(err, http.StatusServiceUnavailable, CodeIdentityProviderUnavailable,
+			"Sign-in is unavailable right now.")
+	}
+	return err
 }

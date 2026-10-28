@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	statusActive    = "active"
-	statusSuspended = "suspended"
+	statusActive = "active"
 )
 
 // Grant is what the session claims need once the account and tenant steps

@@ -178,7 +178,7 @@ func TestRefreshReadsRoleAndPlatformFlagFromTheDatabase(t *testing.T) {
 	e := newSessEnv(t, sessEnvOptions{})
 	p := e.person()
 	c, tenant := signedInOn(e, p, "acme", "admin")
-	e.exec("UPDATE ten_memberships SET role = 'viewer' WHERE tenant_id = $1::uuid AND account_id = $2::uuid", tenant, p.accountID)
+	e.tenants.setMemberRole(tenant, p.accountID, "viewer")
 	e.exec("UPDATE iam_accounts SET is_platform_operator = true WHERE id = $1::uuid", p.accountID)
 
 	rec := c.mutate(http.MethodPost, refreshPath)
@@ -384,20 +384,20 @@ func TestRefreshAccessRefusalsClearBothCookies(t *testing.T) {
 			e.exec("UPDATE iam_accounts SET status = 'disabled' WHERE id = $1::uuid", p.accountID)
 		}},
 		{"suspended tenant", "TENANT_SUSPENDED", func(e *sessEnv, _ person, tenant string) {
-			e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", tenant)
+			e.tenants.setTenantStatus(tenant, "suspended")
 		}},
 		{"revoked membership", "MEMBERSHIP_REVOKED", func(e *sessEnv, p person, tenant string) {
-			e.exec("UPDATE ten_memberships SET status = 'revoked' WHERE tenant_id = $1::uuid AND account_id = $2::uuid", tenant, p.accountID)
+			e.tenants.setMemberStatus(tenant, p.accountID, "revoked")
 		}},
 		{"suspended membership", "MEMBERSHIP_REVOKED", func(e *sessEnv, p person, tenant string) {
-			e.exec("UPDATE ten_memberships SET status = 'suspended' WHERE tenant_id = $1::uuid AND account_id = $2::uuid", tenant, p.accountID)
+			e.tenants.setMemberStatus(tenant, p.accountID, "suspended")
 		}},
 		{"suspended tenant and revoked membership", "TENANT_SUSPENDED", func(e *sessEnv, p person, tenant string) {
-			e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", tenant)
-			e.exec("UPDATE ten_memberships SET status = 'revoked' WHERE tenant_id = $1::uuid AND account_id = $2::uuid", tenant, p.accountID)
+			e.tenants.setTenantStatus(tenant, "suspended")
+			e.tenants.setMemberStatus(tenant, p.accountID, "revoked")
 		}},
 		{"membership deleted", "TENANT_ACCESS_DENIED", func(e *sessEnv, p person, tenant string) {
-			e.exec("DELETE FROM ten_memberships WHERE tenant_id = $1::uuid AND account_id = $2::uuid", tenant, p.accountID)
+			e.tenants.removeMember(tenant, p.accountID)
 		}},
 	}
 	for _, tc := range cases {
@@ -419,7 +419,7 @@ func TestPlainSignInNeverFailsOnMembershipAfterARefusedRefresh(t *testing.T) {
 	e := newSessEnv(t, sessEnvOptions{})
 	p := e.person()
 	c, tenant := signedInOn(e, p, "acme", "admin")
-	e.exec("UPDATE ten_memberships SET status = 'revoked' WHERE tenant_id = $1::uuid AND account_id = $2::uuid", tenant, p.accountID)
+	e.tenants.setMemberStatus(tenant, p.accountID, "revoked")
 	expectError(t, c.mutate(http.MethodPost, refreshPath), http.StatusForbidden, "MEMBERSHIP_REVOKED")
 
 	rec := c.do(http.MethodGet, "/api/v1/auth/session", nil)
@@ -536,8 +536,7 @@ func TestSwitchMovesTheSessionToTheTargetTenant(t *testing.T) {
 	if csrfSets != 1 || csrfMaxAge <= 0 || csrfMaxAge != sessionMaxAge {
 		t.Errorf("XSRF-TOKEN sets = %d, Max-Age = %d, want one set with the session Max-Age %d", csrfSets, csrfMaxAge, sessionMaxAge)
 	}
-	last := e.scan(`SELECT tenant_id::text FROM ten_memberships
-WHERE account_id = $1::uuid AND last_selected_at IS NOT NULL ORDER BY last_selected_at DESC, id LIMIT 1`, p.accountID)
+	last, _ := e.tenants.rememberedTenant(p.accountID)
 	if last != target {
 		t.Errorf("last selected tenant = %s, want %s", last, target)
 	}
@@ -598,20 +597,20 @@ func TestSwitchCheckAccessOrder(t *testing.T) {
 			e.exec("UPDATE iam_accounts SET status = 'locked' WHERE id = $1::uuid", p.accountID)
 		}},
 		{"tenant suspended", "TENANT_SUSPENDED", func(e *sessEnv, _ person, target string) {
-			e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", target)
+			e.tenants.setTenantStatus(target, "suspended")
 		}},
 		{"tenant suspended wins over a revoked membership", "TENANT_SUSPENDED", func(e *sessEnv, p person, target string) {
-			e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", target)
-			e.exec("UPDATE ten_memberships SET status = 'revoked' WHERE tenant_id = $1::uuid AND account_id = $2::uuid", target, p.accountID)
+			e.tenants.setTenantStatus(target, "suspended")
+			e.tenants.setMemberStatus(target, p.accountID, "revoked")
 		}},
 		{"membership revoked", "MEMBERSHIP_REVOKED", func(e *sessEnv, p person, target string) {
-			e.exec("UPDATE ten_memberships SET status = 'revoked' WHERE tenant_id = $1::uuid AND account_id = $2::uuid", target, p.accountID)
+			e.tenants.setMemberStatus(target, p.accountID, "revoked")
 		}},
 		{"membership suspended", "MEMBERSHIP_REVOKED", func(e *sessEnv, p person, target string) {
-			e.exec("UPDATE ten_memberships SET status = 'suspended' WHERE tenant_id = $1::uuid AND account_id = $2::uuid", target, p.accountID)
+			e.tenants.setMemberStatus(target, p.accountID, "suspended")
 		}},
 		{"not a member", "TENANT_ACCESS_DENIED", func(e *sessEnv, p person, target string) {
-			e.exec("DELETE FROM ten_memberships WHERE tenant_id = $1::uuid AND account_id = $2::uuid", target, p.accountID)
+			e.tenants.removeMember(target, p.accountID)
 		}},
 	}
 	for _, tc := range cases {
@@ -636,8 +635,7 @@ func TestSwitchCheckAccessOrder(t *testing.T) {
 					t.Errorf("cookie %s changed on a refused switch", name)
 				}
 			}
-			remembered := e.scan("SELECT count(*)::text FROM ten_memberships WHERE account_id = $1::uuid AND tenant_id = $2::uuid AND last_selected_at IS NOT NULL", p.accountID, target)
-			if remembered != "0" {
+			if remembered, _ := e.tenants.rememberedTenant(p.accountID); remembered == target {
 				t.Error("a refused switch must not record the tenant as last active")
 			}
 			if claims := c.claims(); claims.TenantID == nil || *claims.TenantID != home {
@@ -857,10 +855,7 @@ func TestSwitchSetsNoCookieWhenTheLastActiveWriteFails(t *testing.T) {
 	c, home := signedInOn(e, p, "tenant-a", "admin")
 	target := e.tenant("tenant-b", "active")
 	e.member(target, p.accountID, "member", "active", e.clock.Now())
-	e.exec(`CREATE FUNCTION it_reject_last_active() RETURNS trigger AS $$
-		BEGIN RAISE EXCEPTION 'last active write rejected'; END; $$ LANGUAGE plpgsql`)
-	e.exec(`CREATE TRIGGER it_reject_last_active BEFORE UPDATE OF last_selected_at
-		ON ten_memberships FOR EACH ROW EXECUTE FUNCTION it_reject_last_active()`)
+	e.tenants.failRemember(errors.New("last active write rejected"))
 
 	rec := c.switchTo(target)
 

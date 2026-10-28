@@ -440,3 +440,24 @@ func (rt *apiKeyRoutes) listScopes(w http.ResponseWriter, r *http.Request) {
 	}
 	rt.writer.Data(w, r, http.StatusOK, infos)
 }
+
+// readTrimmedName validates a name field: required after trimming, at most
+// max characters. It returns the trimmed value.
+func readTrimmedName(body *api.Body, p *api.Problems, field string, max int) (string, bool) {
+	value, ok := body.String(p, field, api.Required)
+	if !ok {
+		return "", false
+	}
+	if !api.CheckRequired(p, field, value) {
+		return "", false
+	}
+	if !api.CheckLength(p, field, value, 1, max) {
+		return "", false
+	}
+	// Postgres text columns reject NUL: it is invalid input, not a 500.
+	if strings.ContainsRune(value, 0) {
+		p.Add(field, api.CodeFieldInvalidFmt, "Must not contain a NUL character")
+		return "", false
+	}
+	return strings.TrimSpace(value), true
+}

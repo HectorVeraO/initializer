@@ -204,8 +204,9 @@ type sessEnv struct {
 	codec   *session.Codec
 	access  *access
 	app     *core.App
-	// directory is the TenantDirectory port the host exposes to modules.
-	directory coreaccess.TenantDirectory
+	// tenants is the TenantAccess and TenantDirectory the host exposes; tests
+	// change tenants, memberships and statuses through it.
+	tenants *tenantsFake
 }
 
 const sessTestPublicURL = "http://localhost:10120"
@@ -217,17 +218,33 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 	clk := &settableClock{now: time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)}
 	logs := &logSink{}
 	keys := randomSessionKeys(t)
-	var directory coreaccess.TenantDirectory
+	tenants := newTenantsFake()
 	probe := core.Module{
 		ID: "session-probe",
+		// tenant:read is tenancy's scope; the probe registers it so keys can hold it.
+		Provide: func(_ context.Context, b *core.Builder) error {
+			return b.Scopes().Register("tenant:read", "Read the key's own tenant", coreaccess.ScopeTenant)
+		},
 		Mount: func(_ context.Context, h *core.Host) error {
-			directory = h.TenantDirectory()
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				principal, _ := reqctx.PrincipalFrom(r.Context())
 				h.API().Data(w, r, http.StatusOK, map[string]any{
 					"actorId": principal.ActorID, "tenantSlug": principal.TenantSlug, "role": string(principal.Role),
 				})
 			})
+			// A stand-in for tenancy's GET /api/v1/tenant: a route a session or a
+			// key holding tenant:read may call, answering the credential's tenant.
+			tenantRoute := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				principal, _ := reqctx.PrincipalFrom(r.Context())
+				err := coreaccess.CheckTenantRef(principal, r.URL.Query().Get("tenantId"))
+				if err != nil {
+					h.API().Fail(w, r, err)
+					return
+				}
+				h.API().Data(w, r, http.StatusOK, map[string]any{"id": principal.TenantID, "slug": principal.TenantSlug})
+			})
+			h.Handle("GET /api/v1/tenant",
+				coreaccess.Policy{Kind: coreaccess.KindSessionOrAPIKey, Scope: "tenant:read", MinRole: reqctx.RoleViewer}, tenantRoute)
 			h.Handle("GET /api/v1/probe", coreaccess.Policy{Kind: coreaccess.KindSession}, handler)
 			h.Handle("POST /api/v1/probe", coreaccess.Policy{Kind: coreaccess.KindSession}, handler)
 			return nil
@@ -245,11 +262,13 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 		settings["APP_PLATFORM_OPERATOR_EMAILS"] = opts.operatorEmails
 	}
 	app, err := core.Build(context.Background(), core.Options{
-		Logger:        slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Config:        config.MapSource(settings),
-		Clock:         clk,
-		Pool:          pool,
-		FlagEvaluator: opts.flags,
+		Logger:          slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Config:          config.MapSource(settings),
+		Clock:           clk,
+		Pool:            pool,
+		FlagEvaluator:   opts.flags,
+		TenantAccess:    tenants,
+		TenantDirectory: tenants,
 	}, []core.Module{Module(), probe})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -263,7 +282,7 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 	}
 	return &sessEnv{
 		t: t, handler: app.Handler(), pool: pool, kratos: fake, clock: clk, logs: logs,
-		codec: session.NewCodec(ring, clk), access: newAccess(pool, clk, nil), app: app, directory: directory,
+		codec: session.NewCodec(ring, clk), access: newAccess(pool, clk, nil), app: app, tenants: tenants,
 	}
 }
 
@@ -309,23 +328,24 @@ func (e *sessEnv) person() person {
 
 func (e *sessEnv) tenant(slug, status string) string {
 	e.t.Helper()
-	return e.scan("INSERT INTO ten_tenants (slug, name, status) VALUES ($1, $1, $2) RETURNING id::text", slug, status)
+	id := randomUUID(e.t)
+	e.tenants.addTenant(id, slug, status)
+	return id
 }
 
 // remember records tenantID as the account's last selected tenant through the
 // TenantAccess port.
 func (e *sessEnv) remember(accountID, tenantID string) {
 	e.t.Helper()
-	err := newTenantAccess(e.pool, e.clock).Remember(context.Background(), reqctx.AccountID(accountID), reqctx.TenantID(tenantID))
+	err := e.tenants.Remember(context.Background(), reqctx.AccountID(accountID), reqctx.TenantID(tenantID))
 	if err != nil {
 		e.t.Fatalf("remember: %v", err)
 	}
 }
 
-func (e *sessEnv) member(tenantID, accountID, role, status string, createdAt time.Time) {
+func (e *sessEnv) member(tenantID, accountID, role, status string, _ time.Time) {
 	e.t.Helper()
-	e.exec(`INSERT INTO ten_memberships (tenant_id, account_id, role, status, created_at)
-VALUES ($1::uuid, $2::uuid, $3, $4, $5)`, tenantID, accountID, role, status, createdAt)
+	e.tenants.addMember(randomUUID(e.t), tenantID, accountID, role, status)
 }
 
 // sessClient is a cookie jar over the handler.

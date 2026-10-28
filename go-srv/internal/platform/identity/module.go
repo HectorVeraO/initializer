@@ -1,5 +1,5 @@
-// Package identity is the identity catalog module: tenants, accounts,
-// memberships, invitations and API keys on top of Ory Kratos identities.
+// Package identity is the identity catalog module: accounts, platform
+// operators, the BFF session and API keys on top of Ory Kratos identities.
 package identity
 
 import (
@@ -25,8 +25,6 @@ type service struct {
 	// public is nil only when APP_KRATOS_PUBLIC_URL is invalid, which fails Build.
 	public *kratos.Public
 	access *access
-	// tenancy backs the tenant, membership and invitation routes.
-	tenancy *tenancy
 	// apiKeys backs the API key routes.
 	apiKeys *apiKeys
 	// keyResolver reads tenants through the host's TenantDirectory, set in Mount.
@@ -83,18 +81,9 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 	s.access = newAccess(b.Pool(), b.Clock(), s.cfg.PlatformOperatorEmails)
 	s.provideSession(b)
 	s.provideKratos(b)
-	s.tenancy = newTenancy(b.Pool(), b.Clock(), s.cfg)
 	s.apiKeys = newAPIKeys(b.Pool(), b.Clock())
-	err := b.ProvideTenantDirectory(&tenantDirectory{pool: b.Pool()})
-	if err != nil {
-		return fmt.Errorf("provide tenant directory: %w", err)
-	}
-	err = b.ProvideTenantAccess(newTenantAccess(b.Pool(), b.Clock()))
-	if err != nil {
-		return fmt.Errorf("provide tenant access: %w", err)
-	}
 	accountsPort := newAccountDirectory(b.Pool(), b.Clock(), s.admin, s.cfg.PlatformOperatorEmails)
-	err = b.ProvideAccountDirectory(accountsPort)
+	err := b.ProvideAccountDirectory(accountsPort)
 	if err != nil {
 		return fmt.Errorf("provide account directory: %w", err)
 	}
@@ -112,7 +101,6 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 		name, description string
 		level             coreaccess.ScopeLevel
 	}{
-		{"tenant:read", "Read the key's own tenant", coreaccess.ScopeTenant},
 		{"api-keys:read", "List the tenant's API key metadata", coreaccess.ScopeTenant},
 	}
 	for _, scope := range scopes {
@@ -141,11 +129,10 @@ func (s *service) provideKratos(b *core.Builder) {
 }
 
 // mount wires the API key resolver to the host tenant directory and registers
-// the session, tenancy and API key routes.
+// the session and API key routes.
 func (s *service) mount(_ context.Context, h *core.Host) error {
 	s.keyResolver.tenants = h.TenantDirectory()
 	s.mountSession(h)
-	s.mountTenancy(h)
 	s.mountAPIKeys(h)
 	return nil
 }

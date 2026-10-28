@@ -1,4 +1,4 @@
-package identity
+package tenancy
 
 import (
 	"encoding/json"
@@ -10,21 +10,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 )
 
-// invEnv is the module behind its real HTTP chain with a fake Kratos public
-// and admin API at the network boundary.
+// invEnv is the module behind its real HTTP chain with fake accounts at the
+// boundary, and signed-in actors.
 type invEnv struct {
-	*sessEnv
-	admin *fakeKratos
+	*tenantsRoot
 }
 
 func newInvEnv(t *testing.T, operatorEmails string) *invEnv {
 	t.Helper()
-	admin := newFakeKratos(t)
-	env := newSessEnv(t, sessEnvOptions{adminURL: admin.server.URL, operatorEmails: operatorEmails})
-	return &invEnv{sessEnv: env, admin: admin}
+	var emails []string
+	if operatorEmails != "" {
+		emails = strings.Split(operatorEmails, ",")
+	}
+	return &invEnv{tenantsRoot: newTenantsRoot(t, emails...)}
 }
 
 // mixedCaseDomain exercises email normalization with an example domain in non-canonical case.
@@ -38,17 +40,12 @@ func (e *invEnv) actor(tenantID, role string, operator bool) (person, *sessClien
 	e.t.Helper()
 	p := e.person()
 	if operator {
-		e.exec("UPDATE iam_accounts SET is_platform_operator = true WHERE id = $1::uuid", p.accountID)
+		e.accounts.setOperator(p.accountID, true)
 	}
 	if tenantID != "" {
 		e.member(tenantID, p.accountID, role, "active", invStart)
 	}
 	return p, e.signIn(p)
-}
-
-func (c *sessClient) send(method, path, body string) *httptest.ResponseRecorder {
-	c.e.t.Helper()
-	return c.doBody(method, path, map[string]string{csrfHeader: c.cookies["XSRF-TOKEN"]}, body)
 }
 
 func errorBody(t *testing.T, rec *httptest.ResponseRecorder) *api.Error {
@@ -588,8 +585,8 @@ func TestAcceptNewValidationAccumulatesInFieldOrder(t *testing.T) {
 			expectIssues(t, anonymous.send(http.MethodPost, "/api/v1/invitations/accept-new", tc.body), tc.want)
 		})
 	}
-	if n := len(e.admin.received()); n != 0 {
-		t.Fatalf("Kratos received %d requests for invalid bodies", n)
+	if _, provisions := e.accounts.calls(); provisions != 0 {
+		t.Fatalf("the provisioner was called %d times for invalid bodies", provisions)
 	}
 }
 
@@ -642,13 +639,12 @@ func TestCreateInvitationEmailLengthEdge(t *testing.T) {
 	}
 }
 
-func TestAcceptNewWithAnExistingIdentityIsConflictAndAcceptRecovers(t *testing.T) {
+func TestAcceptNewWithAnExistingAccountIsConflictAndAcceptRecovers(t *testing.T) {
 	e := newInvEnv(t, "")
 	tenantA := e.tenant("tenant-a", "active")
 	tenantB := e.tenant("tenant-b", "active")
 	_, adminA := e.actor(tenantA, "admin", false)
 	w, wClient := e.actor(tenantB, "admin", false)
-	e.admin.addIdentity(w.email)
 	created := decodeData[InvitationCreated](t, adminA.send(http.MethodPost, "/api/v1/invitations", invitationJSON(w.email, "member")))
 	token := tokenOf(t, created.InvitationURL)
 
@@ -661,18 +657,25 @@ func TestAcceptNewWithAnExistingIdentityIsConflictAndAcceptRecovers(t *testing.T
 	}
 }
 
-func TestAcceptNewMapsKratosRefusals(t *testing.T) {
+func TestAcceptNewPassesProvisionerRefusalsThrough(t *testing.T) {
+	var rejected api.Problems
+	rejected.Add("password", accounts.CodePasswordRejected, "The password was rejected by the password policy.")
 	cases := []struct {
-		name   string
-		status int
-		check  func(t *testing.T, rec *httptest.ResponseRecorder)
+		name    string
+		refusal error
+		check   func(t *testing.T, rec *httptest.ResponseRecorder)
 	}{
-		{"password policy", http.StatusBadRequest, func(t *testing.T, rec *httptest.ResponseRecorder) {
+		{"password policy", rejected.Err(), func(t *testing.T, rec *httptest.ResponseRecorder) {
 			expectIssues(t, rec, []wantIssue{{"password", "PASSWORD_REJECTED"}})
 		}},
-		{"unavailable", http.StatusServiceUnavailable, func(t *testing.T, rec *httptest.ResponseRecorder) {
-			expectError(t, rec, http.StatusServiceUnavailable, "IDENTITY_PROVIDER_UNAVAILABLE")
-		}},
+		{"unavailable", api.NewError(http.StatusServiceUnavailable, accounts.CodeIdentityProviderUnavailable, "Sign-in is unavailable right now."),
+			func(t *testing.T, rec *httptest.ResponseRecorder) {
+				expectError(t, rec, http.StatusServiceUnavailable, "IDENTITY_PROVIDER_UNAVAILABLE")
+			}},
+		{"identity exists", api.NewError(http.StatusConflict, accounts.CodeIdentityAlreadyExists, "An account with this email already exists."),
+			func(t *testing.T, rec *httptest.ResponseRecorder) {
+				expectError(t, rec, http.StatusConflict, "IDENTITY_ALREADY_EXISTS")
+			}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -682,9 +685,7 @@ func TestAcceptNewMapsKratosRefusals(t *testing.T) {
 			created := decodeData[InvitationCreated](t, admin.send(http.MethodPost, "/api/v1/invitations", invitationJSON("jane@example.com", "member")))
 			token := tokenOf(t, created.InvitationURL)
 			password := randomPassword(t)
-			e.admin.mu.Lock()
-			e.admin.rejectStatus = tc.status
-			e.admin.mu.Unlock()
+			e.accounts.failProvision(tc.refusal)
 
 			rec := e.client().send(http.MethodPost, "/api/v1/invitations/accept-new", acceptNewJSON(token, password, "Jane Doe"))
 
@@ -694,6 +695,9 @@ func TestAcceptNewMapsKratosRefusals(t *testing.T) {
 			}
 			if got := e.scan("SELECT count(*)::text FROM ten_invitations WHERE accepted_at IS NULL AND revoked_at IS NULL"); got != "1" {
 				t.Fatalf("the invitation did not stay pending")
+			}
+			if got := e.scan("SELECT count(*)::text FROM ten_memberships WHERE tenant_id = $1::uuid", tenant); got != "1" {
+				t.Fatalf("a refused accept-new added a membership")
 			}
 		})
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/featureflags"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/parameters"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/tenancy"
 )
 
 // installedModules returns the catalog modules of this project in catalog order.
@@ -15,5 +16,6 @@ func installedModules() []core.Module {
 		identity.Module(),
 		featureflags.Module(),
 		parameters.Module(),
+		tenancy.Module(),
 	}
 }

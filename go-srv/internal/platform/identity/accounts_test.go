@@ -6,94 +6,73 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
-	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 )
 
-func TestTenantAccessGrant(t *testing.T) {
-	e := newTenEnv(t)
-	ta := newTenantAccess(e.pool, e.clock)
-	active := e.tenant("tenant-a")
-	suspended := e.tenant("tenant-b")
-	e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", suspended.ID)
-	member := e.account("member@example.com")
-	outsider := e.account("outsider@example.com")
-	e.member(active.ID, member.ID, "viewer", statusActive)
-	e.member(suspended.ID, member.ID, "admin", statusActive)
-	revoked := e.account("revoked@example.com")
-	e.member(active.ID, revoked.ID, "member", "revoked")
-	paused := e.account("paused@example.com")
-	e.member(active.ID, paused.ID, "member", statusSuspended)
+const janeEmail = "jane.doe@example.com"
 
-	t.Run("active member gets tenant and role", func(t *testing.T) {
-		got, err := ta.Grant(context.Background(), reqctx.AccountID(member.ID), reqctx.TenantID(active.ID))
-		if err != nil {
-			t.Fatalf("grant: %v", err)
-		}
-		want := coreaccess.TenantGrant{
-			Tenant: coreaccess.TenantRef{ID: reqctx.TenantID(active.ID), Slug: "tenant-a", Name: "Tenant tenant-a", Status: coreaccess.TenantActive},
-			Role:   reqctx.RoleViewer,
-		}
-		if got != want {
-			t.Fatalf("grant = %+v, want %+v", got, want)
-		}
-	})
+var accountsStart = time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
 
-	denied := map[string]struct {
-		account string
-		tenant  string
-		code    api.Code
-	}{
-		"non-member":           {outsider.ID, active.ID, api.CodeTenantAccessDenied},
-		"unknown tenant":       {member.ID, "99999999-9999-4999-8999-999999999999", api.CodeTenantAccessDenied},
-		"non-uuid tenant":      {member.ID, "not-a-uuid", api.CodeTenantAccessDenied},
-		"non-uuid account":     {"not-a-uuid", active.ID, api.CodeTenantAccessDenied},
-		"suspended tenant":     {member.ID, suspended.ID, api.CodeTenantSuspended},
-		"revoked membership":   {revoked.ID, active.ID, api.CodeMembershipRevoked},
-		"suspended membership": {paused.ID, active.ID, api.CodeMembershipRevoked},
-	}
-	for name, tc := range denied {
-		t.Run(name, func(t *testing.T) {
-			_, err := ta.Grant(context.Background(), reqctx.AccountID(tc.account), reqctx.TenantID(tc.tenant))
+// accountsEnv is the account port over a fresh database, a fake Kratos admin
+// API and a clock the test moves.
+type accountsEnv struct {
+	t      *testing.T
+	pool   *pgxpool.Pool
+	store  *store
+	clock  *settableClock
+	kratos *fakeKratos
+}
 
-			requireAPIError(t, err, http.StatusForbidden, tc.code)
-		})
+func newAccountsEnv(t *testing.T) *accountsEnv {
+	t.Helper()
+	pool := newTestPool(t)
+	clk := &settableClock{now: accountsStart}
+	return &accountsEnv{t: t, pool: pool, store: newStore(pool, clk), clock: clk, kratos: newFakeKratos(t)}
+}
+
+func (e *accountsEnv) exec(sql string, args ...any) {
+	e.t.Helper()
+	_, err := e.pool.Exec(context.Background(), sql, args...)
+	if err != nil {
+		e.t.Fatalf("exec %q: %v", sql, err)
 	}
 }
 
-func TestTenantDirectoryTenant(t *testing.T) {
-	e := newTenEnv(t)
-	dir := &tenantDirectory{pool: e.pool}
-	tenant := e.tenant("tenant-a")
-	e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", tenant.ID)
-
-	got, found, err := dir.Tenant(context.Background(), reqctx.TenantID(tenant.ID))
-	if err != nil || !found {
-		t.Fatalf("tenant = %+v found=%v err=%v", got, found, err)
+func (e *accountsEnv) count(sql string, args ...any) int {
+	e.t.Helper()
+	var n int
+	err := e.pool.QueryRow(context.Background(), sql, args...).Scan(&n)
+	if err != nil {
+		e.t.Fatalf("count %q: %v", sql, err)
 	}
-	if string(got.ID) != tenant.ID || got.Slug != "tenant-a" || got.Status != coreaccess.TenantSuspended {
-		t.Fatalf("tenant ref = %+v", got)
-	}
-	for name, id := range map[string]string{
-		"unknown id": "99999999-9999-4999-8999-999999999999",
-		"non-uuid":   "not-a-uuid",
-		"empty":      "",
-	} {
-		t.Run(name, func(t *testing.T) {
-			ref, found, err := dir.Tenant(context.Background(), reqctx.TenantID(id))
-
-			if err != nil || found || ref != (coreaccess.TenantRef{}) {
-				t.Fatalf("tenant = %+v found=%v err=%v, want not found", ref, found, err)
-			}
-		})
-	}
+	return n
 }
 
-func newProvisioner(t *testing.T, e *tenEnv, operatorEmails ...string) *accountDirectory {
+func (e *accountsEnv) account(email string) Account {
+	e.t.Helper()
+	return mustAccount(e.t, e.store, email)
+}
+
+func requireAPIError(t *testing.T, err error, status int, code api.Code) *api.Error {
+	t.Helper()
+	var apiErr *api.Error
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("want api error %d %s, got %v", status, code, err)
+	}
+	if apiErr.Status != status || apiErr.Code != code {
+		t.Fatalf("want %d %s, got %d %s (%s)", status, code, apiErr.Status, apiErr.Code, apiErr.Message)
+	}
+	return apiErr
+}
+
+func newProvisioner(t *testing.T, e *accountsEnv, operatorEmails ...string) *accountDirectory {
 	t.Helper()
 	adminURL, err := url.Parse(e.kratos.server.URL)
 	if err != nil {
@@ -106,7 +85,7 @@ func TestAccountProvision(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("listed email becomes platform operator", func(t *testing.T) {
-		e := newTenEnv(t)
+		e := newAccountsEnv(t)
 		dir := newProvisioner(t, e, janeEmail)
 
 		ref, err := dir.Provision(ctx, accounts.NewAccount{Email: janeEmail, Password: randomPassword(t), FullName: "  Jane Doe "})
@@ -123,7 +102,7 @@ func TestAccountProvision(t *testing.T) {
 	})
 
 	t.Run("unlisted email is not an operator", func(t *testing.T) {
-		e := newTenEnv(t)
+		e := newAccountsEnv(t)
 		dir := newProvisioner(t, e, "ops@example.com")
 
 		ref, err := dir.Provision(ctx, accounts.NewAccount{Email: janeEmail, Password: randomPassword(t), FullName: "Jane Doe"})
@@ -137,7 +116,7 @@ func TestAccountProvision(t *testing.T) {
 	})
 
 	t.Run("existing identity is a conflict and creates nothing", func(t *testing.T) {
-		e := newTenEnv(t)
+		e := newAccountsEnv(t)
 		dir := newProvisioner(t, e, janeEmail)
 		e.kratos.addIdentity(janeEmail)
 
@@ -150,7 +129,7 @@ func TestAccountProvision(t *testing.T) {
 	})
 
 	t.Run("create conflict after a clear lookup is a conflict", func(t *testing.T) {
-		e := newTenEnv(t)
+		e := newAccountsEnv(t)
 		dir := newProvisioner(t, e)
 		e.kratos.addIdentity(janeEmail)
 		e.kratos.hideFirstFind = true
@@ -164,7 +143,7 @@ func TestAccountProvision(t *testing.T) {
 	})
 
 	t.Run("account insert conflict is a conflict and deletes the new identity", func(t *testing.T) {
-		e := newTenEnv(t)
+		e := newAccountsEnv(t)
 		dir := newProvisioner(t, e)
 		taken := e.account("taken@example.com")
 		e.kratos.nextID = taken.KratosIdentityID
@@ -182,7 +161,7 @@ func TestAccountProvision(t *testing.T) {
 	})
 
 	t.Run("account insert conflict with a failed identity delete is operational", func(t *testing.T) {
-		e := newTenEnv(t)
+		e := newAccountsEnv(t)
 		dir := newProvisioner(t, e)
 		taken := e.account("taken@example.com")
 		e.kratos.nextID = taken.KratosIdentityID
@@ -197,7 +176,7 @@ func TestAccountProvision(t *testing.T) {
 	})
 
 	t.Run("rejected password is a 422 password issue", func(t *testing.T) {
-		e := newTenEnv(t)
+		e := newAccountsEnv(t)
 		dir := newProvisioner(t, e)
 		e.kratos.rejectStatus = http.StatusBadRequest
 
@@ -210,7 +189,7 @@ func TestAccountProvision(t *testing.T) {
 	})
 
 	t.Run("unreachable Kratos is a 503 and creates nothing", func(t *testing.T) {
-		e := newTenEnv(t)
+		e := newAccountsEnv(t)
 		dir := newProvisioner(t, e)
 		e.kratos.rejectStatus = http.StatusServiceUnavailable
 
@@ -229,7 +208,7 @@ func TestAccountProvision(t *testing.T) {
 	}
 	for name, input := range missing {
 		t.Run("missing "+name+" fails before calling Kratos", func(t *testing.T) {
-			e := newTenEnv(t)
+			e := newAccountsEnv(t)
 			dir := newProvisioner(t, e)
 
 			_, err := dir.Provision(ctx, input)
@@ -253,7 +232,7 @@ func TestAccountProvision(t *testing.T) {
 
 func TestAccountDirectoryGet(t *testing.T) {
 	ctx := context.Background()
-	e := newTenEnv(t)
+	e := newAccountsEnv(t)
 	dir := newProvisioner(t, e)
 	first := e.account("first@example.com")
 	second := e.account("second@example.com")
@@ -289,7 +268,7 @@ func TestAccountDirectoryGet(t *testing.T) {
 
 func TestAccountDirectoryByEmail(t *testing.T) {
 	ctx := context.Background()
-	e := newTenEnv(t)
+	e := newAccountsEnv(t)
 	dir := newProvisioner(t, e)
 	older := e.account("shared@example.com")
 	newer := e.account("shared@example.com")
@@ -317,7 +296,7 @@ func TestAccountDirectoryByEmail(t *testing.T) {
 }
 
 func TestAccountDirectoryGrantsOperator(t *testing.T) {
-	e := newTenEnv(t)
+	e := newAccountsEnv(t)
 	dir := newProvisioner(t, e, "ops@example.com")
 
 	if !dir.GrantsOperator("ops@example.com") || !dir.GrantsOperator("OPS@example.com") {
@@ -328,73 +307,11 @@ func TestAccountDirectoryGrantsOperator(t *testing.T) {
 	}
 }
 
-func TestTenantAccessRemember(t *testing.T) {
-	ctx := context.Background()
-	e := newTenEnv(t)
-	ta := newTenantAccess(e.pool, e.clock)
-	tenant := e.tenant("tenant-a")
-	account := e.account("member@example.com")
-	older := e.tenant("tenant-older")
-	olderMembership := e.member(older.ID, account.ID, "member", statusActive)
-	e.member(tenant.ID, account.ID, "member", statusActive)
-	// The fallback picks the oldest membership, so Select returning tenant-a proves Remember ran.
-	e.exec("UPDATE ten_memberships SET created_at = created_at - interval '1 day' WHERE id = $1::uuid", olderMembership.ID)
+func TestAccountProvisionerGrantsOperatorOnlyToListedEmails(t *testing.T) {
+	e := newAccountsEnv(t)
+	port := newAccountDirectory(e.pool, e.clock, nil, []string{"ops@example.com"})
 
-	err := ta.Remember(ctx, reqctx.AccountID(account.ID), reqctx.TenantID(tenant.ID))
-
-	if err != nil {
-		t.Fatalf("remember: %v", err)
+	if !port.GrantsOperator("ops@example.com") || port.GrantsOperator("other@example.com") {
+		t.Fatal("provisioner did not honor the operator list")
 	}
-	grant, err := ta.Select(ctx, reqctx.AccountID(account.ID))
-	if err != nil || grant == nil || string(grant.Tenant.ID) != tenant.ID {
-		t.Fatalf("select = %+v err=%v, want the remembered tenant", grant, err)
-	}
-	for name, ids := range map[string][2]string{
-		"non-uuid account": {"not-a-uuid", tenant.ID},
-		"non-uuid tenant":  {account.ID, "not-a-uuid"},
-	} {
-		if err := ta.Remember(ctx, reqctx.AccountID(ids[0]), reqctx.TenantID(ids[1])); err == nil {
-			t.Fatalf("%s: remember succeeded, want an error", name)
-		}
-	}
-}
-
-func TestTenantAccessMemberships(t *testing.T) {
-	ctx := context.Background()
-	e := newTenEnv(t)
-	ta := newTenantAccess(e.pool, e.clock)
-	zulu := e.tenant("zulu")
-	alpha := e.tenant("alpha")
-	gone := e.tenant("gone")
-	e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", zulu.ID)
-	account := e.account("member@example.com")
-	other := e.account("other@example.com")
-	e.member(zulu.ID, account.ID, "admin", statusActive)
-	e.member(alpha.ID, account.ID, "viewer", statusActive)
-	e.member(gone.ID, account.ID, "member", "revoked")
-	e.member(alpha.ID, other.ID, "admin", statusActive)
-
-	got, err := ta.Memberships(ctx, reqctx.AccountID(account.ID))
-
-	if err != nil {
-		t.Fatalf("memberships: %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("got %d memberships, want 2: %+v", len(got), got)
-	}
-	if got[0].Tenant.Slug != "alpha" || got[0].Role != reqctx.RoleViewer || got[0].Status != statusActive {
-		t.Fatalf("first = %+v, want alpha viewer active", got[0])
-	}
-	if got[1].Tenant.Slug != "zulu" || got[1].Tenant.Status != coreaccess.TenantSuspended || got[1].Role != reqctx.RoleAdmin {
-		t.Fatalf("second = %+v, want zulu admin with a suspended tenant", got[1])
-	}
-
-	t.Run("no memberships and bad ids give an empty non-nil list", func(t *testing.T) {
-		for name, id := range map[string]string{"non-uuid": "not-a-uuid", "unknown": "99999999-9999-4999-8999-999999999999"} {
-			got, err := ta.Memberships(ctx, reqctx.AccountID(id))
-			if err != nil || got == nil || len(got) != 0 {
-				t.Fatalf("%s: got %v err=%v, want an empty non-nil list", name, got, err)
-			}
-		}
-	})
 }

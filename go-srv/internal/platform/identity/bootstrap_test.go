@@ -19,7 +19,6 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 )
 
 const (
@@ -278,7 +277,6 @@ func (e *bootstrapEnv) settings(extra map[string]string) map[string]string {
 		"APP_PUBLIC_BASE_URL":          "http://localhost:10120",
 		"APP_SESSION_KEYS":             randomSessionKeys(e.t),
 		"APP_KRATOS_ADMIN_URL":         e.fake.server.URL,
-		"APP_BOOTSTRAP_TENANT_SLUG":    testSlug,
 		"APP_BOOTSTRAP_ADMIN_EMAIL":    testAdminEmail,
 		"APP_BOOTSTRAP_ADMIN_PASSWORD": e.password,
 	}
@@ -326,14 +324,6 @@ func (e *bootstrapEnv) seedAccount(identityID, email string) {
 		"INSERT INTO iam_accounts (kratos_identity_id, email) VALUES ($1::uuid, lower($2))", identityID, email)
 	if err != nil {
 		e.t.Fatalf("seed account %s: %v", email, err)
-	}
-}
-
-func (e *bootstrapEnv) seedTenant(slug, name string) {
-	e.t.Helper()
-	_, err := e.pool.Exec(context.Background(), "INSERT INTO ten_tenants (slug, name) VALUES ($1, $2)", slug, name)
-	if err != nil {
-		e.t.Fatalf("seed tenant %s: %v", slug, err)
 	}
 }
 
@@ -385,89 +375,44 @@ func (e *bootstrapEnv) account(email string) Account {
 	return account
 }
 
-func TestBootstrapCreatesTheTenantAndItsOperatorAdmin(t *testing.T) {
+func TestBootstrapCreatesTheOperatorAccountAndNoTenant(t *testing.T) {
 	env := newBootstrapEnv(t)
 	env.mustBuild(nil)
 
-	if env.count("ten_tenants") != 1 || env.count("iam_accounts") != 1 || env.count("ten_memberships") != 1 {
-		t.Fatalf("rows: %d tenants, %d accounts, %d memberships; want 1 each",
-			env.count("ten_tenants"), env.count("iam_accounts"), env.count("ten_memberships"))
-	}
-	st := newStore(env.pool, clock.System{})
-	tenant, err := st.TenantBySlug(context.Background(), testSlug)
-	if err != nil {
-		t.Fatalf("tenant: %v", err)
-	}
-	if tenant.Name != testSlug || tenant.Status != "active" {
-		t.Errorf("tenant name %q status %q", tenant.Name, tenant.Status)
+	if env.count("iam_accounts") != 1 {
+		t.Fatalf("accounts = %d, want 1", env.count("iam_accounts"))
 	}
 	account := env.account(testAdminEmail)
 	if !account.IsPlatformOperator {
 		t.Error("the bootstrap admin is not a platform operator")
 	}
-	selectedAt := env.pool.QueryRow(context.Background(),
-		"SELECT count(*) FROM ten_memberships WHERE account_id = $1::uuid AND tenant_id = $2::uuid AND last_selected_at IS NOT NULL",
-		account.ID, tenant.ID)
-	var marked int
-	if err := selectedAt.Scan(&marked); err != nil || marked != 1 {
-		t.Errorf("admin membership with last_selected_at = %d err=%v, want 1", marked, err)
-	}
-	grant, err := newTenantAccess(env.pool, clock.System{}).Select(context.Background(), reqctx.AccountID(account.ID))
-	if err != nil || grant == nil || string(grant.Tenant.ID) != tenant.ID {
-		t.Errorf("first session select = %+v err=%v, want the bootstrap tenant %s", grant, err, tenant.ID)
+	var tenantTables int
+	err := env.pool.QueryRow(context.Background(),
+		"SELECT count(*) FROM information_schema.tables WHERE table_name LIKE 'ten\\_%'").Scan(&tenantTables)
+	if err != nil || tenantTables != 0 {
+		t.Errorf("ten_* tables = %d err=%v, want none: the first tenant is tenancy's", tenantTables, err)
 	}
 }
 
-func TestBootstrapPromotesAnAccountThatAlreadyExistsForTheAdminIdentity(t *testing.T) {
+func TestAnExistingAccountSkipsTheBootstrap(t *testing.T) {
 	env := newBootstrapEnv(t)
 	identityID := env.fake.addIdentity(testAdminEmail)
 	env.seedAccount(identityID, testAdminEmail)
+
+	env.mustBuild(nil)
+
+	if env.count("iam_accounts") != 1 {
+		t.Errorf("accounts = %d, want the seeded one", env.count("iam_accounts"))
+	}
 	if env.account(testAdminEmail).IsPlatformOperator {
-		t.Fatal("the seeded account is already an operator")
+		t.Error("a skipped bootstrap promoted the existing account")
 	}
-
-	env.mustBuild(nil)
-
-	if env.count("iam_accounts") != 1 || env.count("ten_tenants") != 1 || env.count("ten_memberships") != 1 {
-		t.Errorf("rows: %d accounts, %d tenants, %d memberships; want 1 each",
-			env.count("iam_accounts"), env.count("ten_tenants"), env.count("ten_memberships"))
+	skipped := env.logs.events(t, "bootstrap_skipped")
+	if len(skipped) != 1 || skipped[0]["reason"] != "accounts_exist" {
+		t.Errorf("bootstrap_skipped = %v, want reason accounts_exist", skipped)
 	}
-	account := env.account(testAdminEmail)
-	tenant, err := newStore(env.pool, clock.System{}).TenantBySlug(context.Background(), testSlug)
-	if err != nil {
-		t.Fatalf("tenant: %v", err)
-	}
-	grant, err := newTenantAccess(env.pool, clock.System{}).Select(context.Background(), reqctx.AccountID(account.ID))
-	hasBootstrapTenant := err == nil && grant != nil && string(grant.Tenant.ID) == tenant.ID
-	if !account.IsPlatformOperator || !hasBootstrapTenant {
-		t.Errorf("account operator=%v select=%+v err=%v, want operator with the bootstrap tenant %s",
-			account.IsPlatformOperator, grant, err, tenant.ID)
-	}
-	var marked int
-	row := env.pool.QueryRow(context.Background(),
-		"SELECT count(*) FROM ten_memberships WHERE account_id = $1::uuid AND tenant_id = $2::uuid AND last_selected_at IS NOT NULL",
-		account.ID, tenant.ID)
-	if err := row.Scan(&marked); err != nil || marked != 1 {
-		t.Errorf("promoted membership with last_selected_at = %d err=%v, want 1", marked, err)
-	}
-}
-
-func TestBootstrapMakesTheAdminAnActiveAdminMemberOfTheTenant(t *testing.T) {
-	env := newBootstrapEnv(t)
-	env.mustBuild(nil)
-
-	st := newStore(env.pool, clock.System{})
-	tenant, err := st.TenantBySlug(context.Background(), testSlug)
-	if err != nil {
-		t.Fatalf("tenant: %v", err)
-	}
-	account := env.account(testAdminEmail)
-	membership, err := st.MembershipByTenantAccount(context.Background(), tenant.ID, account.ID)
-	if err != nil {
-		t.Fatalf("membership: %v", err)
-	}
-	if membership.Role != "admin" || membership.Status != "active" {
-		t.Errorf("membership role %q status %q", membership.Role, membership.Status)
+	if len(env.fake.received()) != 0 {
+		t.Error("a skipped bootstrap called Kratos")
 	}
 }
 
@@ -544,13 +489,13 @@ func TestBootstrapSendsTheIdentityToKratosWithATraceparent(t *testing.T) {
 func TestSecondSequentialRunSkipsAndChangesNothing(t *testing.T) {
 	env := newBootstrapEnv(t)
 	env.mustBuild(nil)
-	env.mustBuild(map[string]string{"APP_BOOTSTRAP_TENANT_SLUG": "other-corp"})
+	env.mustBuild(map[string]string{"APP_BOOTSTRAP_ADMIN_EMAIL": "other@example.com"})
 
-	if env.count("ten_tenants") != 1 || env.count("iam_accounts") != 1 || env.count("ten_memberships") != 1 {
+	if env.count("iam_accounts") != 1 {
 		t.Fatalf("a second run changed the rows")
 	}
 	skipped := env.logs.events(t, "bootstrap_skipped")
-	if len(skipped) != 1 || skipped[0]["reason"] != "tenants_exist" {
+	if len(skipped) != 1 || skipped[0]["reason"] != "accounts_exist" {
 		t.Errorf("bootstrap_skipped = %v", skipped)
 	}
 	if env.fake.count(http.MethodPost) != 1 {
@@ -558,7 +503,7 @@ func TestSecondSequentialRunSkipsAndChangesNothing(t *testing.T) {
 	}
 }
 
-func TestTwoConcurrentRunsLeaveOneTenantOneAccountOneMembership(t *testing.T) {
+func TestTwoConcurrentRunsLeaveOneAccount(t *testing.T) {
 	env := newBootstrapEnv(t)
 	const runs = 2
 	errs := make([]error, runs)
@@ -576,9 +521,8 @@ func TestTwoConcurrentRunsLeaveOneTenantOneAccountOneMembership(t *testing.T) {
 			t.Fatalf("run %d: %v", i, err)
 		}
 	}
-	if env.count("ten_tenants") != 1 || env.count("iam_accounts") != 1 || env.count("ten_memberships") != 1 {
-		t.Fatalf("rows: %d tenants, %d accounts, %d memberships; want 1 each",
-			env.count("ten_tenants"), env.count("iam_accounts"), env.count("ten_memberships"))
+	if env.count("iam_accounts") != 1 {
+		t.Fatalf("accounts = %d, want 1", env.count("iam_accounts"))
 	}
 	if env.fake.count(http.MethodPost) != 1 {
 		t.Errorf("Kratos saw %d creates, want 1", env.fake.count(http.MethodPost))
@@ -650,7 +594,7 @@ func TestKratosDownPastTheTimeoutFailsBuildAndReleasesTheLock(t *testing.T) {
 	if env.fake.count(http.MethodGet) < 3 {
 		t.Errorf("Kratos saw %d lookups, want retries", env.fake.count(http.MethodGet))
 	}
-	if env.count("ten_tenants") != 0 || env.count("iam_accounts") != 0 {
+	if env.count("iam_accounts") != 0 {
 		t.Error("a failed bootstrap left rows behind")
 	}
 	// The failed run must have released its lock: no session holds it.
@@ -686,7 +630,7 @@ func TestALockHeldByAnotherSessionFailsBuildAtTheTimeout(t *testing.T) {
 	if elapsed < 4*time.Second || elapsed > 15*time.Second {
 		t.Errorf("Build gave up after %s, want about the 5s timeout", elapsed)
 	}
-	if env.count("ten_tenants") != 0 || len(env.fake.received()) != 0 {
+	if env.count("iam_accounts") != 0 || len(env.fake.received()) != 0 {
 		t.Error("bootstrap ran without holding the lock")
 	}
 }
@@ -696,38 +640,45 @@ func TestKratosRecoveringWithinTheTimeoutLetsBootstrapFinish(t *testing.T) {
 	env.fake.failures = 2
 	env.mustBuild(map[string]string{"APP_BOOTSTRAP_TIMEOUT": "60s"})
 
-	if env.count("ten_tenants") != 1 || env.count("ten_memberships") != 1 {
+	if env.count("iam_accounts") != 1 {
 		t.Fatal("bootstrap did not finish after Kratos recovered")
 	}
 }
 
-func TestAPartialBootstrapConfigListsEveryProblemInOneError(t *testing.T) {
-	env := newBootstrapEnv(t)
-	_, err := env.build(map[string]string{
-		"APP_BOOTSTRAP_ADMIN_EMAIL":    "",
-		"APP_BOOTSTRAP_ADMIN_PASSWORD": "",
-	})
-	if err == nil {
-		t.Fatal("Build accepted a partial bootstrap configuration")
+func TestAPartialBootstrapConfigNamesTheMissingKey(t *testing.T) {
+	cases := map[string]struct {
+		extra   map[string]string
+		missing string
+	}{
+		"email without password": {map[string]string{"APP_BOOTSTRAP_ADMIN_PASSWORD": ""}, "APP_BOOTSTRAP_ADMIN_PASSWORD"},
+		"password without email": {map[string]string{"APP_BOOTSTRAP_ADMIN_EMAIL": ""}, "APP_BOOTSTRAP_ADMIN_EMAIL"},
 	}
-	for _, key := range []string{"APP_BOOTSTRAP_ADMIN_EMAIL", "APP_BOOTSTRAP_ADMIN_PASSWORD"} {
-		if !strings.Contains(err.Error(), key) {
-			t.Errorf("error does not name %s: %v", key, err)
-		}
-	}
-	if env.count("ten_tenants") != 0 || len(env.fake.received()) != 0 {
-		t.Error("a rejected configuration ran the bootstrap")
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			env := newBootstrapEnv(t)
+
+			_, err := env.build(tc.extra)
+
+			if err == nil {
+				t.Fatal("Build accepted a partial bootstrap configuration")
+			}
+			if !strings.Contains(err.Error(), tc.missing) {
+				t.Errorf("error does not name %s: %v", tc.missing, err)
+			}
+			if env.count("iam_accounts") != 0 || len(env.fake.received()) != 0 {
+				t.Error("a rejected configuration ran the bootstrap")
+			}
+		})
 	}
 }
 
 func TestBootstrapDisabledCreatesNothing(t *testing.T) {
 	env := newBootstrapEnv(t)
 	env.mustBuild(map[string]string{
-		"APP_BOOTSTRAP_TENANT_SLUG":    "",
 		"APP_BOOTSTRAP_ADMIN_EMAIL":    "",
 		"APP_BOOTSTRAP_ADMIN_PASSWORD": "",
 	})
-	if env.count("ten_tenants") != 0 || env.count("iam_accounts") != 0 || env.count("ten_memberships") != 0 {
+	if env.count("iam_accounts") != 0 {
 		t.Error("a disabled bootstrap created rows")
 	}
 	if len(env.fake.received()) != 0 {
@@ -735,23 +686,9 @@ func TestBootstrapDisabledCreatesNothing(t *testing.T) {
 	}
 }
 
-func TestAnExistingTenantSkipsEvenWithDifferentVariables(t *testing.T) {
-	env := newBootstrapEnv(t)
-	env.seedTenant("existing", "Existing")
-	env.mustBuild(nil)
-
-	if env.count("ten_tenants") != 1 || env.count("iam_accounts") != 0 {
-		t.Error("the bootstrap ran although a tenant exists")
-	}
-	if len(env.fake.received()) != 0 {
-		t.Error("the bootstrap called Kratos although a tenant exists")
-	}
-}
-
 func TestListedOperatorEmailsGrantExistingAccountsOnly(t *testing.T) {
 	env := newBootstrapEnv(t)
 	ctx := context.Background()
-	env.seedTenant("existing", "Existing")
 	for _, email := range []string{testJaneEmail, "john.roe@example.com", "kept@example.com"} {
 		env.seedAccount(randomUUID(t), email)
 	}
@@ -784,7 +721,6 @@ func TestOperatorGrantsApplyWhenBootstrapIsDisabledAndNeverRevoke(t *testing.T) 
 	env := newBootstrapEnv(t)
 	env.seedAccount(randomUUID(t), testJaneEmail)
 	disabled := map[string]string{
-		"APP_BOOTSTRAP_TENANT_SLUG":    "",
 		"APP_BOOTSTRAP_ADMIN_EMAIL":    "",
 		"APP_BOOTSTRAP_ADMIN_PASSWORD": "",
 	}
@@ -816,7 +752,7 @@ func TestAKratosRejectionFailsBuildWithoutRetrying(t *testing.T) {
 	if env.fake.count(http.MethodPost) != 1 {
 		t.Errorf("Kratos saw %d creates, want 1", env.fake.count(http.MethodPost))
 	}
-	if env.count("ten_tenants") != 0 {
+	if env.count("iam_accounts") != 0 {
 		t.Error("a failed bootstrap left rows behind")
 	}
 }

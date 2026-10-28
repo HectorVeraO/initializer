@@ -1,4 +1,4 @@
-package identity
+package tenancy
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/db"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 )
 
 const (
@@ -117,7 +116,7 @@ func newToken() (string, error) {
 	raw := make([]byte, tokenBytes)
 	_, err := rand.Read(raw)
 	if err != nil {
-		return "", fmt.Errorf("identity: random token: %w", err)
+		return "", fmt.Errorf("tenancy: random token: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
@@ -165,7 +164,7 @@ func (s *tenancy) CreateInvitation(ctx context.Context, tenantID, actorID, email
 	tenant, tenantOK := canonicalID(tenantID)
 	actor, actorOK := canonicalID(actorID)
 	if !tenantOK || !actorOK || email == "" || !role.Valid() {
-		return InvitationCreated{}, errors.New("identity: create invitation: tenant id, actor id, email and role are required")
+		return InvitationCreated{}, errors.New("tenancy: create invitation: tenant id, actor id, email and role are required")
 	}
 	lowered := strings.ToLower(email)
 	if s.provisioner.GrantsOperator(lowered) {
@@ -183,7 +182,7 @@ func (s *tenancy) CreateInvitation(ctx context.Context, tenantID, actorID, email
 			return created, wrapOperational("create invitation", err)
 		}
 	}
-	return InvitationCreated{}, fmt.Errorf("identity: create invitation: %w", err)
+	return InvitationCreated{}, fmt.Errorf("tenancy: create invitation: %w", err)
 }
 
 // requirePlatformOperator answers 403 PLATFORM_OPERATOR_REQUIRED unless the
@@ -195,7 +194,7 @@ func (s *tenancy) requirePlatformOperator(ctx context.Context, actor string) err
 	id := reqctx.AccountID(actor)
 	found, err := s.accounts.Get(ctx, []reqctx.AccountID{id})
 	if err != nil {
-		return fmt.Errorf("identity: read inviter: %w", err)
+		return fmt.Errorf("tenancy: read inviter: %w", err)
 	}
 	inviter, exists := found[id]
 	if !exists || !inviter.PlatformOperator {
@@ -258,7 +257,7 @@ func wrapOperational(op string, err error) error {
 	if errors.As(err, &apiErr) {
 		return err
 	}
-	return fmt.Errorf("identity: %s: %w", op, err)
+	return fmt.Errorf("tenancy: %s: %w", op, err)
 }
 
 // RevokeInvitation revokes a pending invitation of the tenant. A foreign,
@@ -337,7 +336,7 @@ func readTenant(ctx context.Context, tx pgx.Tx, tenantID string) (Tenant, error)
 func (s *tenancy) AcceptInvitation(ctx context.Context, accountID, token string) (MembershipView, error) {
 	account, isUUID := canonicalID(accountID)
 	if !isUUID || token == "" {
-		return MembershipView{}, errors.New("identity: accept invitation: account id and token are required")
+		return MembershipView{}, errors.New("tenancy: accept invitation: account id and token are required")
 	}
 	// The account is read before the transaction opens: the accounts port uses
 	// its own pooled connection, so reading inside would hold two.
@@ -355,13 +354,13 @@ func (s *tenancy) AcceptInvitation(ctx context.Context, accountID, token string)
 		}
 		holder, exists := found[id]
 		if !exists {
-			return forbidden(CodeAccountLockedOrDisabled, "The account is locked or disabled.")
+			return forbidden(codeAccountLockedOrDisabled, "The account is locked or disabled.")
 		}
 		if !strings.EqualFold(holder.Email, invitation.Email) {
 			return forbidden(CodeInvitationEmailMismatch, "The invitation was sent to another email address.")
 		}
 		if holder.Status != accounts.StatusActive {
-			return forbidden(CodeAccountLockedOrDisabled, "The account is locked or disabled.")
+			return forbidden(codeAccountLockedOrDisabled, "The account is locked or disabled.")
 		}
 		tenant, err := readTenant(ctx, tx, invitation.TenantID)
 		if err != nil {
@@ -412,7 +411,7 @@ RETURNING id::text`, tenant.ID, account, invitation.Role, now).Scan(&membershipI
 func (s *tenancy) AcceptNew(ctx context.Context, token, password, fullName string) (AcceptNewResult, error) {
 	name := strings.TrimSpace(fullName)
 	if token == "" || password == "" || name == "" {
-		return AcceptNewResult{}, errors.New("identity: accept new: token, password and full name are required")
+		return AcceptNewResult{}, errors.New("tenancy: accept new: token, password and full name are required")
 	}
 	var result AcceptNewResult
 	err := db.InTx(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
@@ -465,13 +464,13 @@ func (s *tenancy) ListInvitations(ctx context.Context, tenantID, status string, 
 	tenant, tenantOK := api.ParseUUID(tenantID)
 	filter, filterOK := statusFilters[status]
 	if !tenantOK || !filterOK || q.Page < 1 || q.Size < 1 {
-		return nil, 0, errors.New("identity: list invitations: tenant id, status and page are required")
+		return nil, 0, errors.New("tenancy: list invitations: tenant id, status and page are required")
 	}
 	now := s.clock.Now()
 	var total int64
 	err := s.pool.QueryRow(ctx, "SELECT count(*) FROM ten_invitations WHERE tenant_id = $1::uuid AND "+filter, tenant, now).Scan(&total)
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: count invitations: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: count invitations: %w", err)
 	}
 	direction := "ASC"
 	if q.SortDesc {
@@ -482,13 +481,13 @@ func (s *tenancy) ListInvitations(ctx context.Context, tenantID, status string, 
 			" ORDER BY created_at "+direction+", id "+direction+" LIMIT $3 OFFSET $4",
 		tenant, now, q.Size, q.Offset())
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: list invitations: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: list invitations: %w", err)
 	}
 	found, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (invitationRow, error) {
 		return scanInvitation(row)
 	})
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: list invitations: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: list invitations: %w", err)
 	}
 	views := make([]InvitationView, 0, len(found))
 	for _, item := range found {
@@ -503,14 +502,4 @@ var statusFilters = map[string]string{
 	invitationAccepted: "accepted_at IS NOT NULL AND $2::timestamptz IS NOT NULL",
 	invitationRevoked:  "revoked_at IS NOT NULL AND $2::timestamptz IS NOT NULL",
 	invitationExpired:  "accepted_at IS NULL AND revoked_at IS NULL AND expires_at <= $2",
-}
-
-// identityError maps an unreachable Kratos to 503. The cause is kept for the
-// log line and carries no password or email.
-func identityError(err error) error {
-	if errors.Is(err, kratos.ErrUnavailable) {
-		return api.Wrap(err, http.StatusServiceUnavailable, CodeIdentityProviderUnavailable,
-			"Sign-in is unavailable right now.")
-	}
-	return err
 }
