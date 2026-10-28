@@ -14,6 +14,7 @@
   "expiresAt": "Vence el (opcional)",
   "scopes": "Permisos",
   "noScopes": "No hay permisos disponibles para otorgar.",
+  "noScopesWithoutTenant": "En este proyecto, ningún permiso puede ser tenido por una clave sin tenant.",
   "scopesLoadFailed": "No se pudieron cargar los permisos.",
   "scopesRetry": "Reintentar",
   "submit": "Crear clave de API",

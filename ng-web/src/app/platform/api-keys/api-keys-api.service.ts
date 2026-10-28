@@ -26,6 +26,8 @@ export interface ApiKeyView {
 export interface ApiKeyScope {
   readonly name: string;
   readonly description: string;
+  /** `any`: a key with or without a tenant may hold it. `tenant`: only a key bound to a tenant. */
+  readonly level: 'any' | 'tenant';
 }
 
 /** `data` of POST /api/v1/api-keys. `plainTextKey` is shown once and kept nowhere. */

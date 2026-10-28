@@ -18,9 +18,13 @@ const SCOPES_URL = '/api/v1/api-key-scopes';
 const SYNTHETIC_KEY = 'synthetic-plain-key';
 
 const SCOPES = [
-  { name: 'api-keys:read', description: 'Read API keys' },
-  { name: 'tenant:read', description: 'Read the tenant' }
+  { name: 'api-keys:read', description: 'Read API keys', level: 'tenant' },
+  { name: 'tenant:read', description: 'Read the tenant', level: 'tenant' }
 ];
+
+const ANY_SCOPE = { name: 'probe:whoami', description: 'Read the key principal', level: 'any' };
+
+const TENANTLESS_OPERATOR = { activeTenant: null, role: null, isPlatformOperator: true, memberships: [] };
 
 function apiKey(name: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return { id: `id-${name}`, name, keyPrefix: 'synthetic_pfx', scopes: ['tenant:read'], status: 'active', expiresAt: null, revokedAt: null, createdAt: '2026-01-01T12:00:00Z', ...overrides };
@@ -135,7 +139,7 @@ describe('ApiKeysPage', () => {
   });
 
   it('offers the scopes the server returns', async () => {
-    const fixture = await open([], 0, [{ name: 'custom:scope', description: 'Synthetic' }]);
+    const fixture = await open([], 0, [{ name: 'custom:scope', description: 'Synthetic', level: 'tenant' }]);
 
     const boxes = allByTestId(root(fixture), 'api-key-scope');
 
@@ -158,6 +162,31 @@ describe('ApiKeysPage', () => {
     const fixture = await open([], 0, []);
 
     expect(byTestId(root(fixture), 'api-key-scopes-empty')).not.toBeNull();
+    expect((byTestId(root(fixture), 'api-key-submit') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('offers a tenantless operator only the scopes of level any', async () => {
+    const fixture = await open([], 0, [...SCOPES, ANY_SCOPE], accessContext(TENANTLESS_OPERATOR));
+
+    const boxes = allByTestId(root(fixture), 'api-key-scope');
+
+    expect(boxes.map((box) => box.getAttribute('data-key'))).toEqual(['probe:whoami']);
+    expect((byTestId(root(fixture), 'api-key-submit') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('offers a session with an active tenant every scope', async () => {
+    const fixture = await open([], 0, [...SCOPES, ANY_SCOPE]);
+
+    const boxes = allByTestId(root(fixture), 'api-key-scope');
+
+    expect(boxes.map((box) => box.getAttribute('data-key'))).toEqual(['api-keys:read', 'tenant:read', 'probe:whoami']);
+  });
+
+  it('says no scope fits a key without a tenant and disables submit when no scope has level any', async () => {
+    const fixture = await open([], 0, SCOPES, accessContext(TENANTLESS_OPERATOR));
+
+    expect(allByTestId(root(fixture), 'api-key-scope')).toEqual([]);
+    expect(textOf(byTestId(root(fixture), 'api-key-scopes-empty'))).toBe(apiKeysEs.noScopesWithoutTenant);
     expect((byTestId(root(fixture), 'api-key-submit') as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -307,11 +336,11 @@ describe('ApiKeysPage', () => {
   });
 
   it('shows the SCOPE_LEVEL_MISMATCH text under the scopes field', async () => {
-    const operator = accessContext({ activeTenant: null, role: null, isPlatformOperator: true, memberships: [] });
+    const operator = accessContext(TENANTLESS_OPERATOR);
 
-    const fixture = await open([], 0, SCOPES, operator);
+    const fixture = await open([], 0, [ANY_SCOPE], operator);
 
-    await fill(fixture, 'ci', ['tenant:read']);
+    await fill(fixture, 'ci', ['probe:whoami']);
     await submit(fixture);
 
     (await nextCall('POST', LIST_URL)).flush(errorEnvelope('VALIDATION_FAILED', [{ field: 'scopes', code: 'SCOPE_LEVEL_MISMATCH', message: 'x' }]), { status: 422, statusText: 'Error' });
@@ -333,8 +362,8 @@ describe('ApiKeysPage', () => {
     expect(textOf(byTestId(root(fixture), 'api-keys-owner'))).toBe(apiKeysEs.owner.global);
   });
 
-  it('lets a tenantless platform operator create and revoke keys: the page adds no role gate of its own', async () => {
-    const fixture = await open([apiKey('ci')], 1, SCOPES, accessContext({ activeTenant: null, role: null, isPlatformOperator: true, memberships: [] }));
+  it('shows the form and the revoke button to a tenantless platform operator: the page adds no role gate of its own', async () => {
+    const fixture = await open([apiKey('ci')], 1, SCOPES, accessContext(TENANTLESS_OPERATOR));
 
     expect(byTestId(root(fixture), 'api-key-form')).not.toBeNull();
     expect(byTestId(allByTestId(root(fixture), 'api-keys-row')[0], 'api-key-revoke')).not.toBeNull();

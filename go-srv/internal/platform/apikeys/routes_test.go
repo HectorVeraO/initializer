@@ -570,3 +570,31 @@ func TestAnOperatorWithoutATenantManagesGlobalKeysOnly(t *testing.T) {
 		t.Fatalf("operator revoked list = %v", got)
 	}
 }
+
+func TestWithoutTenancyAnOperatorMintsAGlobalKeyThatCallsAnAnyLevelRoute(t *testing.T) {
+	e := newEnvWithoutTenancy(t)
+	_, operator := e.actor("", "", true)
+
+	refused := operator.send(http.MethodPost, "/api/v1/api-keys", createKeyJSON("tenant-level", []string{"tenant:read"}, nil))
+	expectIssues(t, refused, []wantIssue{{"scopes[0]", "SCOPE_LEVEL_MISMATCH"}})
+
+	created := operator.send(http.MethodPost, "/api/v1/api-keys", createKeyJSON("global-probe", []string{whoamiScope}, nil))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("mint answered %d: %s", created.Code, created.Body.String())
+	}
+	key := decodeData[ApiKeyCreated](t, created).PlainTextKey
+
+	rec := e.withKey(whoamiPath, key)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("global key on the any-level route answered %d: %s", rec.Code, rec.Body.String())
+	}
+	principal := decodeData[whoami](t, rec)
+	if principal.Kind != string(reqctx.ActorAPIKey) || principal.TenantID != "" || !reflect.DeepEqual(principal.Scopes, []string{whoamiScope}) {
+		t.Fatalf("principal = %+v", principal)
+	}
+
+	expectError(t, e.withKey("/api/v1/api-keys", key), http.StatusForbidden, "ACTIVE_TENANT_REQUIRED")
+	if leaked := strings.Contains(e.logs.String(), key); leaked {
+		t.Fatal("the plain key reached the logs")
+	}
+}
