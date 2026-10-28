@@ -1,7 +1,7 @@
 -- +goose Up
 CREATE TABLE iam_api_keys (
   id                     uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id              uuid        NOT NULL REFERENCES ten_tenants (id),
+  tenant_id              uuid        NULL,
   name                   text        NOT NULL,
   key_prefix             text        NOT NULL,
   secret_hash            bytea       NOT NULL,
@@ -9,9 +9,9 @@ CREATE TABLE iam_api_keys (
   scopes                 text[]      NOT NULL,
   expires_at             timestamptz NULL,
   revoked_at             timestamptz NULL,
-  created_by_account_id  uuid        NOT NULL REFERENCES iam_accounts (id),
+  created_by_account_id  uuid        NOT NULL,
   created_at             timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT iam_api_keys_prefix_format CHECK (key_prefix ~ '^gbk_live_[a-z2-7]{16}$'),
+  CONSTRAINT iam_api_keys_prefix_format CHECK (key_prefix ~ '^ak_live_[a-z2-7]{16}$'),
   CONSTRAINT iam_api_keys_name_length CHECK (char_length(name) BETWEEN 1 AND 100),
   CONSTRAINT iam_api_keys_scopes_nonempty CHECK (cardinality(scopes) > 0)
 );

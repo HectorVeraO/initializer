@@ -51,7 +51,7 @@ func TestRegistryMatchesTheDesignTable(t *testing.T) {
 		"FIELD_OUT_OF_RANGE", "FIELD_INVALID_FORMAT", "FIELD_NOT_ALLOWED", "FIELD_DUPLICATE",
 		"FIELD_MIN_ITEMS", "PARAMETER_KEY_INVALID", "PARAMETER_TYPE_MISMATCH", "PARAMETER_OUT_OF_RANGE",
 		"PARAMETER_VALUE_NOT_ALLOWED", "PARAMETER_CONSTRAINT_INVALID", "PARAMETER_FIELD_IMMUTABLE",
-		"PASSWORD_REJECTED",
+		"PASSWORD_REJECTED", "SCOPE_LEVEL_MISMATCH",
 	}
 	byCode := map[api.Code]api.CodeInfo{}
 	for _, info := range api.Registry() {
@@ -67,6 +67,9 @@ func TestRegistryMatchesTheDesignTable(t *testing.T) {
 		if info, ok := byCode[code]; !ok || !info.Issue {
 			t.Errorf("issue code %s: %+v", code, info)
 		}
+	}
+	if raisedBy := byCode["SCOPE_LEVEL_MISMATCH"].RaisedBy; raisedBy != "api-keys" {
+		t.Errorf("SCOPE_LEVEL_MISMATCH raisedBy = %q, want api-keys", raisedBy)
 	}
 	if len(want)+len(issues) != len(api.Registry()) {
 		t.Errorf("expected %d codes, registry has %d", len(want)+len(issues), len(api.Registry()))

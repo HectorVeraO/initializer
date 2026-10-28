@@ -78,7 +78,7 @@ func TestCheckMint(t *testing.T) {
 		t.Fatalf("tenantless mint: err = %v, want exactly one issue", err)
 	}
 	issue := apiErr.Issues[0]
-	if issue.Field != "scopes[0]" || issue.Code != api.CodeFieldNotAllowed || issue.Message != "Requires a key bound to a tenant" {
+	if issue.Field != "scopes[0]" || issue.Code != api.CodeScopeLevelMismatch || issue.Message != "Requires a key bound to a tenant" {
 		t.Fatalf("issue = %+v", issue)
 	}
 

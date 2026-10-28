@@ -38,7 +38,7 @@ export const ApiErrorCode = {
 
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 
-/** Core issue codes (`error.issues[].code`, the `Issue: true` rows of `Registry()` raised by core); module issue codes (`PASSWORD_REJECTED`, `PARAMETER_*`) live in their module folder. */
+/** Issue codes (`error.issues[].code`, the `Issue: true` rows of `Registry()` raised by core, and `SCOPE_LEVEL_MISMATCH`, which core raises for the api-keys module); other module issue codes (`PASSWORD_REJECTED`, `PARAMETER_*`) live in their module folder. */
 export const IssueCode = {
   BodyMalformed: 'BODY_MALFORMED',
   FieldRequired: 'FIELD_REQUIRED',
@@ -49,7 +49,8 @@ export const IssueCode = {
   FieldInvalidFormat: 'FIELD_INVALID_FORMAT',
   FieldNotAllowed: 'FIELD_NOT_ALLOWED',
   FieldDuplicate: 'FIELD_DUPLICATE',
-  FieldMinItems: 'FIELD_MIN_ITEMS'
+  FieldMinItems: 'FIELD_MIN_ITEMS',
+  ScopeLevelMismatch: 'SCOPE_LEVEL_MISMATCH'
 } as const;
 
 export type IssueCode = (typeof IssueCode)[keyof typeof IssueCode];

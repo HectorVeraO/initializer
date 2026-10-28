@@ -260,7 +260,8 @@
       "FIELD_INVALID_FORMAT": "El valor tiene un formato no válido",
       "FIELD_NOT_ALLOWED": "El valor no es una de las opciones permitidas",
       "FIELD_DUPLICATE": "El valor está repetido",
-      "FIELD_MIN_ITEMS": "Hay muy pocos elementos"
+      "FIELD_MIN_ITEMS": "Hay muy pocos elementos",
+      "SCOPE_LEVEL_MISMATCH": "Este scope requiere una clave asociada a un tenant"
     }
   }
 }
