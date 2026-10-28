@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
@@ -56,13 +58,17 @@ func newTenEnv(t *testing.T, operatorEmails ...string) *tenEnv {
 		t.Fatalf("parse base url: %v", err)
 	}
 	cfg := Config{PublicBaseURL: base, InvitationTTL: tenTTL, PlatformOperatorEmails: operatorEmails}
+	svc := newTenancy(pool, clk, cfg)
+	port := newAccountDirectory(pool, clk, kratos.NewAdmin(adminURL), operatorEmails)
+	svc.accounts = port
+	svc.provisioner = port
 	return &tenEnv{
 		t:      t,
 		pool:   pool,
 		store:  newStore(pool, clk),
 		clock:  clk,
 		kratos: fake,
-		svc:    newTenancy(pool, clk, kratos.NewAdmin(adminURL), cfg),
+		svc:    svc,
 		access: newAccess(pool, clk, operatorEmails),
 	}
 }
@@ -968,7 +974,10 @@ func FuzzAcceptInvitationToken(f *testing.F) {
 	if err != nil {
 		f.Fatalf("parse: %v", err)
 	}
-	svc := newTenancy(pool, clk, nil, Config{PublicBaseURL: base, InvitationTTL: tenTTL})
+	svc := newTenancy(pool, clk, Config{PublicBaseURL: base, InvitationTTL: tenTTL})
+	port := newAccountDirectory(pool, clk, nil, nil)
+	svc.accounts = port
+	svc.provisioner = port
 	st := newStore(pool, clk)
 	tenant, err := st.InsertTenant(context.Background(), "tenant-a", "Tenant A")
 	if err != nil {
@@ -1079,4 +1088,85 @@ func TestServicesRejectMalformedInput(t *testing.T) {
 	if n := e.count("SELECT count(*) FROM ten_invitations"); n != 0 {
 		t.Fatalf("invitations = %d, want 0", n)
 	}
+}
+
+func TestAcceptNewAfterProvisionFailureLeavesAccountAndAcceptRecovers(t *testing.T) {
+	ctx := context.Background()
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+	admin := e.account("admin@example.com")
+	jane := e.account(janeEmail)
+	e.member(tenant.ID, jane.ID, "member", "revoked")
+	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
+	e.kratos.rejectStatus = http.StatusInternalServerError
+
+	_, err := e.svc.AcceptNew(ctx, token, randomPassword(t), "Jane Doe")
+
+	requireAPIError(t, err, 503, CodeIdentityProviderUnavailable)
+	if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
+		t.Fatalf("invitation status = %s, want pending", got)
+	}
+
+	e.kratos.rejectStatus = 0
+	e.kratos.identities[janeEmail] = "11111111-1111-4111-8111-111111111111"
+	_, err = e.svc.AcceptNew(ctx, token, randomPassword(t), "Jane Doe")
+	requireAPIError(t, err, 409, CodeIdentityAlreadyExists)
+
+	view, err := e.svc.AcceptInvitation(ctx, jane.ID, token)
+	if err != nil || view.Status != statusActive {
+		t.Fatalf("accept after failure: %+v err=%v", view, err)
+	}
+	if got := e.invitationStatus(created.Invitation.ID); got != "accepted" {
+		t.Fatalf("invitation status = %s, want accepted", got)
+	}
+}
+
+func TestAcceptInvitationComparesEmailsCaseInsensitively(t *testing.T) {
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+	admin := e.account("admin@example.com")
+	jane := e.account(janeEmail)
+	_, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
+	e.svc.accounts = upperCaseDirectory{inner: e.svc.accounts}
+
+	view, err := e.svc.AcceptInvitation(context.Background(), jane.ID, token)
+
+	if err != nil || view.Status != statusActive {
+		t.Fatalf("accept = %+v err=%v, want accepted", view, err)
+	}
+}
+
+func TestCreateInvitationSeesActiveMemberAmongAccountsSharingTheEmail(t *testing.T) {
+	e := newTenEnv(t)
+	tenant := e.tenant("tenant-a")
+	admin := e.account("admin@example.com")
+	older := e.account("shared@example.com")
+	newer := e.account("shared@example.com")
+	e.exec("UPDATE iam_accounts SET created_at = created_at + interval '1 hour' WHERE id = $1::uuid", newer.ID)
+	e.member(tenant.ID, older.ID, "member", "revoked")
+	e.member(tenant.ID, newer.ID, "member", "active")
+
+	_, err := e.svc.CreateInvitation(context.Background(), tenant.ID, admin.ID, "shared@example.com", reqctx.RoleMember)
+
+	requireAPIError(t, err, 409, CodeMembershipAlreadyActive)
+}
+
+// upperCaseDirectory answers every email upper-cased, as a store that does not
+// normalize would. iam_accounts_email_lower forbids seeding such a row, so the
+// accounts port is the only place the case can be injected.
+type upperCaseDirectory struct {
+	inner accounts.Directory
+}
+
+func (d upperCaseDirectory) Get(ctx context.Context, ids []reqctx.AccountID) (map[reqctx.AccountID]accounts.Ref, error) {
+	found, err := d.inner.Get(ctx, ids)
+	for id, ref := range found {
+		ref.Email = strings.ToUpper(ref.Email)
+		found[id] = ref
+	}
+	return found, err
+}
+
+func (d upperCaseDirectory) ByEmail(ctx context.Context, email string) ([]accounts.Ref, error) {
+	return d.inner.ByEmail(ctx, email)
 }

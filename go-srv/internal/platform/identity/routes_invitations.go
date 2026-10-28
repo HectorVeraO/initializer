@@ -32,6 +32,8 @@ type tenancyRoutes struct {
 
 // mountTenancy registers the tenant, membership and invitation routes.
 func (s *service) mountTenancy(h *core.Host) {
+	s.tenancy.accounts = h.AccountDirectory()
+	s.tenancy.provisioner = h.AccountProvisioner()
 	routes := &tenancyRoutes{tenancy: s.tenancy, writer: h.API()}
 	admin := coreaccess.Policy{Kind: coreaccess.KindSession, MinRole: reqctx.RoleAdmin}
 	operator := coreaccess.Policy{Kind: coreaccess.KindSession, PlatformOperator: true}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/db"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
@@ -167,7 +168,7 @@ func (s *tenancy) CreateInvitation(ctx context.Context, tenantID, actorID, email
 		return InvitationCreated{}, errors.New("identity: create invitation: tenant id, actor id, email and role are required")
 	}
 	lowered := strings.ToLower(email)
-	if slices.Contains(s.operatorEmails, lowered) {
+	if s.provisioner.GrantsOperator(lowered) {
 		err := s.requirePlatformOperator(ctx, actor)
 		if err != nil {
 			return InvitationCreated{}, err
@@ -191,37 +192,46 @@ func (s *tenancy) CreateInvitation(ctx context.Context, tenantID, actorID, email
 // invite one.
 func (s *tenancy) requirePlatformOperator(ctx context.Context, actor string) error {
 	denied := forbidden(api.CodePlatformOperatorNeeded, "Only a platform operator may invite this address.")
-	var isOperator bool
-	err := s.pool.QueryRow(ctx, `SELECT is_platform_operator FROM iam_accounts WHERE id = $1::uuid`, actor).Scan(&isOperator)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return denied
-	}
+	id := reqctx.AccountID(actor)
+	found, err := s.accounts.Get(ctx, []reqctx.AccountID{id})
 	if err != nil {
 		return fmt.Errorf("identity: read inviter: %w", err)
 	}
-	if !isOperator {
+	inviter, exists := found[id]
+	if !exists || !inviter.PlatformOperator {
 		return denied
 	}
 	return nil
 }
 
 func (s *tenancy) createInvitationOnce(ctx context.Context, tenant, actor, email, role string) (InvitationCreated, error) {
+	holders, err := s.accounts.ByEmail(ctx, email)
+	if err != nil {
+		return InvitationCreated{}, err
+	}
+	holderIDs := make([]string, 0, len(holders))
+	for _, holder := range holders {
+		holderIDs = append(holderIDs, string(holder.ID))
+	}
 	var created InvitationCreated
-	err := db.InTx(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	err = db.InTx(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		now := s.clock.Now()
-		rows, err := tx.Query(ctx,
-			`SELECT m.status FROM ten_memberships m JOIN iam_accounts a ON a.id = m.account_id
-WHERE m.tenant_id = $1::uuid AND a.email = $2 FOR UPDATE OF m`, tenant, email)
-		if err != nil {
-			return err
+		if len(holderIDs) > 0 {
+			rows, err := tx.Query(ctx,
+				`SELECT status FROM ten_memberships
+WHERE tenant_id = $1::uuid AND account_id = ANY($2::uuid[]) FOR UPDATE`, tenant, holderIDs)
+			if err != nil {
+				return err
+			}
+			statuses, err := pgx.CollectRows(rows, pgx.RowTo[string])
+			if err != nil {
+				return err
+			}
+			if slices.Contains(statuses, statusActive) {
+				return conflict(CodeMembershipAlreadyActive, "The account is already an active member.")
+			}
 		}
-		statuses, err := pgx.CollectRows(rows, pgx.RowTo[string])
-		if err != nil {
-			return err
-		}
-		if slices.Contains(statuses, statusActive) {
-			return conflict(CodeMembershipAlreadyActive, "The account is already an active member.")
-		}
+		var err error
 		_, err = tx.Exec(ctx,
 			`UPDATE ten_invitations SET revoked_at = $3
 WHERE tenant_id = $1::uuid AND email = $2 AND accepted_at IS NULL AND revoked_at IS NULL`,
@@ -329,26 +339,28 @@ func (s *tenancy) AcceptInvitation(ctx context.Context, accountID, token string)
 	if !isUUID || token == "" {
 		return MembershipView{}, errors.New("identity: accept invitation: account id and token are required")
 	}
+	// The account is read before the transaction opens: the accounts port uses
+	// its own pooled connection, so reading inside would hold two.
+	id := reqctx.AccountID(account)
+	found, err := s.accounts.Get(ctx, []reqctx.AccountID{id})
+	if err != nil {
+		return MembershipView{}, wrapOperational("accept invitation", err)
+	}
 	var view MembershipView
-	err := db.InTx(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	err = db.InTx(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		now := s.clock.Now()
 		invitation, err := lockPendingInvitation(ctx, tx, token, now)
 		if err != nil {
 			return err
 		}
-		var email, accountStatus string
-		err = tx.QueryRow(ctx, "SELECT email, status FROM iam_accounts WHERE id = $1::uuid", account).
-			Scan(&email, &accountStatus)
-		if errors.Is(err, pgx.ErrNoRows) {
+		holder, exists := found[id]
+		if !exists {
 			return forbidden(CodeAccountLockedOrDisabled, "The account is locked or disabled.")
 		}
-		if err != nil {
-			return err
-		}
-		if !strings.EqualFold(email, invitation.Email) {
+		if !strings.EqualFold(holder.Email, invitation.Email) {
 			return forbidden(CodeInvitationEmailMismatch, "The invitation was sent to another email address.")
 		}
-		if accountStatus != statusActive {
+		if holder.Status != accounts.StatusActive {
 			return forbidden(CodeAccountLockedOrDisabled, "The account is locked or disabled.")
 		}
 		tenant, err := readTenant(ctx, tx, invitation.TenantID)
@@ -390,17 +402,17 @@ RETURNING id::text`, tenant.ID, account, invitation.Role, now).Scan(&membershipI
 	return view, nil
 }
 
-// AcceptNew creates the Kratos identity and the account of an invited person
-// and adds it to the tenant, in one transaction. The Kratos admin calls run
-// while the invitation row is locked. No session is issued, and password is
-// only passed to Kratos.
+// AcceptNew provisions the account of an invited person through the account
+// provisioner and adds it to the tenant, in one tenancy transaction. The
+// provisioner commits the account on its own connection while the invitation
+// row stays locked; a later failure leaves the account without the membership
+// and the invitation pending, so a retry is 409 and the authenticated accept
+// completes the work. No session is issued, and password is only passed to
+// the provisioner.
 func (s *tenancy) AcceptNew(ctx context.Context, token, password, fullName string) (AcceptNewResult, error) {
 	name := strings.TrimSpace(fullName)
 	if token == "" || password == "" || name == "" {
 		return AcceptNewResult{}, errors.New("identity: accept new: token, password and full name are required")
-	}
-	if s.admin == nil {
-		return AcceptNewResult{}, errors.New("identity: accept new: the Kratos admin client is not configured")
 	}
 	var result AcceptNewResult
 	err := db.InTx(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
@@ -416,20 +428,13 @@ func (s *tenancy) AcceptNew(ctx context.Context, token, password, fullName strin
 		if tenant.Status != statusActive {
 			return forbidden(api.CodeTenantSuspended, "The tenant is suspended.")
 		}
-		identity, err := s.createIdentity(ctx, invitation.Email, password)
+		created, err := s.provisioner.Provision(ctx, accounts.NewAccount{
+			Email: invitation.Email, Password: password, FullName: name,
+		})
 		if err != nil {
 			return err
 		}
-		// The flag is granted at creation when the invited email is listed in the operator emails.
-		isOperator := slices.Contains(s.operatorEmails, invitation.Email)
-		var accountID string
-		err = tx.QueryRow(ctx,
-			`INSERT INTO iam_accounts (kratos_identity_id, email, full_name, is_platform_operator, created_at, updated_at)
-VALUES ($1::uuid, $2, $3, $4, $5, $5) RETURNING id::text`,
-			identity.ID, invitation.Email, name, isOperator, now).Scan(&accountID)
-		if err != nil {
-			return err
-		}
+		accountID := string(created.ID)
 		var membershipID string
 		err = tx.QueryRow(ctx,
 			`INSERT INTO ten_memberships (tenant_id, account_id, role, created_at, updated_at)
@@ -452,33 +457,6 @@ VALUES ($1::uuid, $2::uuid, $3, $4, $4) RETURNING id::text`,
 		return AcceptNewResult{}, wrapOperational("accept new", err)
 	}
 	return result, nil
-}
-
-// createIdentity is steps 4-5 of accept-new: no identity may exist for the
-// email, then one is created. An identity that already exists answers 409; a
-// Kratos that cannot answer answers 503.
-func (s *tenancy) createIdentity(ctx context.Context, email, password string) (kratos.Identity, error) {
-	exists := conflict(CodeIdentityAlreadyExists, "An account with this email already exists. Sign in and accept the invitation.")
-	_, found, err := s.admin.FindIdentityByEmail(ctx, email)
-	if err != nil {
-		return kratos.Identity{}, identityError(err)
-	}
-	if found {
-		return kratos.Identity{}, exists
-	}
-	identity, err := s.admin.CreatePasswordIdentity(ctx, email, password)
-	if errors.Is(err, kratos.ErrIdentityExists) {
-		return kratos.Identity{}, exists
-	}
-	if errors.Is(err, kratos.ErrPasswordRejected) {
-		var problems api.Problems
-		problems.Add("password", CodePasswordRejected, "The password was rejected by the password policy.")
-		return kratos.Identity{}, problems.Err()
-	}
-	if err != nil {
-		return kratos.Identity{}, identityError(err)
-	}
-	return identity, nil
 }
 
 // ListInvitations pages the tenant's invitations whose derived status at now

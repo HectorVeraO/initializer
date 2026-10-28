@@ -94,7 +94,8 @@ func (s *tenancy) UpdateMembership(ctx context.Context, tenantID, membershipID s
 	if !tenantOK || !idOK {
 		return MemberView{}, api.NotFound()
 	}
-	var view MemberView
+	var updated Membership
+	var tenantView Tenant
 	err := db.InTx(ctx, s.pool, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		now := s.clock.Now()
 		admins, err := lockActiveAdmins(ctx, tx, tenant)
@@ -131,9 +132,16 @@ func (s *tenancy) UpdateMembership(ctx context.Context, tenantID, membershipID s
 			}
 			current.Role, current.Status, current.UpdatedAt = plan.role, plan.status, now
 		}
-		view, err = readMemberView(ctx, tx, current)
+		tenantView, err = readTenant(ctx, tx, current.TenantID)
+		updated = current
 		return err
 	})
+	if err != nil {
+		return MemberView{}, wrapOperational("update membership", err)
+	}
+	// The account is read after the transaction ends: the accounts port uses
+	// its own pooled connection, so reading inside would hold two.
+	view, err := s.readMemberView(ctx, tenantView, updated)
 	if err != nil {
 		return MemberView{}, wrapOperational("update membership", err)
 	}
@@ -157,17 +165,17 @@ WHERE tenant_id = $1::uuid AND role = 'admin' AND status = 'active' ORDER BY id 
 	return slices.Clone(ids), nil
 }
 
-func readMemberView(ctx context.Context, tx pgx.Tx, m Membership) (MemberView, error) {
-	tenant, err := readTenant(ctx, tx, m.TenantID)
-	if err != nil {
-		return MemberView{}, err
-	}
-	var account MemberAccount
-	err = tx.QueryRow(ctx, "SELECT id::text, email, full_name FROM iam_accounts WHERE id = $1::uuid", m.AccountID).
-		Scan(&account.ID, &account.Email, &account.FullName)
+func (s *tenancy) readMemberView(ctx context.Context, tenant Tenant, m Membership) (MemberView, error) {
+	id := reqctx.AccountID(m.AccountID)
+	found, err := s.accounts.Get(ctx, []reqctx.AccountID{id})
 	if err != nil {
 		return MemberView{}, fmt.Errorf("read member account: %w", err)
 	}
+	holder, exists := found[id]
+	if !exists {
+		return MemberView{}, fmt.Errorf("read member account: account %s not found", m.AccountID)
+	}
+	account := MemberAccount{ID: string(holder.ID), Email: holder.Email, FullName: holder.FullName}
 	return MemberView{
 		MembershipView: newMembershipView(m.ID, tenant, m.Role, m.Status),
 		Account:        account,
