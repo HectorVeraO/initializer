@@ -9,10 +9,13 @@
   </div>
 
   <div class="layout-topbar-actions">
-    <app-tenant-switcher />
-    <app-account-menu />
+    @for (item of contextItems; track item.id) {
+    <span [attr.data-testid]="'topbar-' + item.id"><ng-container *ngComponentOutlet="item.component" /></span>
+    } @for (item of accountItems; track item.id) {
+    <span [attr.data-testid]="'topbar-' + item.id"><ng-container *ngComponentOutlet="item.component" /></span>
+    }
     <div class="layout-config-menu">
-      <p-select [options]="languages" [ngModel]="selectedLang()" (onChange)="setLang($event.value.code)" dataKey="code" appendTo="body" styleClass="lang-select" [style]="{ minWidth: '7rem' }">
+      <p-select data-testid="language-select" [options]="languages" [ngModel]="selectedLang()" (onChange)="setLang($event.value.code)" dataKey="code" appendTo="body" styleClass="lang-select" [style]="{ minWidth: '7rem' }">
         <ng-template #selectedItem let-lang>
           <span class="text-sm font-medium">{{ 'topbar.lang.' + lang.code | transloco }}</span>
         </ng-template>
@@ -20,7 +23,7 @@
           <span>{{ 'topbar.lang.' + lang.code | transloco }}</span>
         </ng-template>
       </p-select>
-      <button type="button" class="layout-topbar-action" (click)="toggleDarkMode()">
+      <button type="button" class="layout-topbar-action" data-testid="theme-toggle" (click)="toggleDarkMode()">
         <i [class]="layoutService.isDarkTheme() ? 'pi pi-moon' : 'pi pi-sun'"></i>
       </button>
     </div>

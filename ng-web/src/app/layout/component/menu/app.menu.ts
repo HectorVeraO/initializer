@@ -7,7 +7,7 @@ import { environment } from '../../../../environments/environment';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { createDeveloperSection } from '@/dev/dev.menu';
-import { PLATFORM_MODULES, SessionStore, meetsRequirement } from '@/platform/core';
+import { ACCESS_PROVIDER, FLAG_SOURCE, PLATFORM_MODULES, TENANT_SELECTION, allowsAccess, navLabel } from '@/platform/core';
 
 const SECTION_TITLE_KEY = 'menu.title';
 
@@ -23,7 +23,9 @@ const SECTION_TITLE_ENTRY = '@title';
 export class AppMenu implements OnInit, OnDestroy {
   private readonly transloco = inject(TranslocoService);
   private readonly destroy$ = new Subject<void>();
-  private readonly sessionStore = inject(SessionStore);
+  private readonly access = inject(ACCESS_PROVIDER);
+  private readonly flags = inject(FLAG_SOURCE);
+  private readonly isMultiTenant = inject(TENANT_SELECTION) !== null;
   private readonly modules = inject(PLATFORM_MODULES);
   private readonly navLabels = signal<Record<string, string>>({});
 
@@ -72,19 +74,13 @@ export class AppMenu implements OnInit, OnDestroy {
     return model;
   }
 
-  /** One section per platform module with at least one entry the session meets; none while anonymous. */
+  /** One section per platform module with at least one entry the visitor may open; none while the provider does not admit the visitor. */
   private buildPlatformSections(): MenuItem[] {
-    const session = this.sessionStore.session();
-
-    if (session === null) {
-      return [];
-    }
-
     const sections: MenuItem[] = [];
 
     for (const module of this.modules) {
       const items: MenuItem[] = module.nav
-        .filter((entry) => meetsRequirement(session, entry.requires))
+        .filter((entry) => allowsAccess(this.access, this.flags, this.isMultiTenant, entry.requires))
         .map((entry) => ({
           id: `nav-${entry.id}`,
           label: this.navLabels()[`${module.id}/${entry.id}`] ?? entry.labelKey,
@@ -116,8 +112,7 @@ export class AppMenu implements OnInit, OnDestroy {
         });
 
       for (const entry of module.nav) {
-        this.transloco
-          .selectTranslate(entry.labelKey, {}, module.i18n)
+        navLabel(this.transloco, module, entry)
           .pipe(takeUntil(this.destroy$))
           .subscribe((label) => {
             this.navLabels.update((labels) => ({ ...labels, [`${module.id}/${entry.id}`]: label }));

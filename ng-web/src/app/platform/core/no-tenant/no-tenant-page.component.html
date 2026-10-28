@@ -6,11 +6,10 @@
       {{ 'tenancy.noTenant.account' | transloco }} <span data-testid="no-tenant-account-email">{{ current.email }}</span>
     </p>
   }
-  @if (isOperator()) {
+  @if (allowedEntries().length > 0) {
     <div class="flex flex-col gap-2">
-      <a routerLink="/operator/tenants" class="text-primary" data-testid="no-tenant-operator-tenants">{{ 'tenancy.noTenant.operatorTenants' | transloco }}</a>
-      @if (hasFlagsEntry()) {
-        <a routerLink="/operator/feature-flags" class="text-primary" data-testid="no-tenant-operator-flags">{{ 'tenancy.noTenant.operatorFlags' | transloco }}</a>
+      @for (entry of allowedEntries(); track entry.id) {
+        <a [routerLink]="entry.path" class="text-primary" [attr.data-testid]="'no-tenant-nav-' + entry.id">{{ entry.label }}</a>
       }
     </div>
   }

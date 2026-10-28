@@ -1,3 +1,4 @@
+import { Provider, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Routes } from '@angular/router';
 import { TranslocoTestingModule } from '@jsverse/transloco';
@@ -6,12 +7,10 @@ import { environment } from '../../../../environments/environment';
 import { buildAppRoutes } from '../../../../app.routes';
 import { DEV_ROUTES } from '@/dev/dev.routes.prod';
 import { byTestId, textOf } from '@/core/testing/ui-testing';
-import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MessageService } from '@openng/optimus-ui/api';
-import { WebModule, SessionStore, coreModule, providePlatform } from '@/platform/core';
-import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { sessionView } from '../../../../testing/fixtures/session-view';
+import { PLATFORM_MODULES, coreModule } from '@/platform/core';
+import type { AccessContext, WebModule } from '@/platform/core';
+import { accessContext, provideFakeAccess, provideTenantSelection } from '../../../../testing/fixtures/access-testing';
 import { AppMenu } from './app.menu';
 
 function routePaths(routes: Routes, prefix = ''): string[] {
@@ -22,21 +21,25 @@ function routePaths(routes: Routes, prefix = ''): string[] {
   });
 }
 
+/** The mandatory first module, contributing nothing. */
+const STUB_CORE: WebModule = { id: 'core', shellRoutes: [], publicRoutes: [], nav: [], i18n: { scope: 'core', alias: 'core', loader: { es: () => Promise.resolve({}) } } };
+
 describe('AppMenu', () => {
   const originalProduction = environment.production;
-
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [TranslocoTestingModule.forRoot({ langs: { es }, translocoConfig: { availableLangs: ['es'], defaultLang: 'es' }, preloadLangs: true })],
-      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), providePlatform([coreModule]), { provide: MessageService, useValue: { add: vi.fn() } }]
-    });
-  });
 
   afterEach(() => {
     environment.production = originalProduction;
   });
 
+  function configure(modules: readonly WebModule[], providers: Provider[]): void {
+    TestBed.configureTestingModule({
+      imports: [TranslocoTestingModule.forRoot({ langs: { es }, translocoConfig: { availableLangs: ['es'], defaultLang: 'es' }, preloadLangs: true })],
+      providers: [provideRouter([]), { provide: PLATFORM_MODULES, useValue: modules }, { provide: MessageService, useValue: { add: vi.fn() } }, ...providers]
+    });
+  }
+
   function render(production: boolean): HTMLElement {
+    configure([STUB_CORE], []);
     environment.production = production;
 
     const fixture = TestBed.createComponent(AppMenu);
@@ -78,29 +81,21 @@ describe('AppMenu', () => {
       id: 'reports',
       shellRoutes: [],
       publicRoutes: [],
-      i18n: { scope: 'reports', alias: 'reports', loader: { es: () => Promise.resolve({ menu: { title: 'Informes' }, nav: { members: 'Miembros', admins: 'Solo admins' } }) } },
+      i18n: { scope: 'reports', alias: 'reports', loader: { es: () => Promise.resolve({ menu: { title: 'Informes' }, nav: { open: 'Abierto', members: 'Miembros', anyone: 'Cualquiera', admins: 'Solo admins' } }) } },
       nav: [
+        { id: 'open', labelKey: 'nav.open', icon: 'menu-icon menu-icon-users', path: '/open', requires: {} },
         { id: 'members', labelKey: 'nav.members', icon: 'menu-icon menu-icon-users', path: '/members', requires: { tenant: 'required' } },
+        { id: 'anyone', labelKey: 'nav.anyone', icon: 'menu-icon menu-icon-users', path: '/anyone', requires: { tenant: 'required-unless-operator' } },
         { id: 'admins', labelKey: 'nav.admins', icon: 'menu-icon menu-icon-cog', path: '/admins', requires: { roles: ['admin'] } }
       ]
     };
 
-    beforeEach(() => {
-      TestBed.configureTestingModule({ providers: [providePlatform([coreModule, reportsModule])] });
-    });
+    const MEMBER = accessContext({ role: 'member' });
 
-    afterEach(() => {
-      TestBed.inject(HttpTestingController).verify();
-    });
+    const TENANTLESS_MEMBER = accessContext({ role: null, activeTenant: null, memberships: [] });
 
-    async function renderWithSession(status: number, view: object): Promise<HTMLElement> {
-      const http = TestBed.inject(HttpTestingController);
-
-      const loaded = TestBed.inject(SessionStore).ensureLoaded();
-
-      await vi.waitFor(() => http.expectOne('/assets/config/runtime-config.json').flush({ apiUrl: '' }));
-      await vi.waitFor(() => http.expectOne('/api/v1/auth/session').flush(view, { status, statusText: 'x' }));
-      await loaded;
+    async function renderWith(providers: Provider[]): Promise<HTMLElement> {
+      configure([STUB_CORE, reportsModule], providers);
       environment.production = true;
 
       const fixture = TestBed.createComponent(AppMenu);
@@ -114,39 +109,79 @@ describe('AppMenu', () => {
       return fixture.nativeElement as HTMLElement;
     }
 
-    it('lists the entries the session meets, labelled through the module scope', async () => {
-      const root = await renderWithSession(200, okEnvelope(sessionView()));
+    function shownEntries(root: HTMLElement): string[] {
+      const entries = Array.from(root.querySelectorAll('[data-testid^="nav-"]')).map((item) => (item.getAttribute('data-testid') ?? '').replace('nav-', ''));
 
-      expect(textOf(byTestId(root, 'nav-members'))).toBe('Miembros');
-      expect(textOf(byTestId(root, 'nav-admins'))).toBe('Solo admins');
+      return entries;
+    }
+
+    describe('in a multi-tenant console', () => {
+      const multiTenant = (context: AccessContext | null): Provider[] => [...provideFakeAccess(context), provideTenantSelection('/no-tenant')];
+
+      it('lists the entries the visitor meets, labelled through the module scope', async () => {
+        const root = await renderWith(multiTenant(accessContext()));
+
+        expect(shownEntries(root)).toEqual(['open', 'members', 'anyone', 'admins']);
+        expect(textOf(byTestId(root, 'nav-members'))).toBe('Miembros');
+        expect(textOf(byTestId(root, 'nav-admins'))).toBe('Solo admins');
+      });
+
+      it('hides an entry whose role requirement the visitor misses', async () => {
+        const root = await renderWith(multiTenant(MEMBER));
+
+        expect(shownEntries(root)).toEqual(['open', 'members', 'anyone']);
+      });
+
+      it('hides the entries that need a tenant from a tenantless visitor', async () => {
+        const root = await renderWith(multiTenant(TENANTLESS_MEMBER));
+
+        expect(shownEntries(root)).toEqual(['open']);
+      });
+
+      it('shows a tenantless platform operator the entry that lets operators through', async () => {
+        const root = await renderWith(multiTenant(accessContext({ role: null, activeTenant: null, memberships: [], isPlatformOperator: true })));
+
+        expect(shownEntries(root)).toEqual(['open', 'anyone']);
+      });
+
+      it('titles the module section through the module scope', async () => {
+        const root = await renderWith(multiTenant(accessContext()));
+
+        expect(textOf(byTestId(root, 'menu-module-reports'))).toContain('Informes');
+      });
+
+      it('shows no module section while the visitor is not admitted', async () => {
+        const root = await renderWith(multiTenant(null));
+
+        expect(root.querySelector('[data-testid="menu-module-reports"]')).toBeNull();
+        expect(shownEntries(root)).toEqual([]);
+      });
+
+      it('follows the visitor: the entries change when the context does', async () => {
+        const visitor = signal<AccessContext | null>(MEMBER);
+
+        const root = await renderWith([...provideFakeAccess(visitor), provideTenantSelection('/no-tenant')]);
+
+        expect(shownEntries(root)).toEqual(['open', 'members', 'anyone']);
+        visitor.set(accessContext());
+        await vi.waitFor(() => expect(shownEntries(root)).toEqual(['open', 'members', 'anyone', 'admins']));
+      });
     });
 
-    it('hides an entry whose role requirement the session misses', async () => {
-      const account = { id: 'a', email: 'viewer@example.com', fullName: null, role: 'viewer', isPlatformOperator: false };
+    describe('in a single-tenant console', () => {
+      it('shows required-unless-operator to a tenantless member and hides required', async () => {
+        const root = await renderWith([...provideFakeAccess(TENANTLESS_MEMBER), provideTenantSelection(null)]);
 
-      const root = await renderWithSession(200, okEnvelope(sessionView({ account })));
-
-      expect(textOf(byTestId(root, 'nav-members'))).toBe('Miembros');
-      expect(root.querySelector('[data-testid="nav-admins"]')).toBeNull();
+        expect(shownEntries(root)).toEqual(['open', 'anyone']);
+      });
     });
 
-    it('titles the module section through the module scope', async () => {
-      const root = await renderWithSession(200, okEnvelope(sessionView()));
+    describe('under the default open access', () => {
+      it('shows an entry without a clause and hides every entry with one', async () => {
+        const root = await renderWith([]);
 
-      expect(textOf(byTestId(root, 'menu-module-reports'))).toContain('Informes');
-    });
-
-    it('shows no module section while anonymous', async () => {
-      const root = await renderWithSession(401, errorEnvelope('SESSION_INVALID'));
-
-      expect(root.querySelector('[data-testid="menu-module-reports"]')).toBeNull();
-      expect(root.querySelector('[data-testid="nav-members"]')).toBeNull();
-    });
-
-    it('shows no section for a module whose entries the session misses entirely', async () => {
-      const root = await renderWithSession(200, okEnvelope(sessionView({ activeTenant: null, account: { id: 'a', email: 'op@example.com', fullName: null, role: null, isPlatformOperator: true } })));
-
-      expect(root.querySelector('[data-testid="menu-module-reports"]')).toBeNull();
+        expect(shownEntries(root)).toEqual(['open']);
+      });
     });
   });
 });

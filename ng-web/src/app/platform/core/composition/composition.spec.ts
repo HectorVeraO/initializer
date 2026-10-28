@@ -57,7 +57,7 @@ function topbarItem(id: string, slot: TopbarItem['slot']): TopbarItem {
 }
 
 function moduleWith(id: string, shell: Route[] = [], publicRoutes: Route[] = [], extra: Partial<WebModule> = {}): WebModule {
-  return { ...coreModule, id, shellRoutes: shell, publicRoutes, ports: undefined, ...extra };
+  return { ...coreModule, id, shellRoutes: shell, publicRoutes, ports: undefined, topbar: undefined, interceptors: undefined, ...extra };
 }
 
 function withPorts(id: string, ports: PortBindings): WebModule {

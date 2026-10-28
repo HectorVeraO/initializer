@@ -1,57 +1,75 @@
-import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { MessageService } from '@openng/optimus-ui/api';
 import { byTestId, configureFeatureTest, settle, textOf } from '@/core/testing/ui-testing';
-import { sessionView } from '../../../../testing/fixtures/session-view';
-import { fakeLocation, loadSession } from '../../../../testing/fixtures/session-testing';
-import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
+import { accessContext, provideFakeAccess, provideTenantSelection } from '../../../../testing/fixtures/access-testing';
+import type { AccessContext } from '../access/access.types';
 import { PLATFORM_MODULES } from '../composition/web-module';
-import type { WebModule } from '../composition/web-module';
-import { coreModule } from '../module';
-import { BROWSER_LOCATION } from '../session/browser-location';
+import type { NavEntry, WebModule } from '../composition/web-module';
 import { NoTenantPage } from './no-tenant-page.component';
 
-const OPERATOR = { id: 'a', email: 'op@example.com', fullName: null, role: null, isPlatformOperator: true };
+const OPERATOR = accessContext({ activeTenant: null, role: null, isPlatformOperator: true, memberships: [], account: { id: 'a', email: 'op@example.com', fullName: null } });
 
-const MEMBER = { id: 'a', email: 'jane@example.com', fullName: null, role: null, isPlatformOperator: false };
+const MEMBER = accessContext({ activeTenant: null, role: null, isPlatformOperator: false, memberships: [], account: { id: 'b', email: 'jane@example.com', fullName: null } });
 
-const FLAGS_MODULE: WebModule = { ...coreModule, id: 'feature-flags', nav: [{ id: 'flags', labelKey: 'nav.flags', icon: 'x', path: '/operator/feature-flags', requires: {} }] };
+/** A synthetic module whose nav labels come from its own scope, like a real module. */
+function moduleWith(id: string, title: string, nav: readonly NavEntry[]): WebModule {
+  const labels = Object.fromEntries(nav.map((entry) => [entry.id, `${title} ${entry.id}`]));
+
+  return {
+    id,
+    shellRoutes: [],
+    publicRoutes: [],
+    nav: nav.map((entry) => ({ ...entry, labelKey: `nav.${entry.id}` })),
+    i18n: { scope: `${id}-spec`, alias: `${id}-spec`, loader: { es: () => Promise.resolve({ nav: labels }) } }
+  };
+}
+
+function entry(id: string, path: string, requires: NavEntry['requires']): NavEntry {
+  return { id, labelKey: '', icon: 'x', path, requires };
+}
+
+const TENANCY = moduleWith('tenancy', 'Tenancy', [entry('memberships', '/memberships', { tenant: 'required' }), entry('operator-tenants', '/operator/tenants', { platformOperator: true })]);
+
+const FLAGS = moduleWith('feature-flags', 'Flags', [entry('feature-flags', '/operator/feature-flags', { platformOperator: true })]);
+
+const PARAMETERS = moduleWith('parameters', 'Params', [entry('parameters', '/parameters', { tenant: 'required-unless-operator' })]);
+
+const KEYS = moduleWith('api-keys', 'Keys', [entry('api-keys', '/api-keys', { tenant: 'required', roles: ['admin'], orTenantlessOperator: true })]);
+
+const CORE = moduleWith('core', 'Core', []);
 
 describe('NoTenantPage', () => {
-  let location: ReturnType<typeof fakeLocation>;
+  let signOut: ReturnType<typeof vi.fn<() => Promise<void>>>;
 
   beforeEach(() => {
-    stubBroadcastChannel();
-    location = fakeLocation();
+    signOut = vi.fn(() => Promise.resolve());
   });
 
   afterEach(() => {
-    TestBed.inject(HttpTestingController).verify();
-    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
   });
 
-  async function render(account: object, modules: readonly WebModule[] = [coreModule]) {
-    configureFeatureTest(
-      [],
-      [
-        { provide: MessageService, useValue: { add: vi.fn() } },
-        { provide: BROWSER_LOCATION, useValue: location },
-        { provide: PLATFORM_MODULES, useValue: modules }
-      ]
-    );
-    await loadSession(sessionView({ account, activeTenant: null, memberships: [] }));
+  async function render(context: AccessContext, modules: readonly WebModule[] = [CORE, TENANCY]) {
+    configureFeatureTest([], [...provideFakeAccess(context, { signOut: () => signOut() }), provideTenantSelection('/no-tenant'), { provide: MessageService, useValue: { add: vi.fn() } }, { provide: PLATFORM_MODULES, useValue: modules }]);
 
     const fixture = TestBed.createComponent(NoTenantPage);
 
     await settle(fixture);
 
-    // The core translation scope loads asynchronously.
+    // The tenancy and identity translation scopes load asynchronously.
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(textOf(fixture.nativeElement)).toContain('Cerrar sesión');
+      expect(textOf(fixture.nativeElement)).toContain('No tienes un tenant');
     });
 
     return fixture.nativeElement as HTMLElement;
+  }
+
+  function navIds(root: HTMLElement): string[] {
+    const ids = Array.from(root.querySelectorAll('[data-testid^="no-tenant-nav-"]')).map((link) => (link.getAttribute('data-testid') ?? '').replace('no-tenant-nav-', ''));
+
+    return ids;
   }
 
   it('explains the situation and shows the account email', async () => {
@@ -61,29 +79,38 @@ describe('NoTenantPage', () => {
     expect(textOf(byTestId(root, 'no-tenant-account-email'))).toBe('jane@example.com');
   });
 
-  it('links to operator tenants only for a platform operator', async () => {
-    const member = await render(MEMBER);
+  it('lists the operator tenants entry, with its label and path, for a tenantless platform operator', async () => {
+    const root = await render(OPERATOR);
 
-    expect(byTestId(member, 'no-tenant-operator-tenants')).toBeNull();
-    TestBed.resetTestingModule();
-
-    const operator = await render(OPERATOR);
-
-    expect(byTestId(operator, 'no-tenant-operator-tenants')?.getAttribute('href')).toBe('/operator/tenants');
-    expect(byTestId(operator, 'no-tenant-operator-flags')).toBeNull();
+    expect(navIds(root)).toEqual(['operator-tenants']);
+    expect(byTestId(root, 'no-tenant-nav-operator-tenants')?.getAttribute('href')).toBe('/operator/tenants');
+    expect(textOf(byTestId(root, 'no-tenant-nav-operator-tenants'))).toBe('Tenancy operator-tenants');
   });
 
-  it('links to operator feature flags when that nav entry exists', async () => {
-    const root = await render(OPERATOR, [coreModule, FLAGS_MODULE]);
+  it('lists nothing for a tenantless member', async () => {
+    const root = await render(MEMBER, [CORE, TENANCY, FLAGS, PARAMETERS, KEYS]);
 
-    expect(byTestId(root, 'no-tenant-operator-flags')?.getAttribute('href')).toBe('/operator/feature-flags');
+    expect(navIds(root)).toEqual([]);
   });
 
-  it('signs out', async () => {
+  it('lists every entry a tenantless operator may open across the installed modules, in module order', async () => {
+    const root = await render(OPERATOR, [CORE, TENANCY, FLAGS, PARAMETERS, KEYS]);
+
+    expect(navIds(root)).toEqual(['operator-tenants', 'feature-flags', 'parameters', 'api-keys']);
+  });
+
+  it('lists no entry of a module that is not installed', async () => {
+    const root = await render(OPERATOR, [CORE, TENANCY]);
+
+    expect(byTestId(root, 'no-tenant-nav-feature-flags')).toBeNull();
+    expect(byTestId(root, 'no-tenant-nav-api-keys')).toBeNull();
+  });
+
+  it('signs out through the access provider', async () => {
     const root = await render(MEMBER);
 
     (byTestId(root, 'sign-out') as HTMLButtonElement).click();
-    (await nextCall('POST', '/api/v1/auth/logout')).flush({ data: { logoutUrl: '/login' }, meta: { traceId: 'abc', timestamp: '2026-01-01T00:00:00Z' }, error: null });
-    await vi.waitFor(() => expect(location.assign).toHaveBeenCalledWith('/login'));
+
+    await vi.waitFor(() => expect(signOut).toHaveBeenCalledOnce());
   });
 });

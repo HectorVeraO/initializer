@@ -10,7 +10,7 @@ import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
-import { InlineConfirmComponent, SessionStore } from '@/platform/core';
+import { ACCESS_PROVIDER, InlineConfirmComponent } from '@/platform/core';
 import { displayValue, jsonText } from '../json-value';
 import { PLATFORM_PARAMETERS_I18N } from '../i18n/scope';
 import { ParameterDefinitionDialog } from '../parameter-definition-dialog/parameter-definition-dialog.component';
@@ -30,7 +30,7 @@ const SCOPE_ALIAS = PLATFORM_PARAMETERS_I18N.alias as string;
 })
 export class ParameterListPage {
   private readonly api = inject(ParametersApi);
-  private readonly store = inject(SessionStore);
+  private readonly access = inject(ACCESS_PROVIDER);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
 
@@ -49,8 +49,10 @@ export class ParameterListPage {
   protected readonly isDefinitionOpen = signal(false);
   protected readonly definitionTarget = signal<ParameterView | null>(null);
 
-  protected readonly canOverride = computed(() => this.store.role() === 'admin' && this.store.activeTenantId() !== null);
-  protected readonly isOperator = this.store.isPlatformOperator;
+  private readonly activeTenantId = computed(() => this.access.context()?.activeTenant?.id ?? null);
+
+  protected readonly canOverride = computed(() => this.access.context()?.role === 'admin' && this.activeTenantId() !== null);
+  protected readonly isOperator = computed(() => this.access.context()?.isPlatformOperator === true);
   protected readonly showsActions = computed(() => this.canOverride() || this.isOperator());
 
   protected readonly isEmpty = computed(() => !this.isLoading() && !this.loadFailed() && this.rows().length === 0);
@@ -59,7 +61,7 @@ export class ParameterListPage {
   constructor() {
     // Loads on first render and again whenever the active tenant changes.
     effect(() => {
-      this.store.activeTenantId();
+      this.activeTenantId();
       untracked(() => {
         this.hasLoaded = false;
         void this.load();

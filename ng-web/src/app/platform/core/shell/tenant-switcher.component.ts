@@ -8,7 +8,7 @@ import { errorCode, isServerFailure } from '@/core/api/api-error';
 import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { scopedText } from '../i18n/scoped-text';
 import { TENANCY_I18N } from '../i18n/tenancy/scope';
-import { SessionStore } from '../session/session-store.service';
+import { ACCESS_PROVIDER } from '../access/access.port';
 
 /** Codes of a refused switch that have their own text under `tenancy.errors`. */
 const SWITCH_REFUSALS: readonly string[] = [ApiErrorCode.TenantAccessDenied, ApiErrorCode.TenantSuspended, ApiErrorCode.MembershipRevoked];
@@ -22,28 +22,30 @@ const SWITCH_REFUSALS: readonly string[] = [ApiErrorCode.TenantAccessDenied, Api
   templateUrl: './tenant-switcher.component.html'
 })
 export class TenantSwitcher {
-  private readonly store = inject(SessionStore);
+  private readonly access = inject(ACCESS_PROVIDER);
   private readonly router = inject(Router);
   private readonly messages = inject(MessageService);
   private readonly transloco = inject(TranslocoService);
 
-  protected readonly isAuthenticated = computed(() => this.store.state() === 'authenticated');
-  protected readonly options = computed(() => [...this.store.switchableMemberships()]);
-  protected readonly activeTenant = this.store.activeTenant;
+  protected readonly isAuthenticated = this.access.admitted;
+  /** Memberships the switcher offers: membership `active` and tenant `active`. */
+  protected readonly options = computed(() => (this.access.context()?.memberships ?? []).filter((membership) => membership.status === 'active' && membership.tenant.status === 'active'));
+  protected readonly activeTenant = computed(() => this.access.context()?.activeTenant ?? null);
+  private readonly activeTenantId = computed(() => this.activeTenant()?.id ?? null);
   protected readonly pendingTenantId = signal<string | null>(null);
 
-  /** The id the select shows: the one just picked while a switch runs, else the store's active tenant. */
-  protected readonly shownTenantId = computed(() => this.pendingTenantId() ?? this.store.activeTenantId());
+  /** The id the select shows: the one just picked while a switch runs, else the active tenant. */
+  protected readonly shownTenantId = computed(() => this.pendingTenantId() ?? this.activeTenantId());
 
   protected async onChange(tenantId: string | null): Promise<void> {
-    if (tenantId === null || tenantId === this.store.activeTenantId()) {
+    if (tenantId === null || tenantId === this.activeTenantId()) {
       return;
     }
 
     this.pendingTenantId.set(tenantId);
 
     try {
-      await this.store.switchTenant(tenantId);
+      await this.access.switchTenant(tenantId);
     } catch (error) {
       this.pendingTenantId.set(null);
       await this.reportFailure(error);

@@ -14,8 +14,8 @@ import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
-import { InlineConfirmComponent, TenantsApi } from '@/platform/core';
-import type { TenantView } from '@/platform/core';
+import { InlineConfirmComponent, TENANT_DIRECTORY } from '@/platform/core';
+import type { TenantRef } from '@/platform/core';
 import { FeatureFlagsApi } from '../feature-flags-api.service';
 import type { FlagView } from '../feature-flags.types';
 import { PLATFORM_FEATURE_FLAGS_I18N } from '../i18n/scope';
@@ -41,7 +41,7 @@ interface OverrideRow {
 })
 export class FlagDetailPage {
   private readonly api = inject(FeatureFlagsApi);
-  private readonly tenantsApi = inject(TenantsApi);
+  private readonly tenantDirectory = inject(TENANT_DIRECTORY);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
   private readonly route = inject(ActivatedRoute);
@@ -52,7 +52,9 @@ export class FlagDetailPage {
   protected readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key') ?? '')), { initialValue: this.route.snapshot?.paramMap?.get('key') ?? '' });
 
   protected readonly flag = signal<FlagView | null>(null);
-  protected readonly tenants = signal<TenantView[]>([]);
+  /** False when no installed module lists tenants: the override section is replaced by a short text. */
+  protected readonly hasTenantDirectory = this.tenantDirectory !== null;
+  protected readonly tenants = signal<TenantRef[]>([]);
   protected readonly tenantsFailed = signal(false);
   protected readonly isLoading = signal(false);
   protected readonly loadFailed = signal(false);
@@ -157,6 +159,20 @@ export class FlagDetailPage {
     this.messages.add({ severity: 'error', summary });
   }
 
+  /** The tenant list for names and the picker; a failure leaves the overrides showing tenant ids. */
+  private loadTenants(): Promise<{ readonly ok: boolean; readonly items: readonly TenantRef[] }> {
+    if (this.tenantDirectory === null) {
+      return Promise.resolve({ ok: true, items: [] });
+    }
+
+    const request = firstValueFrom(this.tenantDirectory.list()).then(
+      (page) => ({ ok: true, items: page.items }),
+      () => ({ ok: false, items: [] as TenantRef[] })
+    );
+
+    return request;
+  }
+
   private async load(): Promise<void> {
     this.loadSequence += 1;
 
@@ -165,10 +181,7 @@ export class FlagDetailPage {
     this.isLoading.set(!this.hasLoaded);
     this.loadFailed.set(false);
 
-    const tenantsRequest = firstValueFrom(this.tenantsApi.list()).then(
-      (page) => ({ ok: true as const, items: page.items }),
-      () => ({ ok: false as const, items: [] as TenantView[] })
-    );
+    const tenantsRequest = this.loadTenants();
 
     try {
       const page = await firstValueFrom(this.api.list());
@@ -182,7 +195,7 @@ export class FlagDetailPage {
       this.listedCount.set(page.items.length);
       this.totalItems.set(page.totalItems);
       this.flag.set(page.items.find((item) => item.key === this.key()) ?? null);
-      this.tenants.set(tenants.items);
+      this.tenants.set([...tenants.items]);
       this.tenantsFailed.set(!tenants.ok);
       this.hasLoaded = true;
     } catch (error) {

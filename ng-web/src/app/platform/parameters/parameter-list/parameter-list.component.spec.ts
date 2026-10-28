@@ -1,12 +1,12 @@
 import { HttpTestingController } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MessageService } from '@openng/optimus-ui/api';
-import { SessionStore } from '@/platform/core';
+import type { AccessContext } from '@/platform/core';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { sessionView } from '../../../../testing/fixtures/session-view';
-import { loadSession } from '../../../../testing/fixtures/session-testing';
-import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
+import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
+import { nextCall } from '../../../../testing/fixtures/http-testing';
 import { parameterView } from '../../../../testing/fixtures/parameter-view';
 import { ParameterListPage } from './parameter-list.component';
 
@@ -14,42 +14,39 @@ const LIST_URL = '/api/v1/parameters';
 
 const KEY = 'example.retry.max_attempts';
 
-const OTHER_TENANT = { id: '44444444-4444-4444-8444-444444444444', slug: 'tenant-b', name: 'Tenant B', status: 'active' };
+const OTHER_TENANT = { id: '44444444-4444-4444-8444-444444444444', slug: 'tenant-b', name: 'Tenant B', status: 'active' } as const;
 
 function pageOf(items: Record<string, unknown>[], totalItems = items.length): object {
   return okEnvelope({ items, page: 1, size: 100, totalItems });
 }
 
-function role(name: 'admin' | 'member' | 'viewer', isPlatformOperator = false): Record<string, unknown> {
-  return sessionView({ account: { id: '22222222-2222-4222-8222-222222222222', email: 'admin@example.com', fullName: 'Jane Doe', role: name, isPlatformOperator } });
+function role(name: 'admin' | 'member' | 'viewer', isPlatformOperator = false): AccessContext {
+  return accessContext({ role: name, isPlatformOperator });
 }
 
-const OPERATOR_WITHOUT_TENANT = sessionView({
-  account: { id: '22222222-2222-4222-8222-222222222222', email: 'admin@example.com', fullName: 'Jane Doe', role: null, isPlatformOperator: true },
-  activeTenant: null,
-  memberships: []
-});
+const OPERATOR_WITHOUT_TENANT = accessContext({ role: null, isPlatformOperator: true, activeTenant: null, memberships: [] });
 
 describe('ParameterListPage', () => {
   let http: HttpTestingController;
 
   let messages: { add: ReturnType<typeof vi.fn> };
 
+  let visitor: ReturnType<typeof signal<AccessContext | null>>;
+
   beforeEach(() => {
-    stubBroadcastChannel();
     stubMatchMedia();
     messages = { add: vi.fn() };
-    configureFeatureTest([], [{ provide: MessageService, useValue: messages }]);
+    visitor = signal<AccessContext | null>(null);
+    configureFeatureTest([], [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }]);
     http = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
     http.verify();
-    vi.unstubAllGlobals();
   });
 
-  async function open(session: Record<string, unknown>, items: Record<string, unknown>[] = [parameterView(KEY)], totalItems = items.length): Promise<ComponentFixture<ParameterListPage>> {
-    await loadSession(session);
+  async function open(context: AccessContext, items: Record<string, unknown>[] = [parameterView(KEY)], totalItems = items.length): Promise<ComponentFixture<ParameterListPage>> {
+    visitor.set(context);
 
     const fixture = TestBed.createComponent(ParameterListPage);
 
@@ -86,7 +83,7 @@ describe('ParameterListPage', () => {
   }
 
   it('requests the first page of 100 sorted by key', async () => {
-    await loadSession(role('admin'));
+    visitor.set(role('admin'));
 
     const fixture = TestBed.createComponent(ParameterListPage);
 
@@ -349,13 +346,17 @@ describe('ParameterListPage', () => {
     });
   });
 
+  it('offers no override to an admin without an active tenant', async () => {
+    const fixture = await open(accessContext({ role: 'admin', activeTenant: null, memberships: [] }));
+
+    expect(allByTestId(root(fixture), 'parameters-row')).toHaveLength(1);
+    expect(byTestId(root(fixture), 'parameter-set-override')).toBeNull();
+  });
+
   it('refetches when the active tenant changes', async () => {
     const fixture = await open(role('admin'));
 
-    const switching = TestBed.inject(SessionStore).switchTenant(OTHER_TENANT.id);
-
-    (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(okEnvelope(sessionView({ activeTenant: OTHER_TENANT })));
-    await switching;
+    visitor.set(accessContext({ activeTenant: OTHER_TENANT }));
     (await nextCall('GET', LIST_URL)).flush(pageOf([parameterView('example.other', { effectiveValue: 8, source: 'tenant' })]));
     await settle(fixture);
 
@@ -363,7 +364,7 @@ describe('ParameterListPage', () => {
   });
 
   it('offers a retry when the list fails to load', async () => {
-    await loadSession(role('admin'));
+    visitor.set(role('admin'));
 
     const fixture = TestBed.createComponent(ParameterListPage);
 

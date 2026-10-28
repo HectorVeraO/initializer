@@ -19,9 +19,7 @@
   "noTenant": {
     "title": "No tienes un tenant",
     "message": "No eres miembro activo de ningún tenant. Pide una invitación a un administrador.",
-    "account": "Sesión iniciada como",
-    "operatorTenants": "Administrar tenants",
-    "operatorFlags": "Administrar feature flags"
+    "account": "Sesión iniciada como"
   },
   "issues": {
     "PASSWORD_REJECTED": "La contraseña no cumple la política de contraseñas. Elige otra."

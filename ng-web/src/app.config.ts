@@ -8,7 +8,7 @@ import { appRoutes } from './app.routes';
 import { ConfirmationService, MessageService } from '@openng/optimus-ui/api';
 import { GlobalErrorHandler } from '@/core/handler/global-error.handler';
 import { provideApiHttpClient } from '@/core/interceptors/api-http.providers';
-import { platformSessionInterceptor, providePlatform } from '@/platform/core';
+import { platformInterceptors, providePlatform } from '@/platform/core';
 import { installedModules } from '@/platform/modules';
 import { provideRuntimeConfigInit } from '@/core/config/runtime-config.initializer';
 import { provideTransloco } from '@jsverse/transloco';
@@ -19,7 +19,7 @@ import { AppPreset } from './app-theme.preset';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(appRoutes, withInMemoryScrolling({ anchorScrolling: 'enabled', scrollPositionRestoration: 'enabled' }), withEnabledBlockingInitialNavigation(), withRouterConfig({ onSameUrlNavigation: 'reload' })),
-    provideApiHttpClient([platformSessionInterceptor]),
+    provideApiHttpClient(platformInterceptors(installedModules)),
     providePlatform(installedModules),
     provideOptimus({
       theme: { preset: AppPreset, options: { darkModeSelector: '.app-dark' } }
