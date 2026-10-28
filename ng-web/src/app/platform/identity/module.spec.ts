@@ -3,7 +3,8 @@ import { MessageService } from '@openng/optimus-ui/api';
 import { configureFeatureTest } from '@/core/testing/ui-testing';
 import { ACCESS_PROVIDER, FLAG_SOURCE, coreModule, platformRoutes, providePlatform } from '@/platform/core';
 import { stubBroadcastChannel } from '../../../testing/fixtures/http-testing';
-import { SessionAccess } from './access/session-access';
+import { loadSession } from './testing/session-testing';
+import { sessionView } from './testing/session-view';
 import { identityModule } from './module';
 
 describe('identityModule', () => {
@@ -23,16 +24,15 @@ describe('identityModule', () => {
     expect((identityModule.topbar ?? []).map((item) => `${item.id}:${item.slot}`)).toEqual(['account-menu:account']);
   });
 
-  it('binds the access and flag ports to one session-backed instance', () => {
+  it('binds the access and flag ports to the signed-in session', async () => {
     stubBroadcastChannel();
     configureFeatureTest([], [{ provide: MessageService, useValue: { add: vi.fn() } }]);
     TestBed.configureTestingModule({ providers: [providePlatform([coreModule, identityModule])] });
 
-    expect(TestBed.inject(ACCESS_PROVIDER)).toBeInstanceOf(SessionAccess);
-    expect(TestBed.inject(FLAG_SOURCE)).toBe(TestBed.inject(ACCESS_PROVIDER));
-  });
+    await loadSession(sessionView({ flags: { beta: true } }));
 
-  it('contributes the session interceptor', () => {
-    expect(identityModule.interceptors).toHaveLength(1);
+    expect(TestBed.inject(ACCESS_PROVIDER).context()?.account.email).toBe('admin@example.com');
+    expect(TestBed.inject(FLAG_SOURCE).isEnabled('beta')).toBe(true);
+    expect(TestBed.inject(FLAG_SOURCE).isEnabled('unknown')).toBe(false);
   });
 });

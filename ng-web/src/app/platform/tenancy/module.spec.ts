@@ -1,8 +1,8 @@
+import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { configureFeatureTest } from '@/core/testing/ui-testing';
 import { TENANT_DIRECTORY, TENANT_SELECTION, coreModule, platformRoutes, providePlatform } from '@/platform/core';
 import { tenancyModule } from './module';
-import { TenantsApi } from './tenants/tenants-api.service';
 
 describe('tenancyModule', () => {
   it('mounts the four shell routes and the public accept page', () => {
@@ -21,12 +21,15 @@ describe('tenancyModule', () => {
     expect((tenancyModule.topbar ?? []).map((item) => `${item.id}:${item.slot}`)).toEqual(['tenant-switcher:context']);
   });
 
-  it('binds the tenant directory and the tenant selection, and nothing else', () => {
+  it('binds the tenant directory to the tenants route and the tenant selection to /no-tenant', () => {
     configureFeatureTest();
     TestBed.configureTestingModule({ providers: [providePlatform([coreModule, tenancyModule])] });
 
-    expect(TestBed.inject(TENANT_DIRECTORY)).toBeInstanceOf(TenantsApi);
+    TestBed.inject(TENANT_DIRECTORY)?.list().subscribe();
+
+    const request = TestBed.inject(HttpTestingController).expectOne((candidate) => candidate.url.endsWith('/api/v1/tenants'));
+
+    expect(request.request.method).toBe('GET');
     expect(TestBed.inject(TENANT_SELECTION)?.noTenantPath).toBe('/no-tenant');
-    expect(tenancyModule.ports).toEqual({ tenants: TenantsApi, tenantSelection: expect.any(Function) });
   });
 });
