@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -238,15 +239,29 @@ func TestBootstrapIsEnabledOnlyWithEmailAndPassword(t *testing.T) {
 }
 
 func TestBootstrapIgnoresTheTenantKeys(t *testing.T) {
-	settings := bootstrapPair()
-	settings["APP_BOOTSTRAP_TENANT_SLUG"] = "Not A Slug"
-	settings["APP_BOOTSTRAP_TENANT_NAME"] = strings.Repeat("n", 101)
-	settings["APP_INVITATION_TTL"] = "1s"
-
-	cfg, problems := parse(t, settings)
-
-	if problems != "" || !cfg.Bootstrap.Enabled {
-		t.Fatalf("enabled=%v problems=%q, want the tenancy keys left to tenancy", cfg.Bootstrap.Enabled, problems)
+	tenantKeys := []map[string]string{
+		{"APP_BOOTSTRAP_TENANT_SLUG": "acme", "APP_BOOTSTRAP_TENANT_NAME": "Acme", "APP_INVITATION_TTL": "168h"},
+		{"APP_BOOTSTRAP_TENANT_SLUG": "Not A Slug", "APP_BOOTSTRAP_TENANT_NAME": strings.Repeat("n", 101), "APP_INVITATION_TTL": "1s"},
+		{"APP_INVITATION_TTL": "not-a-duration"},
+	}
+	bases := map[string]map[string]string{"bootstrap enabled": bootstrapPair(), "bootstrap off": nil}
+	for name, base := range bases {
+		wantCfg, wantProblems := parse(t, base)
+		for _, extra := range tenantKeys {
+			settings := map[string]string{}
+			for k, v := range base {
+				settings[k] = v
+			}
+			for k, v := range extra {
+				settings[k] = v
+			}
+			gotCfg, gotProblems := parse(t, settings)
+			// The generated keyring differs per parse; compare the rest.
+			gotCfg.SessionKeys, wantCfg.SessionKeys = config.Secret{}, config.Secret{}
+			if gotProblems != wantProblems || !reflect.DeepEqual(gotCfg, wantCfg) {
+				t.Errorf("%s with %v: config or problems changed (problems %q, want %q)", name, extra, gotProblems, wantProblems)
+			}
+		}
 	}
 }
 

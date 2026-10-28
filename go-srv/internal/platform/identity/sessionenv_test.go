@@ -191,6 +191,9 @@ type sessEnvOptions struct {
 	adminURL string
 	// operatorEmails is APP_PLATFORM_OPERATOR_EMAILS.
 	operatorEmails string
+	// noTenancy leaves TenantAccess and TenantDirectory unset, so the core
+	// No* defaults apply: identity alone.
+	noTenancy bool
 }
 
 // sessEnv is core.Build with the module, a probe route and fakes at the boundary.
@@ -221,10 +224,6 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 	tenants := newTenantsFake()
 	probe := core.Module{
 		ID: "session-probe",
-		// tenant:read is tenancy's scope; the probe registers it so keys can hold it.
-		Provide: func(_ context.Context, b *core.Builder) error {
-			return b.Scopes().Register("tenant:read", "Read the key's own tenant", coreaccess.ScopeTenant)
-		},
 		Mount: func(_ context.Context, h *core.Host) error {
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				principal, _ := reqctx.PrincipalFrom(r.Context())
@@ -232,19 +231,6 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 					"actorId": principal.ActorID, "tenantSlug": principal.TenantSlug, "role": string(principal.Role),
 				})
 			})
-			// A stand-in for tenancy's GET /api/v1/tenant: a route a session or a
-			// key holding tenant:read may call, answering the credential's tenant.
-			tenantRoute := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				principal, _ := reqctx.PrincipalFrom(r.Context())
-				err := coreaccess.CheckTenantRef(principal, r.URL.Query().Get("tenantId"))
-				if err != nil {
-					h.API().Fail(w, r, err)
-					return
-				}
-				h.API().Data(w, r, http.StatusOK, map[string]any{"id": principal.TenantID, "slug": principal.TenantSlug})
-			})
-			h.Handle("GET /api/v1/tenant",
-				coreaccess.Policy{Kind: coreaccess.KindSessionOrAPIKey, Scope: "tenant:read", MinRole: reqctx.RoleViewer}, tenantRoute)
 			h.Handle("GET /api/v1/probe", coreaccess.Policy{Kind: coreaccess.KindSession}, handler)
 			h.Handle("POST /api/v1/probe", coreaccess.Policy{Kind: coreaccess.KindSession}, handler)
 			return nil
@@ -261,15 +247,20 @@ func newSessEnv(t *testing.T, opts sessEnvOptions) *sessEnv {
 	if opts.operatorEmails != "" {
 		settings["APP_PLATFORM_OPERATOR_EMAILS"] = opts.operatorEmails
 	}
-	app, err := core.Build(context.Background(), core.Options{
-		Logger:          slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Config:          config.MapSource(settings),
-		Clock:           clk,
-		Pool:            pool,
-		FlagEvaluator:   opts.flags,
-		TenantAccess:    tenants,
-		TenantDirectory: tenants,
-	}, []core.Module{Module(), probe})
+	buildOptions := core.Options{
+		Logger:        slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Config:        config.MapSource(settings),
+		Clock:         clk,
+		Pool:          pool,
+		FlagEvaluator: opts.flags,
+	}
+	if !opts.noTenancy {
+		buildOptions.TenantAccess = tenants
+		buildOptions.TenantDirectory = tenants
+	} else {
+		tenants = nil
+	}
+	app, err := core.Build(context.Background(), buildOptions, []core.Module{Module(), probe})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
