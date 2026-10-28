@@ -63,6 +63,8 @@ type Options struct {
 	Root string
 	// BaseRev is the resolved base revision; "" skips MIGRATION_MODIFIED and MIGRATION_OUT_OF_ORDER.
 	BaseRev string
+	// PreRelease skips the base comparison: MIGRATION_MODIFIED and MIGRATION_OUT_OF_ORDER (L78)
+	PreRelease bool
 }
 
 // Lint returns every violation plus the number of migration files checked.
@@ -92,7 +94,7 @@ func Lint(opts Options) (violations []report.Violation, filesChecked int, err er
 		}
 	}
 	l.checkDuplicateTimestamps()
-	if opts.BaseRev != "" {
+	if opts.BaseRev != "" && !opts.PreRelease {
 		err = l.checkAgainstBase()
 		if err != nil {
 			return nil, 0, err

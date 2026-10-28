@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Feature flags
-  version: 1.0.0
+  version: 0.1.0
   description: >-
     Platform-operator routes over the feature flags the flags.yaml manifest declares:
     list every flag with its overrides, and set or clear a global override or a

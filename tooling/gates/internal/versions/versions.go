@@ -22,8 +22,14 @@ const (
 	RuleVersionNotBumped     = "VERSION_NOT_BUMPED"
 	RuleVersionDecreased     = "VERSION_DECREASED"
 	RuleComponentPathOverlap = "COMPONENT_PATH_OVERLAP"
+	RuleVersionNotPrerelease = "VERSION_NOT_PRERELEASE"
 
-	refVersions = "L23"
+	refVersions   = "L23"
+	refPrerelease = "L76"
+
+	// preReleaseVersion is the only version a component may have while the
+	// pre-release setting is on.
+	preReleaseVersion = "0.1.0"
 
 	specManifestName   = "spec.manifest.json"
 	moduleManifestName = repo.ManifestName
@@ -130,9 +136,13 @@ func (s gitSource) read(filePath string) ([]byte, bool, error) {
 }
 
 func violation(rule, manifestPath, format string, args ...any) report.Violation {
+	return violationRef(refVersions, rule, manifestPath, format, args...)
+}
+
+func violationRef(ref, rule, manifestPath, format string, args ...any) report.Violation {
 	return report.Violation{
 		Rule:     rule,
-		Ref:      refVersions,
+		Ref:      ref,
 		Severity: report.SeverityError,
 		Path:     manifestPath,
 		Message:  fmt.Sprintf(format, args...),
@@ -376,7 +386,9 @@ func matches(entry, file string) bool {
 
 // CheckBumps compares HEAD with merge-base(BaseRev, HEAD): a component whose
 // files changed must carry a higher manifest version, and no version may drop.
-func CheckBumps(ctx context.Context, root, baseRev string) ([]report.Violation, error) {
+// With preRelease on, those two rules are off and every component must be at
+// 0.1.0 instead (L76).
+func CheckBumps(ctx context.Context, root, baseRev string, preRelease bool) ([]report.Violation, error) {
 	err := ctx.Err()
 	if err != nil {
 		return nil, err
@@ -424,6 +436,10 @@ func CheckBumps(ctx context.Context, root, baseRev string) ([]report.Violation, 
 		baseVersions[c.Name] = c.Version
 	}
 	for _, c := range headComponents {
+		if preRelease {
+			violations = append(violations, checkPreReleaseVersion(c)...)
+			continue
+		}
 		baseVersion, existed := baseVersions[c.Name]
 		if !existed {
 			continue
@@ -443,6 +459,17 @@ func CheckBumps(ctx context.Context, root, baseRev string) ([]report.Violation, 
 	}
 	sortViolations(violations)
 	return violations, nil
+}
+
+// checkPreReleaseVersion reports a component whose parseable version is not
+// the pre-release version; an unparseable one already has VERSION_INVALID.
+func checkPreReleaseVersion(c Component) []report.Violation {
+	_, err := parseVersion(c.Version)
+	if err != nil || c.Version == preReleaseVersion {
+		return nil
+	}
+	return []report.Violation{violationRef(refPrerelease, RuleVersionNotPrerelease, c.ManifestPath,
+		"%s is at %s; while versioning.json preRelease is true every version is %s", c.Name, c.Version, preReleaseVersion)}
 }
 
 // MissingTags returns "<component>-v<version>" for every component whose current

@@ -466,3 +466,72 @@ func TestUnknownBaseRevIsAnError(t *testing.T) {
 		t.Fatalf("error does not name the unknown revision: %v", err)
 	}
 }
+
+func lintPreRelease(t *testing.T, root string) []report.Violation {
+	t.Helper()
+	vs, _, err := migrationlint.Lint(migrationlint.Options{Root: root, BaseRev: "main", PreRelease: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return vs
+}
+
+func TestPreReleaseBaseComparisonIsOff(t *testing.T) {
+	const prefix = modDir + "migrations/"
+	cases := map[string]func(t *testing.T, root string){
+		"edited": func(t *testing.T, root string) {
+			put(t, root, prefix+"20260101120000_sys_one.sql", upLine+"CREATE TABLE sys_one (id int, a int);\n")
+		},
+		"deleted": func(t *testing.T, root string) {
+			_ = os.Remove(filepath.Join(root, filepath.FromSlash(prefix+"20260101120000_sys_one.sql")))
+		},
+		"moved to another module": func(t *testing.T, root string) {
+			err := os.Remove(filepath.Join(root, filepath.FromSlash(prefix+"20260201120000_sys_two.sql")))
+			if err != nil {
+				t.Fatal(err)
+			}
+			put(t, root, "go-srv/internal/platform/flags/module.manifest.json", `{"tablePrefixes":["flg"]}`)
+			put(t, root, "go-srv/internal/platform/flags/migrations/20260201120000_flg_two.sql", upLine+"CREATE TABLE flg_two (id int);\n")
+		},
+		"older file added": func(t *testing.T, root string) {
+			put(t, root, prefix+"20260115120000_sys_late.sql", upLine)
+		},
+	}
+	for name, change := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := baseRepo(t)
+			change(t, root)
+			commitAll(t, root)
+			expectRules(t, lintPreRelease(t, root))
+		})
+	}
+}
+
+func TestPreReleaseKeepsTheOtherRules(t *testing.T) {
+	cases := map[string]struct {
+		file string
+		sql  string
+		want string
+	}{
+		"bad name":       {"20260301120000_BadName.sql", upLine, "MIGRATION_NAME_INVALID"},
+		"foreign prefix": {"20260301120000_flg_a.sql", upLine, "MIGRATION_PREFIX_FOREIGN"},
+		"destructive":    {"20260301120000_sys_drop.sql", upLine + "ALTER TABLE sys_one DROP COLUMN id;\n", "MIGRATION_DESTRUCTIVE"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := baseRepo(t)
+			put(t, root, "go-srv/internal/platform/flags/module.manifest.json", `{"tablePrefixes":["flg"]}`)
+			put(t, root, modDir+"migrations/"+tc.file, tc.sql)
+			commitAll(t, root)
+			expectRules(t, lintPreRelease(t, root), tc.want)
+		})
+	}
+}
+
+func TestPreReleaseOffStillRefusesEditedBaseMigration(t *testing.T) {
+	root := baseRepo(t)
+	put(t, root, modDir+"migrations/20260101120000_sys_one.sql", upLine+"CREATE TABLE sys_one (id int, a int);\n")
+	commitAll(t, root)
+	vs, _ := lint(t, root, "main")
+	expectRules(t, vs, migrationlint.RuleModified)
+}

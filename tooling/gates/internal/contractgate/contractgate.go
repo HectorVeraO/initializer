@@ -67,6 +67,8 @@ type Options struct {
 	Root       string
 	BaseRev    string // diff base is merge-base(BaseRev, HEAD)
 	OasdiffBin string // default "oasdiff" from PATH
+	// PreRelease skips CONTRACT_BREAKING_NOT_MAJOR (L76)
+	PreRelease bool
 }
 
 type manifest struct {
@@ -380,6 +382,9 @@ func checkSpecBreaking(ctx context.Context, opts Options, mergeBase, name string
 	if len(markers) == 0 {
 		violations = append(violations, violation(RuleBreakingUnmarked, refPlain, contractPath, 0,
 			"breaking change without a BREAKING CHANGE: trailer on a commit touching %s/: %s", dir, summary))
+	}
+	if opts.PreRelease {
+		return violations, nil
 	}
 	notMajor, reason, err := majorNotBumped(opts.Root, mergeBase, name, baseContract)
 	if err != nil {

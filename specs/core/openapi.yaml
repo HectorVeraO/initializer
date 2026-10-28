@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Core
-  version: 1.1.1
+  version: 0.1.0
   description: >-
     Wire contract every platform module shares: the response envelope, the
     error and issue code tables, trace correlation, pagination, the health
