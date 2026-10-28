@@ -9,16 +9,16 @@ import (
 	"sort"
 )
 
-// GatbaseDir is the repo-relative directory that holds one directory per module.
-const GatbaseDir = "go-srv/internal/gatbase"
+// PlatformDir is the repo-relative directory that holds one directory per module.
+const PlatformDir = "go-srv/internal/platform"
 
 // ManifestName is the file that registers a module.
 const ManifestName = "module.manifest.json"
 
-// ModuleDir is one directory under go-srv/internal/gatbase and what its
+// ModuleDir is one directory under go-srv/internal/platform and what its
 // module.manifest.json says. Only the fields the gates read are decoded.
 type ModuleDir struct {
-	// Dir is the directory name under GatbaseDir.
+	// Dir is the directory name under PlatformDir.
 	Dir string
 	// ManifestPath is repo-relative with forward slashes.
 	ManifestPath string
@@ -37,16 +37,16 @@ type manifestFields struct {
 	TablePrefixes []string `json:"tablePrefixes"`
 }
 
-// DiscoverModules lists the directories under <root>/go-srv/internal/gatbase,
-// sorted by name, with their manifests decoded. A missing gatbase directory
+// DiscoverModules lists the directories under <root>/go-srv/internal/platform,
+// sorted by name, with their manifests decoded. A missing platform directory
 // yields no modules.
 func DiscoverModules(root string) ([]ModuleDir, error) {
-	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(GatbaseDir)))
+	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(PlatformDir)))
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", GatbaseDir, err)
+		return nil, fmt.Errorf("read %s: %w", PlatformDir, err)
 	}
 	var modules []ModuleDir
 	for _, entry := range entries {
@@ -55,7 +55,7 @@ func DiscoverModules(root string) ([]ModuleDir, error) {
 		}
 		module := ModuleDir{
 			Dir:          entry.Name(),
-			ManifestPath: path.Join(GatbaseDir, entry.Name(), ManifestName),
+			ManifestPath: path.Join(PlatformDir, entry.Name(), ManifestName),
 		}
 		raw, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(module.ManifestPath)))
 		switch {

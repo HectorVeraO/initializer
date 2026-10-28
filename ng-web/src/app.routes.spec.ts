@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, Routes } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
-import { GatbaseWebModule, anonymousGuard, coreModule } from '@/gatbase/core';
+import { WebModule, anonymousGuard, coreModule } from '@/platform/core';
 import { errorEnvelope } from './testing/fixtures/api-envelope';
 import { okEnvelope, sessionView } from './testing/fixtures/session-view';
 import { buildAppRoutes } from './app.routes';
@@ -11,7 +11,7 @@ import { buildAppRoutes } from './app.routes';
 const CONFIG_URL = '/assets/config/runtime-config.json';
 
 // The core module ships no login page yet; the stub gives the anonymous redirect a target.
-const APP_MODULE: GatbaseWebModule = {
+const APP_MODULE: WebModule = {
   ...coreModule,
   publicRoutes: [
     { path: 'login', canMatch: [anonymousGuard], component: BlankComponent },

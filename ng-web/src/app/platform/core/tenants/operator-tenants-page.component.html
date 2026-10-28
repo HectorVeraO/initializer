@@ -1,0 +1,83 @@
+<p-page-header [title]="'core.tenants.title' | transloco" />
+
+<p-form-section [title]="'core.tenants.createTitle' | transloco">
+  <form [formGroup]="form" class="flex flex-col gap-4" data-testid="tenant-form" (ngSubmit)="submit()">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+      <div class="flex flex-col gap-2">
+        <label for="tenant-slug">{{ 'core.tenants.slug' | transloco }}</label>
+        <input pInputText id="tenant-slug" formControlName="slug" autocomplete="off" data-testid="tenant-slug" />
+        @for (message of slugMessages(); track $index) {
+          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="tenant-slug-error">{{ message }}</p-message>
+        }
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label for="tenant-name">{{ 'core.tenants.name' | transloco }}</label>
+        <input pInputText id="tenant-name" formControlName="name" autocomplete="off" data-testid="tenant-name" />
+        @for (message of nameMessages(); track $index) {
+          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="tenant-name-error">{{ message }}</p-message>
+        }
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label for="tenant-admin-email">{{ 'core.tenants.adminEmail' | transloco }}</label>
+        <input pInputText id="tenant-admin-email" formControlName="adminEmail" type="email" autocomplete="off" data-testid="tenant-admin-email" />
+        @for (message of adminEmailMessages(); track $index) {
+          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="tenant-admin-email-error">{{ message }}</p-message>
+        }
+      </div>
+    </div>
+
+    @if (formMessages().length > 0) {
+      <div role="alert" data-testid="tenant-issues">
+        <p-message severity="error">
+          @for (message of formMessages(); track $index) {
+            <div>{{ message }}</div>
+          }
+        </p-message>
+      </div>
+    }
+
+    <div>
+      <button pButton type="submit" data-testid="tenant-submit" [disabled]="isSubmitting()">{{ 'core.tenants.submit' | transloco }}</button>
+    </div>
+  </form>
+</p-form-section>
+
+<p class="mt-4 mb-0 text-sm" data-testid="tenants-suspension-note">{{ 'core.tenants.suspensionNote' | transloco }}</p>
+
+<div class="card mt-2">
+  <p-list-state feature="tenants" [loading]="isLoading()" [loadFailed]="loadFailed()" [empty]="isEmpty()" sectionKey="core.tenants.section" emptyKey="core.tenants.empty" (retry)="reload()">
+    <p-table [value]="rows()" dataKey="id">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>{{ 'core.tenants.slug' | transloco }}</th>
+          <th>{{ 'core.tenants.name' | transloco }}</th>
+          <th>{{ 'core.tenants.status' | transloco }}</th>
+          <th>{{ 'core.tenants.created' | transloco }}</th>
+          <th></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr data-testid="tenants-row" [attr.data-key]="row.slug">
+          <td data-testid="tenants-cell-slug">{{ row.slug }}</td>
+          <td data-testid="tenants-cell-name">{{ row.name }}</td>
+          <td data-testid="tenants-cell-status" [attr.data-value]="row.status">{{ 'core.tenants.statuses.' + row.status | transloco }}</td>
+          <td data-testid="tenants-cell-created">{{ row.createdAt | santiagoDate }}</td>
+          <td class="text-right">
+            @if (row.status === 'active') {
+              <app-inline-confirm labelKey="core.tenants.suspend" testId="tenant-suspend" (confirmed)="setStatus(row, 'suspended')" />
+            } @else {
+              <button pButton type="button" size="small" severity="secondary" [outlined]="true" data-testid="tenant-activate" (click)="setStatus(row, 'active')">{{ 'core.tenants.activate' | transloco }}</button>
+            }
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+    @if (isTruncated()) {
+      <p class="mt-2 mb-0 text-sm" data-testid="tenants-truncated">{{ 'core.tenants.truncated' | transloco: { shown: rows().length, total: totalItems() } }}</p>
+    }
+  </p-list-state>
+</div>
+
+<app-one-time-secret-dialog titleKey="core.tenants.adminLinkTitle" [secret]="secret()" (closed)="closeSecret()" />

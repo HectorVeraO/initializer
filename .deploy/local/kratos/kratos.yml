@@ -5,7 +5,7 @@ dsn: memory
 
 serve:
   public:
-    # Overridden per environment with SERVE_PUBLIC_BASE_URL=${GATBASE_PUBLIC_BASE_URL}/kratos/
+    # Overridden per environment with SERVE_PUBLIC_BASE_URL=${APP_PUBLIC_BASE_URL}/kratos/
     base_url: http://localhost:10120/kratos/
     cors:
       enabled: false

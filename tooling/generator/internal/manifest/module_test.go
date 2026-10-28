@@ -10,7 +10,7 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 )
 
-const modulePath = "go-srv/internal/gatbase/parameters/module.manifest.json"
+const modulePath = "go-srv/internal/platform/parameters/module.manifest.json"
 
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()

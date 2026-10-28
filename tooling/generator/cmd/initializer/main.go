@@ -1,4 +1,4 @@
-// Command initializer generates a project from the Gatbase catalog.
+// Command initializer generates a project from the module catalog.
 package main
 
 import (

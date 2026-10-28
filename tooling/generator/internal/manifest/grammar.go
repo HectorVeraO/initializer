@@ -23,7 +23,7 @@ var (
 
 var tckTagTable = map[string]bool{
 	"@core":          true,
-	"@core-auth":     true,
+	"@identity":      true,
 	"@otel":          true,
 	"@parameters":    true,
 	"@feature-flags": true,

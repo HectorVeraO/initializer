@@ -167,7 +167,7 @@ func WebSymbol(id string) (string, error) {
 	return symbol.String(), nil
 }
 
-// ModulesTS renders ng-web/src/app/gatbase/modules.ts. ids are the ids of
+// ModulesTS renders ng-web/src/app/platform/modules.ts. ids are the ids of
 // every installed Angular module, core first, in catalog order.
 func ModulesTS(ids []string) ([]byte, error) {
 	if len(ids) == 0 || ids[0] != "core" {

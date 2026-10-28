@@ -1,14 +1,14 @@
 openapi: 3.1.0
 info:
-  title: Gatbase feature flags
-  version: 0.1.0
+  title: Feature flags
+  version: 1.0.0
   description: >-
     Platform-operator routes over the feature flags the flags.yaml manifest declares:
     list every flag with its overrides, and set or clear a global override or a
     per-tenant override. Every route is operator-only and cross-tenant by design: the
     operator names the target tenant in the path. The flag map a tenant user receives
-    is data.flags of the core-auth session responses, declared in
-    specs/core-auth/openapi.yaml, and is not redeclared here. Every /api/v1 body is
+    is data.flags of the identity session responses, declared in
+    specs/identity/openapi.yaml, and is not redeclared here. Every /api/v1 body is
     the envelope of the core contract. Request schemas describe their constraints in
     prose: a violation answers 422 VALIDATION_FAILED with every problem in error.issues.
 servers:
@@ -458,8 +458,8 @@ components:
     sessionCookie:
       type: apiKey
       in: cookie
-      name: gb_session
-      description: Name is __Host-gb_session over https. Not pinned by the TCK; treat it as opaque.
+      name: app_session
+      description: Name is __Host-app_session over https. Not pinned by the TCK; treat it as opaque.
   parameters:
     XsrfToken:
       name: X-XSRF-TOKEN

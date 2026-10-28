@@ -4,22 +4,22 @@ import angular from 'angular-eslint';
 import prettier from 'eslint-config-prettier';
 import { readdirSync } from 'node:fs';
 
-// Module folders of the Gatbase tree, read once at load time: every directory under src/app/gatbase except core.
-const moduleFolders = readdirSync(new URL('./src/app/gatbase/', import.meta.url), { withFileTypes: true })
+// Module folders of the platform tree, read once at load time: every directory under src/app/platform except core.
+const moduleFolders = readdirSync(new URL('./src/app/platform/', import.meta.url), { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && entry.name !== 'core')
   .map((entry) => entry.name);
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // The composition root (modules.ts) is a file, so it joins the folder names by hand.
 const optionalNames = [...moduleFolders, 'modules'].map(escapeRegex).join('|');
-const RELATIVE_TO_OPTIONAL = `^(\\.\\./)+(gatbase/)?(${optionalNames})(/|$)`;
-const RELATIVE_TO_ANY_SIBLING = `^(\\.\\./)+(gatbase/)?(core|${optionalNames})(/|$)`;
+const RELATIVE_TO_OPTIONAL = `^(\\.\\./)+(platform/)?(${optionalNames})(/|$)`;
+const RELATIVE_TO_ANY_SIBLING = `^(\\.\\./)+(platform/)?(core|${optionalNames})(/|$)`;
 
-// Import rules of the Gatbase tree (cookbooks/new-feature.md). Each row of the table in the design is one block below.
-// Alias or relative specifiers into a module folder of the Gatbase tree (everything but core and the composition root).
-const ANY_MODULE_FOLDER = '(^|/)gatbase/(?!core(/|$)|modules$)';
+// Import rules of the platform tree (cookbooks/new-feature.md). Each row of the table in the design is one block below.
+// Alias or relative specifiers into a module folder of the platform tree (everything but core and the composition root).
+const ANY_MODULE_FOLDER = '(^|/)platform/(?!core(/|$)|modules$)';
 // The same, plus a deep import into core: the skeleton goes through the core barrel.
-const ANY_MODULE_FOLDER_OR_CORE_DEEP = '(^|/)gatbase/(?!core$|modules$)';
-const NOT_ANY_MODULE_OR_ROOT = '^@/gatbase/(?!core(/|$))';
+const ANY_MODULE_FOLDER_OR_CORE_DEEP = '(^|/)platform/(?!core$|modules$)';
+const NOT_ANY_MODULE_OR_ROOT = '^@/platform/(?!core(/|$))';
 const SHELL_AND_DEMOS = '^@/(layout|pages|dev)(/|$)';
 
 export default tseslint.config(
@@ -40,20 +40,20 @@ export default tseslint.config(
   },
   {
     files: ['src/**/*.ts'],
-    ignores: ['src/app/gatbase/**'],
+    ignores: ['src/app/platform/**'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [{ regex: ANY_MODULE_FOLDER, message: 'Core-owned code imports a module only through @/gatbase/modules, never its folder.' }] }]
+      'no-restricted-imports': ['error', { patterns: [{ regex: ANY_MODULE_FOLDER, message: 'Core-owned code imports a module only through @/platform/modules, never its folder.' }] }]
     }
   },
   {
-    files: ['src/app/gatbase/core/**/*.ts'],
+    files: ['src/app/platform/core/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
-            { regex: '^@/gatbase/(?!core(/|$))', message: 'The core module never imports another Gatbase module or the composition root.' },
-            { regex: RELATIVE_TO_OPTIONAL, message: 'The core module never imports another Gatbase module or the composition root.' },
+            { regex: '^@/platform/(?!core(/|$))', message: 'The core module never imports another platform module or the composition root.' },
+            { regex: RELATIVE_TO_OPTIONAL, message: 'The core module never imports another platform module or the composition root.' },
             { regex: SHELL_AND_DEMOS, message: 'The core module never imports the shell, the demo pages or the dev guide.' }
           ]
         }
@@ -61,16 +61,16 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/app/gatbase/!(core)/**/*.ts'],
+    files: ['src/app/platform/!(core)/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
-            { regex: '^@/gatbase/core/', message: 'Import the core module through its barrel, @/gatbase/core.' },
-            { regex: NOT_ANY_MODULE_OR_ROOT, message: 'A module never imports another Gatbase module or the composition root.' },
+            { regex: '^@/platform/core/', message: 'Import the core module through its barrel, @/platform/core.' },
+            { regex: NOT_ANY_MODULE_OR_ROOT, message: 'A module never imports another platform module or the composition root.' },
             { regex: SHELL_AND_DEMOS, message: 'A module never imports the shell, the demo pages or the dev guide.' },
-            { regex: RELATIVE_TO_ANY_SIBLING, message: 'A module never imports a sibling module folder of the Gatbase tree.' }
+            { regex: RELATIVE_TO_ANY_SIBLING, message: 'A module never imports a sibling module folder of the platform tree.' }
           ]
         }
       ]
@@ -79,11 +79,11 @@ export default tseslint.config(
   {
     files: ['src/app/layout/**/*.ts', 'src/app.*.ts'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [{ regex: ANY_MODULE_FOLDER_OR_CORE_DEEP, message: 'The skeleton imports Gatbase only through @/gatbase/core and @/gatbase/modules.' }] }]
+      'no-restricted-imports': ['error', { patterns: [{ regex: ANY_MODULE_FOLDER_OR_CORE_DEEP, message: 'The skeleton imports platform modules only through @/platform/core and @/platform/modules.' }] }]
     }
   },
   {
-    files: ['src/app/gatbase/modules.ts'],
+    files: ['src/app/platform/modules.ts'],
     rules: {
       'no-restricted-imports': ['error', { patterns: [{ regex: '^(@/|\\.\\./)', message: 'The composition root imports only ./core and ./<module>/module.' }] }]
     }

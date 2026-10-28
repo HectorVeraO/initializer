@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as path from 'path';
-import { loadEnv, buildBaseUrl, readGrepInvert, gatbaseStack } from './src/env';
+import { loadEnv, buildBaseUrl, readGrepInvert, platformStack } from './src/env';
 
 const env = loadEnv();
-const stack = gatbaseStack();
+const stack = platformStack();
 
 /** process.env without undefined values, as webServer.env requires. */
 function definedEnv(source: NodeJS.ProcessEnv): Record<string, string> {
@@ -71,10 +71,10 @@ export default defineConfig({
           env: {
             ...definedEnv(process.env),
             ...stack.goSrvEnv,
-            GATBASE_PUBLIC_BASE_URL: env.web.baseUrl,
-            GATBASE_BOOTSTRAP_ADMIN_EMAIL: env.auth.email,
-            GATBASE_BOOTSTRAP_ADMIN_PASSWORD: env.auth.password,
-            GATBASE_FLAGS_FILE: stack.flagsFile,
+            APP_PUBLIC_BASE_URL: env.web.baseUrl,
+            APP_BOOTSTRAP_ADMIN_EMAIL: env.auth.email,
+            APP_BOOTSTRAP_ADMIN_PASSWORD: env.auth.password,
+            APP_FLAGS_FILE: stack.flagsFile,
           },
         },
         {

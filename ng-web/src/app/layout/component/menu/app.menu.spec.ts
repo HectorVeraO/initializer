@@ -9,7 +9,7 @@ import { byTestId, textOf } from '@/core/testing/ui-testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { MessageService } from '@openng/optimus-ui/api';
-import { GatbaseWebModule, SessionStore, coreModule, provideGatbase } from '@/gatbase/core';
+import { WebModule, SessionStore, coreModule, providePlatform } from '@/platform/core';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
 import { AppMenu } from './app.menu';
@@ -28,7 +28,7 @@ describe('AppMenu', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [TranslocoTestingModule.forRoot({ langs: { es }, translocoConfig: { availableLangs: ['es'], defaultLang: 'es' }, preloadLangs: true })],
-      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), provideGatbase([coreModule]), { provide: MessageService, useValue: { add: vi.fn() } }]
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), providePlatform([coreModule]), { provide: MessageService, useValue: { add: vi.fn() } }]
     });
   });
 
@@ -73,12 +73,12 @@ describe('AppMenu', () => {
     expect(paths.filter((path) => path.startsWith('dev/'))).toEqual([]);
   });
 
-  describe('Gatbase sections', () => {
-    const reportsModule: GatbaseWebModule = {
+  describe('Module sections', () => {
+    const reportsModule: WebModule = {
       id: 'reports',
       shellRoutes: [],
       publicRoutes: [],
-      i18n: { scope: 'gatbase-reports', alias: 'gatbaseReports', loader: { es: () => Promise.resolve({ menu: { title: 'Informes' }, nav: { members: 'Miembros', admins: 'Solo admins' } }) } },
+      i18n: { scope: 'reports', alias: 'reports', loader: { es: () => Promise.resolve({ menu: { title: 'Informes' }, nav: { members: 'Miembros', admins: 'Solo admins' } }) } },
       nav: [
         { id: 'members', labelKey: 'nav.members', icon: 'menu-icon menu-icon-users', path: '/members', requires: { tenant: 'required' } },
         { id: 'admins', labelKey: 'nav.admins', icon: 'menu-icon menu-icon-cog', path: '/admins', requires: { roles: ['admin'] } }
@@ -86,7 +86,7 @@ describe('AppMenu', () => {
     };
 
     beforeEach(() => {
-      TestBed.configureTestingModule({ providers: [provideGatbase([coreModule, reportsModule])] });
+      TestBed.configureTestingModule({ providers: [providePlatform([coreModule, reportsModule])] });
     });
 
     afterEach(() => {
@@ -136,7 +136,7 @@ describe('AppMenu', () => {
       expect(textOf(byTestId(root, 'menu-module-reports'))).toContain('Informes');
     });
 
-    it('shows no Gatbase section while anonymous', async () => {
+    it('shows no module section while anonymous', async () => {
       const root = await renderWithSession(401, errorEnvelope('SESSION_INVALID'));
 
       expect(root.querySelector('[data-testid="menu-module-reports"]')).toBeNull();

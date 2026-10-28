@@ -36,9 +36,9 @@ func TestModulesGoGoldens(t *testing.T) {
 		golden  string
 		folders []string
 	}{
-		{"modules.core-parameters.go.golden", []string{"coreauth", "parameters"}},
-		{"modules.implied-only.go.golden", []string{"coreauth"}},
-		{"modules.all.go.golden", []string{"coreauth", "featureflags", "parameters"}},
+		{"modules.core-parameters.go.golden", []string{"identity", "parameters"}},
+		{"modules.implied-only.go.golden", []string{"identity"}},
+		{"modules.all.go.golden", []string{"identity", "featureflags", "parameters"}},
 	}
 	for _, c := range cases {
 		t.Run(c.golden, func(t *testing.T) {
@@ -60,7 +60,7 @@ func TestModulesGoGoldens(t *testing.T) {
 }
 
 func TestModulesGoKeepsOneImportGroup(t *testing.T) {
-	got, err := render.ModulesGo("example.com/acme/backend", []string{"coreauth", "parameters"})
+	got, err := render.ModulesGo("example.com/acme/backend", []string{"identity", "parameters"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,20 +99,20 @@ func TestReadmeGoldens(t *testing.T) {
 		GeneratorVersion: "0.1.0",
 		Modules: []render.ReadmeModule{
 			{Stack: "go-srv", Module: "core", Version: "0.1.0"},
-			{Stack: "go-srv", Module: "core-auth", Version: "0.1.0"},
+			{Stack: "go-srv", Module: "identity", Version: "0.1.0"},
 			{Stack: "go-srv", Module: "parameters", Version: "0.1.0"},
 		},
-		TCKTags: []string{"@core", "@core-auth", "@otel", "@parameters"},
+		TCKTags: []string{"@core", "@identity", "@otel", "@parameters"},
 	}
 	all := coreParams
 	all.Modules = []render.ReadmeModule{
 		{Stack: "go-srv", Module: "core", Version: "0.1.0"},
-		{Stack: "go-srv", Module: "core-auth", Version: "0.1.0"},
+		{Stack: "go-srv", Module: "identity", Version: "0.1.0"},
 		{Stack: "go-srv", Module: "feature-flags", Version: "0.1.0"},
 		{Stack: "go-srv", Module: "parameters", Version: "0.1.0"},
 	}
-	all.TCKTags = []string{"@core", "@core-auth", "@feature-flags", "@otel", "@parameters"}
-	all.TCKEnv = []render.EnvPair{{Key: "GATBASE_FLAGS_FILE", Value: "specs/feature-flags/tck/fixtures/flags.yaml"}}
+	all.TCKTags = []string{"@core", "@identity", "@feature-flags", "@otel", "@parameters"}
+	all.TCKEnv = []render.EnvPair{{Key: "APP_FLAGS_FILE", Value: "specs/feature-flags/tck/fixtures/flags.yaml"}}
 	cases := map[string]render.ReadmeInput{
 		"README.core-parameters.md.golden": coreParams,
 		"README.all.md.golden":             all,

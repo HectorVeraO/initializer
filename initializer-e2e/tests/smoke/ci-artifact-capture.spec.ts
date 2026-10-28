@@ -50,7 +50,7 @@ function runCiEnvCopy(command: string): Record<string, string> {
 }
 
 test.describe('CI artifact capture', () => {
-  test('@smoke @issue-98 the .env the e2e-gatbase job writes keeps the CI failure-only defaults', () => {
+  test('@smoke @issue-98 the .env the e2e job writes keeps the CI failure-only defaults', () => {
     const ciDotenv = runCiEnvCopy(findEnvCopyCommand());
     const saved = Object.fromEntries(
       ARTIFACT_KEYS.map((key) => [key, process.env[key]]),

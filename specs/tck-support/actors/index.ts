@@ -94,10 +94,10 @@ export async function login(playwright: Playwright, email: string, password: str
   return { request, email, password, accountId: session.account.id };
 }
 
-/** Signs in the Day-0 admin from GATBASE_BOOTSTRAP_ADMIN_EMAIL / _PASSWORD. */
+/** Signs in the Day-0 admin from APP_BOOTSTRAP_ADMIN_EMAIL / _PASSWORD. */
 export async function bootstrapOperator(playwright: Playwright): Promise<Actor> {
-  const email = requiredEnv('GATBASE_BOOTSTRAP_ADMIN_EMAIL');
-  const password = requiredEnv('GATBASE_BOOTSTRAP_ADMIN_PASSWORD');
+  const email = requiredEnv('APP_BOOTSTRAP_ADMIN_EMAIL');
+  const password = requiredEnv('APP_BOOTSTRAP_ADMIN_PASSWORD');
   return login(playwright, email, password);
 }
 

@@ -3,8 +3,8 @@
 package main
 
 import (
-	"{{.GoModule}}/internal/gatbase/core"
-{{range .Folders}}	"{{$.GoModule}}/internal/gatbase/{{.}}"
+	"{{.GoModule}}/internal/platform/core"
+{{range .Folders}}	"{{$.GoModule}}/internal/platform/{{.}}"
 {{end}})
 
 // installedModules returns the catalog modules of this project in catalog order.

@@ -7,7 +7,7 @@ Guidance for AI agents working on **initializer**. Human contributors should als
 ## Project overview
 
 <!-- AGENTIC-SETUP:AUTOGEN:overview START -->
-initializer is a deterministic project generator in the spirit of Spring Initializr: pick a tech stack and the features you need, and it assembles a compilable project with only those modules and no dead code. Its catalog, Gatbase, holds modular, decoupled, composable capabilities (identity with Ory Kratos and a stateless BFF session, flat multi-tenancy, M2M API keys, typed parameters, trunk-based feature flags, OpenTelemetry), each defined by a language-agnostic contract and certified by a black-box TCK. Go (`go-srv`) and Angular (`ng-web`) are the first stack implementations; a generated project owns the copied code and records each module's base version in `gatbase.lock.json`.
+initializer is a deterministic project generator in the spirit of Spring Initializr: pick a tech stack and the features you need, and it assembles a compilable project with only those modules and no dead code. Its module catalog holds modular, decoupled, composable capabilities (identity with Ory Kratos and a stateless BFF session, flat multi-tenancy, M2M API keys, typed parameters, trunk-based feature flags, OpenTelemetry), each defined by a language-agnostic contract and certified by a black-box TCK. Go (`go-srv`) and Angular (`ng-web`) are the first stack implementations; a generated project owns the copied code and records each module's base version in `initializer.lock.json`.
 
 - **Harness**: Claude Code
 - **Host**: GitHub
@@ -180,11 +180,11 @@ Assume the source branch is GREEN at the start: tests pass, lint is clean, build
 
 ## Cross-cutting patterns
 
-- The Gatbase rules below (envelope, tenant scoping, flags, trace correlation, copy-and-own) apply to `go-srv`, `ng-web` and every TCK suite.
+- The Platform rules below (envelope, tenant scoping, flags, trace correlation, copy-and-own) apply to `go-srv`, `ng-web` and every TCK suite.
 
-## Gatbase rules
+## Platform rules
 
-Full text: `.claude/references/architecture.md` -> "Gatbase rules". `tooling/gates` enforces `flags.yaml` (`gates flags`), migration names and table prefixes (`gates migrations`), contract structure and breaking changes (`gates contracts`, with `oasdiff`) and manifest version bumps (`gates versions`) in CI job `gates`; agents and reviewers apply the remaining rules by reading.
+Full text: `.claude/references/architecture.md` -> "Platform rules". `tooling/gates` enforces `flags.yaml` (`gates flags`), migration names and table prefixes (`gates migrations`), contract structure and breaking changes (`gates contracts`, with `oasdiff`) and manifest version bumps (`gates versions`) in CI job `gates`; agents and reviewers apply the remaining rules by reading.
 
 - **Trunk-based development**, five rules for agents:
   1. No flag on a bugfix or refactor (`A -> A'`): fix `A` directly, with a regression test.
@@ -198,7 +198,7 @@ Full text: `.claude/references/architecture.md` -> "Gatbase rules". `tooling/gat
 - **Tables**: every name matches `^[a-z]{2,4}_[a-z0-9_]+$` with the owning module's registered prefix. Registry and migration naming: `go-srv/cookbooks/data-migrations.md`.
 - **Wire format**: every `/api/v1/` response is `ApiEnvelope<T>` (`{ data, meta: { traceId, timestamp }, error }`); invalid input answers one `422` with every problem in `error.issues[]`; error codes are SCREAMING_SNAKE and part of the contract.
 - **Tenant isolation**: the active tenant comes only from the session token or the API key; every `:id` access filters by it; another tenant's resource answers `404`.
-- **Copy-and-own**: modules live at `go-srv/internal/gatbase/<module>/` and `ng-web/src/app/gatbase/<module>/`. The generator copies them into generated projects at the same paths; each generated project records every module's base version and file hashes in `gatbase.lock.json`. Never move a module path; never add empty interfaces for modules that do not exist.
+- **Copy-and-own**: modules live at `go-srv/internal/platform/<module>/` and `ng-web/src/app/platform/<module>/`. The generator copies them into generated projects at the same paths; each generated project records every module's base version and file hashes in `initializer.lock.json`. Never move a module path; never add empty interfaces for modules that do not exist.
 - **Trace correlation**: every request and async job continues or opens a W3C `traceparent` context; logs and spans carry `trace_id`, `span_id`, `tenant_id`, `actor_id`; the `X-Trace-Id` response header equals `meta.traceId`.
 - **Toolchain and ports**: Go, Node, gitleaks, lefthook and oasdiff are pinned in root `mise.toml` (`mise install`). Run every `node`, `npm`, `npx`, `go` and `gofmt` command through `mise exec --`: the versions on the shell PATH are not the pinned ones, and Angular CLI refuses the older Node. Local host ports come from band `101xx`, mapped in `.deploy/local/README.md`.
 
@@ -244,8 +244,8 @@ Format: see `.claude/references/code-path-parity-format.md`. Root keeps a one-li
 <!-- Add parity rows below this line. The skill never edits below. -->
 
 - **oasdiff pin**: `mise.toml` and `.github/workflows/ci.yml` pin the same oasdiff version. Full row: `.claude/references/code-path-parity.md`.
-- **Envelope schemas**: `ApiMeta`, `ApiIssue`, `ApiError`, `ApiEnvelopeError` and `XTraceId` are byte-identical in `specs/core/openapi.yaml`, `specs/core-auth/openapi.yaml`, `specs/parameters/openapi.yaml` and `specs/feature-flags/openapi.yaml`. Full row: `.claude/references/code-path-parity.md`.
-- **Flag key rule**: `^[a-z][a-z0-9_]*$`, at most 64 characters, is the same in the `CHECK` of both `flg_*` migrations, `go-srv/internal/gatbase/featureflags/manifest.go` and `tooling/gates/internal/flagscheck/flagscheck.go`. Full row: `.claude/references/code-path-parity.md`.
+- **Envelope schemas**: `ApiMeta`, `ApiIssue`, `ApiError`, `ApiEnvelopeError` and `XTraceId` are byte-identical in `specs/core/openapi.yaml`, `specs/identity/openapi.yaml`, `specs/parameters/openapi.yaml` and `specs/feature-flags/openapi.yaml`. Full row: `.claude/references/code-path-parity.md`.
+- **Flag key rule**: `^[a-z][a-z0-9_]*$`, at most 64 characters, is the same in the `CHECK` of both `flg_*` migrations, `go-srv/internal/platform/featureflags/manifest.go` and `tooling/gates/internal/flagscheck/flagscheck.go`. Full row: `.claude/references/code-path-parity.md`.
 
 ## Anti-degradation governance
 

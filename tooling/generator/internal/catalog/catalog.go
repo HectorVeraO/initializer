@@ -1,5 +1,5 @@
 // Package catalog builds and reads catalog.lock.json, the build output that
-// records which files each Gatbase module and spec owns and their hashes.
+// records which files each module and spec owns and their hashes.
 package catalog
 
 import (

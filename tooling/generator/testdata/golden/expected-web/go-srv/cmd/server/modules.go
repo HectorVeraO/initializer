@@ -3,15 +3,15 @@
 package main
 
 import (
-	"example.com/acme/backend/internal/gatbase/core"
-	"example.com/acme/backend/internal/gatbase/coreauth"
-	"example.com/acme/backend/internal/gatbase/parameters"
+	"example.com/acme/backend/internal/platform/core"
+	"example.com/acme/backend/internal/platform/identity"
+	"example.com/acme/backend/internal/platform/parameters"
 )
 
 // installedModules returns the catalog modules of this project in catalog order.
 func installedModules() []core.Module {
 	return []core.Module{
-		coreauth.Module(),
+		identity.Module(),
 		parameters.Module(),
 	}
 }

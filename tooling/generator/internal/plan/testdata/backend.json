@@ -5,8 +5,8 @@
   "composeName": "fixture-app",
   "specs": [
     {"spec": "core", "version": "0.1.0", "tckTags": ["@core", "@otel"], "tckEnv": {}, "files": []},
-    {"spec": "core-auth", "version": "0.1.0", "tckTags": ["@core-auth"], "tckEnv": {}, "files": []},
-    {"spec": "feature-flags", "version": "0.1.0", "tckTags": ["@feature-flags"], "tckEnv": {"GATBASE_FLAGS_FILE": "specs/feature-flags/tck/fixtures/flags.yaml"}, "files": []},
+    {"spec": "feature-flags", "version": "0.1.0", "tckTags": ["@feature-flags"], "tckEnv": {"APP_FLAGS_FILE": "specs/feature-flags/tck/fixtures/flags.yaml"}, "files": []},
+    {"spec": "identity", "version": "0.1.0", "tckTags": ["@identity"], "tckEnv": {}, "files": []},
     {"spec": "parameters", "version": "0.1.0", "tckTags": ["@parameters"], "tckEnv": {}, "files": []}
   ],
   "stacks": [
@@ -15,8 +15,8 @@
       "role": "backend",
       "modules": [
         {"module": "core", "version": "0.1.0", "implied": true, "implementsSpec": {"core": "0.1.0"}, "requiresModules": [], "files": []},
-        {"module": "core-auth", "version": "0.1.0", "implied": true, "implementsSpec": {"core-auth": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []},
         {"module": "feature-flags", "version": "0.1.0", "implied": false, "implementsSpec": {"feature-flags": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []},
+        {"module": "identity", "version": "0.1.0", "implied": true, "implementsSpec": {"identity": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []},
         {"module": "parameters", "version": "0.1.0", "implied": false, "implementsSpec": {"parameters": "0.1.0"}, "requiresCore": "^0.1.0", "requiresModules": [], "files": []}
       ]
     }

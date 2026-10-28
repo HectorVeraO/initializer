@@ -1,22 +1,22 @@
 import { test as base, expect } from '@playwright/test';
 import { loadEnv } from '../env';
-import { GatbaseApi } from '../helpers/gatbase/api';
-import type { SeedTenant, SeedUser } from '../helpers/gatbase/api';
+import { PlatformApi } from '../helpers/platform/api';
+import type { SeedTenant, SeedUser } from '../helpers/platform/api';
 import {
   emailFor,
   passwordFor,
   tenantSlug,
   uniqueId,
-} from '../helpers/gatbase/ids';
+} from '../helpers/platform/ids';
 import { ExamplePage } from '../pages/ExamplePage';
-import { AcceptInvitationPage } from '../pages/gatbase/core/AcceptInvitationPage';
-import { ApiKeysPage } from '../pages/gatbase/core/ApiKeysPage';
-import { InvitationsPage } from '../pages/gatbase/core/InvitationsPage';
-import { OneTimeSecretDialog } from '../pages/gatbase/core/OneTimeSecretDialog';
-import { MembershipsPage } from '../pages/gatbase/core/MembershipsPage';
-import { OperatorTenantsPage } from '../pages/gatbase/core/OperatorTenantsPage';
-import { LoginPage } from '../pages/gatbase/core/LoginPage';
-import { ShellPage } from '../pages/gatbase/core/ShellPage';
+import { AcceptInvitationPage } from '../pages/platform/core/AcceptInvitationPage';
+import { ApiKeysPage } from '../pages/platform/core/ApiKeysPage';
+import { InvitationsPage } from '../pages/platform/core/InvitationsPage';
+import { OneTimeSecretDialog } from '../pages/platform/core/OneTimeSecretDialog';
+import { MembershipsPage } from '../pages/platform/core/MembershipsPage';
+import { OperatorTenantsPage } from '../pages/platform/core/OperatorTenantsPage';
+import { LoginPage } from '../pages/platform/core/LoginPage';
+import { ShellPage } from '../pages/platform/core/ShellPage';
 
 type Pages = {
   examplePage: ExamplePage;
@@ -32,12 +32,12 @@ type Pages = {
 
 type Seeds = {
   /** The bootstrap admin (platform operator) with its own API session. */
-  operator: GatbaseApi;
+  operator: PlatformApi;
   /** Creates tenant e2e-<id> whose first admin is a fresh user created through accept-new, and signs that user in over the API. */
   newTenantAdmin: () => Promise<{
     readonly tenant: SeedTenant;
     readonly admin: SeedUser;
-    readonly api: GatbaseApi;
+    readonly api: PlatformApi;
   }>;
 };
 
@@ -73,7 +73,7 @@ export const test = base.extend<Pages & Seeds>({
   },
   operator: async ({ playwright }, use) => {
     const env = loadEnv();
-    const api = await GatbaseApi.signIn(playwright, env.web.baseUrl, {
+    const api = await PlatformApi.signIn(playwright, env.web.baseUrl, {
       email: env.auth.email,
       password: env.auth.password,
     });
@@ -82,7 +82,7 @@ export const test = base.extend<Pages & Seeds>({
   },
   newTenantAdmin: async ({ playwright, operator }, use, testInfo) => {
     const env = loadEnv();
-    const sessions: GatbaseApi[] = [];
+    const sessions: PlatformApi[] = [];
     await use(async () => {
       const id = uniqueId(testInfo);
       const adminUser = {
@@ -94,14 +94,14 @@ export const test = base.extend<Pages & Seeds>({
         name: `E2E ${id}`,
         adminEmail: adminUser.email,
       });
-      await GatbaseApi.acceptNew(
+      await PlatformApi.acceptNew(
         playwright,
         env.web.baseUrl,
         created.invitationToken,
         adminUser.password,
         `Admin ${id}`,
       );
-      const api = await GatbaseApi.signIn(
+      const api = await PlatformApi.signIn(
         playwright,
         env.web.baseUrl,
         adminUser,

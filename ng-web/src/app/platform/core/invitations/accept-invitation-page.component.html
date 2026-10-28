@@ -1,0 +1,87 @@
+<div class="flex items-center justify-center min-h-screen">
+  <div class="card w-full max-w-md flex flex-col gap-4">
+    <h1 class="text-2xl font-semibold m-0">{{ 'core.accept.title' | transloco }}</h1>
+
+    @if (!hasToken() || isInvalidLink()) {
+      <div data-testid="accept-invalid" role="alert" class="flex flex-col gap-2">
+        <p-message severity="warn">{{ 'core.accept.invalid' | transloco }}</p-message>
+        <a routerLink="/home">{{ 'core.accept.goHome' | transloco }}</a>
+      </div>
+    } @else if (!isLoaded()) {
+      <p class="m-0" data-testid="accept-loading">{{ 'core.accept.loading' | transloco }}</p>
+    } @else {
+      @if (errorText(); as text) {
+        <div role="alert" data-testid="accept-error">
+          <p-message severity="error">{{ text }}</p-message>
+        </div>
+      }
+
+      @if (isAlreadyMember()) {
+        <div class="flex flex-col gap-2" data-testid="accept-already-member">
+          <p-message severity="info">{{ 'core.accept.alreadyMember' | transloco }}</p-message>
+          <a routerLink="/home">{{ 'core.accept.goHome' | transloco }}</a>
+        </div>
+      }
+
+      @if (isAuthenticated()) {
+        <p class="m-0">
+          {{ 'core.accept.asEmail' | transloco }} <strong data-testid="accept-as-email">{{ accountEmail() }}</strong>
+        </p>
+        <button pButton type="button" data-testid="accept-submit" [disabled]="isSubmitting()" (click)="submitAccept()">{{ 'core.accept.submit' | transloco }}</button>
+      } @else {
+        <div class="flex flex-col gap-2" [class.border-2]="highlightSignIn()" [class.border-primary]="highlightSignIn()" [class.p-2]="highlightSignIn()" [class.rounded]="highlightSignIn()">
+          <button pButton type="button" severity="secondary" data-testid="accept-sign-in" (click)="signIn()">{{ 'core.accept.haveAccount' | transloco }}</button>
+        </div>
+
+        <form [formGroup]="form" class="flex flex-col gap-3" data-testid="accept-new-form" (ngSubmit)="submitNew()">
+          <h2 class="text-lg font-semibold m-0">{{ 'core.accept.newAccount' | transloco }}</h2>
+
+          <div class="flex flex-col gap-2">
+            <label for="accept-new-fullname">{{ 'core.accept.fullName' | transloco }}</label>
+            <input pInputText id="accept-new-fullname" formControlName="fullName" type="text" autocomplete="name" data-testid="accept-new-fullname" />
+            @if (form.controls.fullName.touched && form.controls.fullName.invalid) {
+              <p-message severity="error" variant="simple" size="small" role="alert">{{ issueText('FIELD_REQUIRED') }}</p-message>
+            }
+            @for (message of fullNameMessages(); track $index) {
+              <p-message severity="error" variant="simple" size="small" role="alert" data-testid="accept-new-fullname-error">{{ message }}</p-message>
+            }
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label for="accept-new-password">{{ 'core.accept.password' | transloco }}</label>
+            <input pInputText id="accept-new-password" formControlName="password" type="password" autocomplete="new-password" data-testid="accept-new-password" />
+            @if (form.controls.password.touched && form.controls.password.invalid) {
+              <p-message severity="error" variant="simple" size="small" role="alert">{{ issueText('FIELD_REQUIRED') }}</p-message>
+            }
+            @for (message of passwordMessages(); track $index) {
+              <p-message severity="error" variant="simple" size="small" role="alert" data-testid="accept-new-password-error">{{ message }}</p-message>
+            }
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label for="accept-new-password-confirm">{{ 'core.accept.passwordConfirm' | transloco }}</label>
+            <input pInputText id="accept-new-password-confirm" formControlName="confirm" type="password" autocomplete="new-password" data-testid="accept-new-password-confirm" />
+            @if (form.controls.confirm.touched && form.controls.confirm.invalid) {
+              <p-message severity="error" variant="simple" size="small" role="alert">{{ issueText('FIELD_REQUIRED') }}</p-message>
+            }
+            @if (showMismatch()) {
+              <p-message severity="error" variant="simple" size="small" role="alert" data-testid="accept-new-mismatch">{{ 'core.accept.passwordMismatch' | transloco }}</p-message>
+            }
+          </div>
+
+          @if (formMessages().length > 0) {
+            <div role="alert" data-testid="accept-new-issues">
+              <p-message severity="error">
+                @for (message of formMessages(); track $index) {
+                  <div>{{ message }}</div>
+                }
+              </p-message>
+            </div>
+          }
+
+          <button pButton type="submit" data-testid="accept-new-submit" [disabled]="isSubmitting()">{{ 'core.accept.createAccount' | transloco }}</button>
+        </form>
+      }
+    }
+  </div>
+</div>

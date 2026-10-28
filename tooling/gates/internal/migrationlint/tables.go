@@ -78,7 +78,7 @@ func (l *linter) checkStatement(file string, info *moduleInfo, statement Stateme
 	}
 	if len(kinds) > 0 && !statement.ContractStep {
 		l.add(RuleDestructive, file, statement.Line,
-			"%s needs the line \"-- gatbase:contract-step <reason>\" directly above it", strings.Join(kinds, ", "))
+			"%s needs the line \"-- initializer:contract-step <reason>\" directly above it", strings.Join(kinds, ", "))
 	}
 }
 

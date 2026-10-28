@@ -225,7 +225,7 @@
   },
   "home": {
     "title": "Inicio",
-    "intro": "Consola base lista para recibir los módulos de Gatbase.",
+    "intro": "Consola base lista para recibir los módulos de la plataforma.",
     "demos": "Demos de componentes"
   },
   "forbidden": {

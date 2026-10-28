@@ -75,7 +75,7 @@ func TestModulesTSRefusesBadInput(t *testing.T) {
 func TestWebSymbolExamples(t *testing.T) {
 	cases := map[string]string{
 		"core":          "coreModule",
-		"core-auth":     "coreAuthModule",
+		"identity":      "identityModule",
 		"feature-flags": "featureFlagsModule",
 		"a1-b2-c3":      "a1B2C3Module",
 	}

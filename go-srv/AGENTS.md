@@ -1,7 +1,7 @@
 # AGENTS.md - go-srv
 
 <!-- AGENTIC-SETUP:AUTOGEN:overview START -->
-**Purpose**: Go stack of the catalog: the Go HTTP API and BFF implementation of each Gatbase module (identity, tenancy, API keys, parameters, feature flags, OpenTelemetry) that the generator copies into Go projects.
+**Purpose**: Go stack of the module catalog: the Go HTTP API and BFF implementation of each platform module (identity, tenancy, API keys, parameters, feature flags, OpenTelemetry) that the generator copies into Go projects.
 
 - **Stack**: Go 1.26 / stdlib `net/http` / PostgreSQL 18
 - **Entry point**: `cmd/server/main.go`
@@ -24,7 +24,7 @@ Read the fragment routed to your task before building here; this `AGENTS.md` is 
 <!-- AGENTIC-SETUP:AUTOGEN:commands START -->
 | Action | Command |
 |---|---|
-| Develop | `go run ./cmd/server` (needs `GATBASE_DATABASE_URL`: `set -a; . ../.deploy/local/.env; set +a`) |
+| Develop | `go run ./cmd/server` (needs `APP_DATABASE_URL`: `set -a; . ../.deploy/local/.env; set +a`) |
 | Lint | `go vet ./...` |
 | Build | `go build ./...` |
 <!-- AGENTIC-SETUP:AUTOGEN:commands END -->
@@ -37,7 +37,7 @@ Test runner: **go test** (`go test ./...`); no dedicated stub.
 
 Before declaring a change complete:
 
-- **Tests**: `go test ./...`; with `GATBASE_TEST_DATABASE_URL` set (cookbook `testing-tck.md`) the database tests run instead of skipping.
+- **Tests**: `go test ./...`; with `APP_TEST_DATABASE_URL` set (cookbook `testing-tck.md`) the database tests run instead of skipping.
 - **Lint**: `go vet ./...`
 - **Build**: `go build ./...`
 - **Read the full modified file**, not just the diff.

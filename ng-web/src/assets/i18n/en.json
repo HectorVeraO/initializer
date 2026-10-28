@@ -225,7 +225,7 @@
   },
   "home": {
     "title": "Home",
-    "intro": "Base console ready to receive the Gatbase modules.",
+    "intro": "Base console ready to receive the platform modules.",
     "demos": "Component demos"
   },
   "forbidden": {

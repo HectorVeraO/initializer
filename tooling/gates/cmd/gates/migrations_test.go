@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	migrationsDir = "go-srv/internal/gatbase/parameters/"
+	migrationsDir = "go-srv/internal/platform/parameters/"
 	sysManifest   = `{"module":"parameters","tablePrefixes":["sys"]}`
 	migrationFile = migrationsDir + "migrations/20260101120000_sys_create_parameters.sql"
 )

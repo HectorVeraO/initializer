@@ -9,7 +9,7 @@ import (
 
 const (
 	specPath      = "specs/feature-flags/spec.manifest.json"
-	selectionPath = "gatbase.selection.json"
+	selectionPath = "initializer.selection.json"
 )
 
 func TestDecodeSpecValidFixture(t *testing.T) {
@@ -17,7 +17,7 @@ func TestDecodeSpecValidFixture(t *testing.T) {
 	if len(issues) != 0 {
 		t.Fatalf("unexpected issues: %v", issues)
 	}
-	if spec.Spec != "feature-flags" || len(spec.TCKTags) != 2 || spec.TCKEnv["GATBASE_FLAGS_FILE"] == "" {
+	if spec.Spec != "feature-flags" || len(spec.TCKTags) != 2 || spec.TCKEnv["APP_FLAGS_FILE"] == "" {
 		t.Errorf("spec not decoded: %+v", spec)
 	}
 }

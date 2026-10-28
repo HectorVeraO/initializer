@@ -78,10 +78,10 @@ func baseRepo(t *testing.T) string {
 	runGit(t, dir, "init", "-b", "main")
 	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("0.1.0"))
 	writeAt(t, dir, "specs/alpha/openapi.yaml", "openapi: 3.0.3\n")
-	writeAt(t, dir, "go-srv/internal/gatbase/core/module.manifest.json", moduleManifest("core", "0.1.0", coreFiles, coreExclude))
-	writeAt(t, dir, "go-srv/internal/gatbase/parameters/module.manifest.json",
-		moduleManifest("parameters", "0.1.0", `["go-srv/internal/gatbase/parameters/"]`, `[]`))
-	writeAt(t, dir, "go-srv/internal/gatbase/parameters/params.go", "package parameters\n")
+	writeAt(t, dir, "go-srv/internal/platform/core/module.manifest.json", moduleManifest("core", "0.1.0", coreFiles, coreExclude))
+	writeAt(t, dir, "go-srv/internal/platform/parameters/module.manifest.json",
+		moduleManifest("parameters", "0.1.0", `["go-srv/internal/platform/parameters/"]`, `[]`))
+	writeAt(t, dir, "go-srv/internal/platform/parameters/params.go", "package parameters\n")
 	writeAt(t, dir, "go-srv/cmd/server/modules.go", "package main\n")
 	writeAt(t, dir, "go-srv/main.go", "package main\n")
 	writeAt(t, dir, "go-srv/AGENTS.md", "docs\n")
@@ -166,9 +166,9 @@ func TestInvalidVersionsFail(t *testing.T) {
 
 func TestNewComponentStartsWithoutComparison(t *testing.T) {
 	dir := baseRepo(t)
-	writeAt(t, dir, "go-srv/internal/gatbase/flags/module.manifest.json",
-		moduleManifest("flags", "0.1.0", `["go-srv/internal/gatbase/flags/"]`, `[]`))
-	writeAt(t, dir, "go-srv/internal/gatbase/core/module.manifest.json", moduleManifest("core", "0.1.1", coreFiles, coreExclude))
+	writeAt(t, dir, "go-srv/internal/platform/flags/module.manifest.json",
+		moduleManifest("flags", "0.1.0", `["go-srv/internal/platform/flags/"]`, `[]`))
+	writeAt(t, dir, "go-srv/internal/platform/core/module.manifest.json", moduleManifest("core", "0.1.1", coreFiles, coreExclude))
 	commitAll(t, dir, "new module")
 	found, _ := check(t, dir)
 	if len(found) != 0 {
@@ -178,7 +178,7 @@ func TestNewComponentStartsWithoutComparison(t *testing.T) {
 
 func TestNestedModuleFilesGoToTheirLongestPrefixOwner(t *testing.T) {
 	dir := baseRepo(t)
-	writeAt(t, dir, "go-srv/internal/gatbase/parameters/params.go", "package parameters // changed\n")
+	writeAt(t, dir, "go-srv/internal/platform/parameters/params.go", "package parameters // changed\n")
 	commitAll(t, dir, "change nested")
 	found, paths := check(t, dir)
 	if rules(found) != versions.RuleVersionNotBumped || !strings.Contains(paths[0], "/parameters/") {
@@ -221,7 +221,7 @@ func TestDeletedFileCountsAsChange(t *testing.T) {
 
 func TestExactFileEntryBeatsDirectory(t *testing.T) {
 	dir := baseRepo(t)
-	writeAt(t, dir, "go-srv/internal/gatbase/other/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/other/module.manifest.json",
 		moduleManifest("other", "0.1.0", `["go-srv/main.go"]`, `[]`))
 	commitAll(t, dir, "other module")
 	runGit(t, dir, "branch", "-f", "main", "topic")
@@ -235,7 +235,7 @@ func TestExactFileEntryBeatsDirectory(t *testing.T) {
 
 func TestPathTargetFilesEntriesAreRead(t *testing.T) {
 	dir := baseRepo(t)
-	writeAt(t, dir, "go-srv/internal/gatbase/other/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/other/module.manifest.json",
 		moduleManifest("other", "0.1.0", `[{"path":"go-srv/main.go","target":"app/main.go"}]`, `[]`))
 	commitAll(t, dir, "other module")
 	components, violations, err := versions.Discover(dir)
@@ -255,9 +255,9 @@ func TestPathTargetFilesEntriesAreRead(t *testing.T) {
 
 func TestOverlapOfEqualEntriesIsReported(t *testing.T) {
 	dir := baseRepo(t)
-	writeAt(t, dir, "go-srv/internal/gatbase/other/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/other/module.manifest.json",
 		moduleManifest("other", "0.1.0", `["mise.toml"]`, `[]`))
-	writeAt(t, dir, "go-srv/internal/gatbase/core/module.manifest.json", moduleManifest("core", "0.1.1", coreFiles, coreExclude))
+	writeAt(t, dir, "go-srv/internal/platform/core/module.manifest.json", moduleManifest("core", "0.1.1", coreFiles, coreExclude))
 	commitAll(t, dir, "overlap")
 	found, _ := check(t, dir)
 	if rules(found) != versions.RuleComponentPathOverlap {
@@ -267,9 +267,9 @@ func TestOverlapOfEqualEntriesIsReported(t *testing.T) {
 
 func TestModuleEntryInsideSpecFolderIsAnOverlap(t *testing.T) {
 	dir := baseRepo(t)
-	writeAt(t, dir, "go-srv/internal/gatbase/other/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/other/module.manifest.json",
 		moduleManifest("other", "0.1.0", `["specs/alpha/openapi.yaml"]`, `[]`))
-	writeAt(t, dir, "go-srv/internal/gatbase/core/module.manifest.json", moduleManifest("core", "0.1.1", coreFiles, coreExclude))
+	writeAt(t, dir, "go-srv/internal/platform/core/module.manifest.json", moduleManifest("core", "0.1.1", coreFiles, coreExclude))
 	commitAll(t, dir, "overlap")
 	found, _ := check(t, dir)
 	if rules(found) != versions.RuleComponentPathOverlap {
@@ -282,9 +282,9 @@ func TestDiscoverReportsUnsafeAndBrokenManifests(t *testing.T) {
 	dir := t.TempDir()
 	writeAt(t, dir, "specs/alpha/spec.manifest.json", "{not json")
 	writeAt(t, dir, "specs/Bad_Name/spec.manifest.json", specManifest("0.1.0"))
-	writeAt(t, dir, "go-srv/internal/gatbase/x/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/x/module.manifest.json",
 		moduleManifest("a b", "0.1.0", `[]`, `[]`))
-	writeAt(t, dir, "go-srv/internal/gatbase/y/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/y/module.manifest.json",
 		moduleManifest("y", "0.1.0", `["../outside", "/abs", "a//b", 5]`, `[]`))
 	components, violations, err := versions.Discover(dir)
 	if err != nil {
@@ -299,8 +299,8 @@ func TestDiscoverReportsUnsafeAndBrokenManifests(t *testing.T) {
 	}
 	sort.Strings(rejectedPaths)
 	wantPaths := []string{
-		"go-srv/internal/gatbase/x/module.manifest.json",
-		"go-srv/internal/gatbase/y/module.manifest.json",
+		"go-srv/internal/platform/x/module.manifest.json",
+		"go-srv/internal/platform/y/module.manifest.json",
 		"specs/Bad_Name/spec.manifest.json",
 		"specs/alpha/spec.manifest.json",
 	}
@@ -323,7 +323,7 @@ func TestDiscoverReportsUnsafeAndBrokenManifests(t *testing.T) {
 func TestDiscoverRejectsUnsafePathEntriesIndividually(t *testing.T) {
 	requireGit(t)
 	dir := t.TempDir()
-	writeAt(t, dir, "go-srv/internal/gatbase/y/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/y/module.manifest.json",
 		moduleManifest("y", "0.1.0", `["../outside", "/abs", "a//b", "ok.go"]`, `["../x", "C:/y"]`))
 	components, violations, err := versions.Discover(dir)
 	if err != nil {
@@ -341,7 +341,7 @@ func TestFolderEntryWithoutTrailingSlashIsInvalid(t *testing.T) {
 	requireGit(t)
 	dir := t.TempDir()
 	writeAt(t, dir, "go-srv/cookbooks/a.md", "docs\n")
-	writeAt(t, dir, "go-srv/internal/gatbase/y/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/y/module.manifest.json",
 		moduleManifest("y", "0.1.0", `["go-srv/cookbooks", "go-srv/cookbooks/a.md"]`, `[]`))
 	_, violations, err := versions.Discover(dir)
 	if err != nil {
@@ -419,9 +419,9 @@ func TestCancelledContextStopsWork(t *testing.T) {
 func TestDuplicateComponentNameKeepsFirstAndReportsSecond(t *testing.T) {
 	requireGit(t)
 	dir := t.TempDir()
-	writeAt(t, dir, "go-srv/internal/gatbase/a/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/a/module.manifest.json",
 		moduleManifest("dup", "0.1.0", `["a.go"]`, `[]`))
-	writeAt(t, dir, "go-srv/internal/gatbase/b/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/b/module.manifest.json",
 		moduleManifest("dup", "0.1.0", `["b.go"]`, `[]`))
 	components, violations, err := versions.Discover(dir)
 	if err != nil {
@@ -431,7 +431,7 @@ func TestDuplicateComponentNameKeepsFirstAndReportsSecond(t *testing.T) {
 		t.Fatalf("components = %+v", components)
 	}
 	if len(violations) != 1 || violations[0].Rule != versions.RuleVersionInvalid ||
-		violations[0].Path != "go-srv/internal/gatbase/b/module.manifest.json" {
+		violations[0].Path != "go-srv/internal/platform/b/module.manifest.json" {
 		t.Fatalf("violations = %v", violations)
 	}
 }
@@ -439,7 +439,7 @@ func TestDuplicateComponentNameKeepsFirstAndReportsSecond(t *testing.T) {
 func TestManifestEntriesAreNormalizedOrRejected(t *testing.T) {
 	requireGit(t)
 	dir := t.TempDir()
-	writeAt(t, dir, "go-srv/internal/gatbase/y/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/y/module.manifest.json",
 		moduleManifest("y", "0.1.0", `["dir\\file.go", "", ".", "a/./b", "ok.go"]`, `["x\\y/", ""]`))
 	components, violations, err := versions.Discover(dir)
 	if err != nil {
@@ -457,7 +457,7 @@ func TestManifestEntriesAreNormalizedOrRejected(t *testing.T) {
 
 func TestRootLevelFolderEntryWithoutSlashIsInvalid(t *testing.T) {
 	dir := baseRepo(t)
-	writeAt(t, dir, "go-srv/internal/gatbase/other/module.manifest.json",
+	writeAt(t, dir, "go-srv/internal/platform/other/module.manifest.json",
 		moduleManifest("other", "0.1.0", `["go-srv"]`, `[]`))
 	commitAll(t, dir, "root folder entry")
 	found, _ := check(t, dir)
@@ -472,9 +472,9 @@ func TestRootLevelFolderEntryWithoutSlashIsInvalid(t *testing.T) {
 
 func TestNgWebModulesAreDiscoveredAndBumpChecked(t *testing.T) {
 	dir := baseRepo(t)
-	writeAt(t, dir, "ng-web/src/app/gatbase/widget/module.manifest.json",
-		`{"schema":1,"stack":"ng-web","module":"widget","version":"0.1.0","files":["ng-web/src/app/gatbase/widget/"],"exclude":[]}`)
-	writeAt(t, dir, "ng-web/src/app/gatbase/widget/widget.ts", "export {}\n")
+	writeAt(t, dir, "ng-web/src/app/platform/widget/module.manifest.json",
+		`{"schema":1,"stack":"ng-web","module":"widget","version":"0.1.0","files":["ng-web/src/app/platform/widget/"],"exclude":[]}`)
+	writeAt(t, dir, "ng-web/src/app/platform/widget/widget.ts", "export {}\n")
 	commitAll(t, dir, "ng-web module")
 	components, violations, err := versions.Discover(dir)
 	if err != nil || len(violations) != 0 {
@@ -488,7 +488,7 @@ func TestNgWebModulesAreDiscoveredAndBumpChecked(t *testing.T) {
 		t.Fatalf("names = %v", names)
 	}
 	runGit(t, dir, "branch", "-f", "main", "topic")
-	writeAt(t, dir, "ng-web/src/app/gatbase/widget/widget.ts", "export const a = 1\n")
+	writeAt(t, dir, "ng-web/src/app/platform/widget/widget.ts", "export const a = 1\n")
 	commitAll(t, dir, "change")
 	found, paths := check(t, dir)
 	if rules(found) != versions.RuleVersionNotBumped || !strings.Contains(paths[0], "/widget/") {

@@ -41,7 +41,7 @@ func realCatalog(t *testing.T) (root, catalogPath string) {
 }
 
 // In a project generated with every module, the README sets
-// GATBASE_FLAGS_FILE for go-srv started from go-srv/, so the path must
+// APP_FLAGS_FILE for go-srv started from go-srv/, so the path must
 // resolve from there.
 func TestGenerateReadmeFlagsFileResolvesFromGoSrv(t *testing.T) {
 	root, catalogPath := realCatalog(t)
@@ -55,7 +55,7 @@ func TestGenerateReadmeFlagsFileResolvesFromGoSrv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const key = "GATBASE_FLAGS_FILE="
+	const key = "APP_FLAGS_FILE="
 	at := strings.Index(string(readme), key)
 	if at < 0 {
 		t.Fatalf("README names no %s", key)
@@ -81,7 +81,7 @@ func TestGenerateWithoutFeatureFlagsShipsNoFlagsConfig(t *testing.T) {
 		t.Fatal("flags.yaml delivered without feature-flags")
 	}
 	survivors := map[string][]string{
-		".deploy/local/.example.env": {"INITIALIZER_PG_PASSWORD=", "OTEL_SERVICE_NAME=", "GATBASE_SESSION_KEYS=", "GATBASE_KRATOS_ADMIN_URL="},
+		".deploy/local/.example.env": {"INITIALIZER_PG_PASSWORD=", "OTEL_SERVICE_NAME=", "APP_SESSION_KEYS=", "APP_KRATOS_ADMIN_URL="},
 		".deploy/local/README.md":    {"## Start and stop", "## Session keys"},
 	}
 	for p, wanted := range survivors {
@@ -94,7 +94,7 @@ func TestGenerateWithoutFeatureFlagsShipsNoFlagsConfig(t *testing.T) {
 				t.Errorf("%s lost unrelated core content %q", p, survivor)
 			}
 		}
-		for _, banned := range []string{"GATBASE_FLAGS_FILE", "feature-flags", "Feature flags"} {
+		for _, banned := range []string{"APP_FLAGS_FILE", "feature-flags", "Feature flags"} {
 			if strings.Contains(string(data), banned) {
 				t.Errorf("%s mentions %q in a project without the feature-flags module", p, banned)
 			}

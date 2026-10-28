@@ -56,7 +56,7 @@ var (
 		"tck-support": true, "scripts": true, "node_modules": true,
 		"test-results": true, "playwright-report": true,
 	}
-	allowedTags    = map[string]bool{"@core": true, "@otel": true, "@core-auth": true, "@parameters": true, "@feature-flags": true}
+	allowedTags    = map[string]bool{"@core": true, "@otel": true, "@identity": true, "@parameters": true, "@feature-flags": true}
 	excludedLevels = map[string]bool{"draft": true, "alpha": true}
 	majorPattern   = regexp.MustCompile(`^(\d+)\.\d+\.\d+`)
 	breakingKeys   = []string{"BREAKING CHANGE", "BREAKING-CHANGE"}

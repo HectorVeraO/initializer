@@ -50,9 +50,9 @@ const (
 var reservedPrefixesJSON []byte
 
 var (
-	locationPattern = regexp.MustCompile(`^go-srv/internal/gatbase/([^/]+)/migrations/([^/]+\.sql)$`)
+	locationPattern = regexp.MustCompile(`^go-srv/internal/platform/([^/]+)/migrations/([^/]+\.sql)$`)
 	// anyMigrationPattern also matches nested files, for files that existed at the base.
-	anyMigrationPattern = regexp.MustCompile(`^go-srv/internal/gatbase/[^/]+/migrations/.+\.sql$`)
+	anyMigrationPattern = regexp.MustCompile(`^go-srv/internal/platform/[^/]+/migrations/.+\.sql$`)
 	namePattern         = regexp.MustCompile(`^(\d{14})_([a-z]{2,4})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`)
 	prefixPattern       = regexp.MustCompile(`^[a-z]{2,4}$`)
 )
@@ -240,7 +240,7 @@ func (l *linter) registerModules(modules []repo.ModuleDir, files []string) {
 func (l *linter) checkFile(file string) error {
 	match := locationPattern.FindStringSubmatch(file)
 	if match == nil || !strings.HasSuffix(file, ".sql") {
-		l.add(RuleLocationInvalid, file, 0, "SQL files live in go-srv/internal/gatbase/<module>/migrations/")
+		l.add(RuleLocationInvalid, file, 0, "SQL files live in go-srv/internal/platform/<module>/migrations/")
 		return nil
 	}
 	module, name := match[1], match[2]
@@ -314,7 +314,7 @@ func (l *linter) checkAgainstBase() error {
 	if err != nil {
 		return fmt.Errorf("find merge base with %s: %w", l.opts.BaseRev, err)
 	}
-	changes, err := repo.DiffNameStatus(l.opts.Root, mergeBase, "HEAD", repo.GatbaseDir)
+	changes, err := repo.DiffNameStatus(l.opts.Root, mergeBase, "HEAD", repo.PlatformDir)
 	if err != nil {
 		return err
 	}
@@ -324,7 +324,7 @@ func (l *linter) checkAgainstBase() error {
 		if known {
 			return cached, nil
 		}
-		files, listErr := repo.ListFiles(l.opts.Root, l.opts.BaseRev, path.Join(repo.GatbaseDir, module, "migrations"))
+		files, listErr := repo.ListFiles(l.opts.Root, l.opts.BaseRev, path.Join(repo.PlatformDir, module, "migrations"))
 		if listErr != nil {
 			return "", listErr
 		}

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
-  title: Gatbase parameters
-  version: 0.2.0
+  title: Parameters
+  version: 1.0.0
   description: >-
     Typed global parameters with per-tenant overrides. Operators define parameters;
     admins of a tenant override their values. Every /api/v1 body is the envelope of
@@ -532,8 +532,8 @@ components:
     sessionCookie:
       type: apiKey
       in: cookie
-      name: gb_session
-      description: Name is __Host-gb_session over https. Not pinned by the TCK; treat it as opaque.
+      name: app_session
+      description: Name is __Host-app_session over https. Not pinned by the TCK; treat it as opaque.
   parameters:
     XsrfToken:
       name: X-XSRF-TOKEN

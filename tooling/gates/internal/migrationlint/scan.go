@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const contractStepMarker = "gatbase:contract-step"
+const contractStepMarker = "initializer:contract-step"
 
 // Statement is one SQL statement with comments removed, single-quoted strings
 // reduced to ” and dollar-quoted bodies reduced to $$.
@@ -16,7 +16,7 @@ type Statement struct {
 	// space and no trailing semicolon. It is never empty.
 	Text string
 	// ContractStep is true when the line directly above the statement is
-	// "-- gatbase:contract-step <reason>" with a non-empty reason.
+	// "-- initializer:contract-step <reason>" with a non-empty reason.
 	ContractStep bool
 }
 

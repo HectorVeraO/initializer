@@ -1,4 +1,4 @@
-// Package lockfile defines gatbase.lock.json, the record a generated project
+// Package lockfile defines initializer.lock.json, the record a generated project
 // keeps of what the generator delivered, and the project layout rules that
 // both the writer (emit) and the reader (verify) share.
 package lockfile
@@ -16,15 +16,15 @@ import (
 )
 
 // Name is the file name of the lock at the project root.
-const Name = "gatbase.lock.json"
+const Name = "initializer.lock.json"
 
 // SelectionName is the file name of the recorded selection at the project root.
-const SelectionName = "gatbase.selection.json"
+const SelectionName = "initializer.selection.json"
 
 // SchemaVersion is the only lock schema this package reads and writes.
 const SchemaVersion = 1
 
-// Lock is the content of gatbase.lock.json. Field order is the key order of
+// Lock is the content of initializer.lock.json. Field order is the key order of
 // the encoded file.
 type Lock struct {
 	Schema        int                `json:"schema"`
@@ -71,14 +71,14 @@ var (
 	sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
-// ModulesRoot returns the modules root of a stack ("go-srv/internal/gatbase/")
+// ModulesRoot returns the modules root of a stack ("go-srv/internal/platform/")
 // and false for a stack the generator does not know.
 func ModulesRoot(stack string) (string, bool) {
 	switch stack {
 	case manifest.StackGoSrv:
-		return "go-srv/internal/gatbase/", true
+		return "go-srv/internal/platform/", true
 	case manifest.StackNgWeb:
-		return "ng-web/src/app/gatbase/", true
+		return "ng-web/src/app/platform/", true
 	}
 	return "", false
 }

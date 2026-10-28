@@ -54,8 +54,8 @@ services:
         condition: service_completed_successfully
     environment:
       DSN: postgres://kratos:${KRATOS_PG_PASSWORD}@postgres:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
-      SERVE_PUBLIC_BASE_URL: ${GATBASE_PUBLIC_BASE_URL:-http://localhost:10120}/kratos/
-      SELFSERVICE_DEFAULT_BROWSER_RETURN_URL: ${GATBASE_PUBLIC_BASE_URL:-http://localhost:10120}/
+      SERVE_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:10120}/kratos/
+      SELFSERVICE_DEFAULT_BROWSER_RETURN_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:10120}/
     ports:
       - "127.0.0.1:10133:4433"
       - "127.0.0.1:10134:4434"

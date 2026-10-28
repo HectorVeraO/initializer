@@ -11,8 +11,8 @@
   ],
   "tablePrefixes": ["sys"],
   "files": [
-    "go-srv/internal/gatbase/parameters/",
+    "go-srv/internal/platform/parameters/",
     { "path": "specs/parameters/openapi.yaml", "target": "api/parameters.yaml" }
   ],
-  "exclude": ["go-srv/internal/gatbase/parameters/testdata/"]
+  "exclude": ["go-srv/internal/platform/parameters/testdata/"]
 }

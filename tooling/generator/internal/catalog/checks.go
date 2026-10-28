@@ -103,8 +103,8 @@ func (b *builder) checkImplied(byStack map[string]map[string]*moduleDoc) {
 		switch {
 		case id == manifest.CoreModule && !doc.module.Implied:
 			b.add(CodeImpliedMismatch, doc.path, "/implied", "core must be implied")
-		case doc.module.Implied && id != manifest.CoreModule && id != "core-auth":
-			b.add(CodeImpliedMismatch, doc.path, "/implied", "only core and core-auth may be implied")
+		case doc.module.Implied && id != manifest.CoreModule && id != "identity":
+			b.add(CodeImpliedMismatch, doc.path, "/implied", "only core and identity may be implied")
 		}
 	}
 	// An id present in several stacks must agree with the first stack's value.
@@ -338,8 +338,8 @@ func (b *builder) checkBoundary(p string, pg *parsedGo, owner *moduleDoc) {
 	if module == "" || pg == nil || pg.failed {
 		return
 	}
-	gatbase := module + "/internal/gatbase"
-	core := gatbase + "/" + coreModuleFolder
+	platform := module + "/internal/platform"
+	core := platform + "/" + coreModuleFolder
 	for _, imp := range pg.imports {
 		if !within(imp.path, module) {
 			continue
@@ -352,11 +352,11 @@ func (b *builder) checkBoundary(p string, pg *parsedGo, owner *moduleDoc) {
 			}
 		case owner == nil || owner.stack.name != manifest.StackGoSrv:
 		case owner.module.Module == manifest.CoreModule:
-			if within(imp.path, gatbase) && !within(imp.path, core) {
+			if within(imp.path, platform) && !within(imp.path, core) {
 				violation = "core must not import another module"
 			}
 		default:
-			own := gatbase + "/" + owner.folder
+			own := platform + "/" + owner.folder
 			if !within(imp.path, core) && !within(imp.path, own) {
 				violation = "a module may import only core and its own folder"
 			}
