@@ -1249,6 +1249,9 @@ func TestListMembersRefusesAnEmailSort(t *testing.T) {
 	if err == nil {
 		t.Fatal("list members accepted sort=email")
 	}
+	if !strings.Contains(err.Error(), "known sort field") {
+		t.Fatalf("err = %v, want the sort field refusal", err)
+	}
 }
 
 func TestListMembersWithAMissingAccountIsAnOperationalError(t *testing.T) {
