@@ -33,11 +33,12 @@ Reserved for planned catalog modules; `gates migrations` rejects a manifest that
 - Every file has the line `-- +goose Up`. Wrap PL/pgSQL bodies in `-- +goose StatementBegin` / `-- +goose StatementEnd`. No `-- +goose Down` (Expand-first), no `-- +goose NO TRANSACTION`.
 - Tables are unquoted, in schema `public` (qualifier optional), and carry the file's module prefix, also in `REFERENCES`, `ALTER TABLE`, `CREATE INDEX ... ON` and `DROP TABLE`; no cross-module foreign keys.
 - A Contract step (`DROP TABLE`, `DROP COLUMN`, `RENAME COLUMN`, `RENAME TO`, `ALTER COLUMN ... TYPE`, `ALTER COLUMN ... SET NOT NULL`) carries the line `-- initializer:contract-step <reason>` directly above the statement.
-- A new file sorts after the newest file of its module on the base revision (its tip, not the fork point); a file that exists at the base is never edited, renamed or deleted.
+- While `versioning.json` has `preRelease: true`, a module's migrations may be edited, split, moved to another module or squashed; `gates migrations` does not report `MIGRATION_MODIFIED` or `MIGRATION_OUT_OF_ORDER`. After such a change reset every local database (`docker compose -f .deploy/local/docker-compose.yml down -v`, or a recreated database). Names, prefixes, table rules and the contract-step line are checked either way, and Expand-first still governs code that reads a column within one PR.
+- While `preRelease` is `false`, a new file sorts after the newest file of its module on the base revision (its tip, not the fork point), and a file that exists at the base is never edited, renamed or deleted.
 - A module embeds its files with `//go:embed migrations/*.sql` and passes the embedded FS as `core.Module.Migrations`. Core applies every module's files at startup (`core/migrate`, goose), after all `Provide` calls and before any `Mount`, in module list order, under one Postgres advisory lock so concurrent instances wait instead of racing.
 - Each module has its own goose version table `cor_migrations_<module>` (`-` becomes `_`: `cor_migrations_feature_flags`). There is no `-- +goose Down`; a failed file fails startup.
 - Test migrations against a real database through `coretest.New(t, modules, coretest.Options{Database: true})` (`cookbooks/testing-tck.md`).
-- A merged migration is immutable. Fix a mistake with a new migration.
+- While `preRelease` is `false`, a merged migration is immutable: fix a mistake with a new migration.
 - A migration touches only its own module's tables.
 
 ## Expand, Dual-Write, Contract

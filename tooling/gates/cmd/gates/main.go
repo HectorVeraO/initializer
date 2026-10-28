@@ -14,6 +14,7 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/contractgate"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/flagscheck"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/migrationlint"
+	"github.com/HectorVeraO/initializer/tooling/gates/internal/prerelease"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/repo"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/report"
 	"github.com/HectorVeraO/initializer/tooling/gates/internal/versions"
@@ -27,7 +28,13 @@ const (
 	defaultBaseRev  = "origin/main"
 	defaultWarnDays = 7
 	flagsFileName   = "flags.yaml"
-	usage           = "usage: gates flags --root <dir> [--base-rev <rev>] [--today YYYY-MM-DD] [--warn-days N]\n       gates migrations --root <dir> [--base-rev <rev>]\n       gates contracts --root <dir> [--base-rev <rev>] [--oasdiff <path>]\n       gates versions --root <dir> [--base-rev <rev>]\n       gates tags --root <dir>"
+
+	// Stderr notices written when versioning.json has preRelease true (L76).
+	noticeVersions   = "pre-release (versioning.json): VERSION_NOT_BUMPED and VERSION_DECREASED are off; every version must be 0.1.0"
+	noticeContracts  = "pre-release (versioning.json): CONTRACT_BREAKING_NOT_MAJOR is off"
+	noticeMigrations = "pre-release (versioning.json): MIGRATION_MODIFIED and MIGRATION_OUT_OF_ORDER are off"
+	noticeTags       = "pre-release (versioning.json): no tags"
+	usage            = "usage: gates flags --root <dir> [--base-rev <rev>] [--today YYYY-MM-DD] [--warn-days N]\n       gates migrations --root <dir> [--base-rev <rev>]\n       gates contracts --root <dir> [--base-rev <rev>] [--oasdiff <path>]\n       gates versions --root <dir> [--base-rev <rev>]\n       gates tags --root <dir>"
 )
 
 func main() {
@@ -140,6 +147,10 @@ func runMigrations(args []string, stdout, stderr io.Writer, getenv func(string) 
 		fmt.Fprintf(stderr, "resolve root: %v\n", err)
 		return exitUsage
 	}
+	preRelease, ok := loadPreRelease(rootDir, noticeMigrations, stderr)
+	if !ok {
+		return exitUsage
+	}
 	rev := *baseRev
 	if rev == "" {
 		rev = defaultBaseRev
@@ -149,7 +160,7 @@ func runMigrations(args []string, stdout, stderr io.Writer, getenv func(string) 
 		fmt.Fprintln(stderr, err)
 		return exitUsage
 	}
-	violations, checked, err := migrationlint.Lint(migrationlint.Options{Root: rootDir, BaseRev: sha})
+	violations, checked, err := migrationlint.Lint(migrationlint.Options{Root: rootDir, BaseRev: sha, PreRelease: preRelease})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
@@ -184,6 +195,10 @@ func runContracts(args []string, stdout, stderr io.Writer, getenv func(string) s
 		fmt.Fprintf(stderr, "resolve root: %v\n", err)
 		return exitUsage
 	}
+	preRelease, ok := loadPreRelease(rootDir, noticeContracts, stderr)
+	if !ok {
+		return exitUsage
+	}
 	rev := *baseRev
 	if rev == "" {
 		rev = defaultBaseRev
@@ -193,7 +208,7 @@ func runContracts(args []string, stdout, stderr io.Writer, getenv func(string) s
 		fmt.Fprintln(stderr, err)
 		return exitUsage
 	}
-	violations, err := contractgate.Check(context.Background(), contractgate.Options{Root: rootDir, BaseRev: sha, OasdiffBin: *oasdiff})
+	violations, err := contractgate.Check(context.Background(), contractgate.Options{Root: rootDir, BaseRev: sha, OasdiffBin: *oasdiff, PreRelease: preRelease})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
@@ -222,6 +237,10 @@ func runVersions(args []string, stdout, stderr io.Writer, getenv func(string) st
 		fmt.Fprintf(stderr, "resolve root: %v\n", err)
 		return exitUsage
 	}
+	preRelease, ok := loadPreRelease(rootDir, noticeVersions, stderr)
+	if !ok {
+		return exitUsage
+	}
 	rev := *baseRev
 	if rev == "" {
 		rev = defaultBaseRev
@@ -231,7 +250,7 @@ func runVersions(args []string, stdout, stderr io.Writer, getenv func(string) st
 		fmt.Fprintln(stderr, err)
 		return exitUsage
 	}
-	violations, err := versions.CheckBumps(context.Background(), rootDir, sha)
+	violations, err := versions.CheckBumps(context.Background(), rootDir, sha, preRelease)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitUsage
@@ -259,6 +278,13 @@ func runTags(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "resolve root: %v\n", err)
 		return exitUsage
 	}
+	preRelease, ok := loadPreRelease(rootDir, noticeTags, stderr)
+	if !ok {
+		return exitUsage
+	}
+	if preRelease {
+		return exitOK
+	}
 	tags, err := versions.MissingTags(context.Background(), rootDir)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -268,6 +294,21 @@ func runTags(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, tag)
 	}
 	return exitOK
+}
+
+// loadPreRelease reads versioning.json under rootDir and writes notice to
+// stderr when the setting is on. ok is false after a malformed file, whose
+// error is already on stderr.
+func loadPreRelease(rootDir, notice string, stderr io.Writer) (preRelease, ok bool) {
+	preRelease, err := prerelease.Load(rootDir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return false, false
+	}
+	if preRelease {
+		fmt.Fprintln(stderr, notice)
+	}
+	return preRelease, true
 }
 
 // finish prints the violations and returns the exit code for them.

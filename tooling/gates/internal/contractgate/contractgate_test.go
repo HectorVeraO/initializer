@@ -591,3 +591,43 @@ func FuzzCheckStructure(f *testing.F) {
 		}
 	})
 }
+
+func checkPreRelease(t *testing.T, dir string) []report.Violation {
+	t.Helper()
+	vs, err := contractgate.Check(context.Background(), contractgate.Options{Root: dir, BaseRev: "main", PreRelease: true})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	return vs
+}
+
+func TestPreReleaseBreakingChangeWithMarkerAndSameVersionPasses(t *testing.T) {
+	dir := breakingBranch(t, "1.0.0", "feature(alpha): Drop name\n\nWhy.\n\nBREAKING CHANGE: name is gone")
+	wantRules(t, checkPreRelease(t, dir))
+}
+
+func TestPreReleaseBreakingChangeWithoutMarkerFailsUnmarkedOnly(t *testing.T) {
+	dir := breakingBranch(t, "1.0.0", "feature(alpha): Drop name")
+	wantRules(t, checkPreRelease(t, dir), contractgate.RuleBreakingUnmarked)
+}
+
+func TestPreReleaseVersionResetPasses(t *testing.T) {
+	dir := goodRepo(t)
+	runGit(t, dir, "switch", "-c", "topic")
+	write(t, dir, "specs/alpha/openapi.yaml", specYAML("0.1.0", "", "[id, name]", ""))
+	write(t, dir, "specs/alpha/spec.manifest.json", manifestJSON("alpha", "0.1.0", "@core"))
+	commitAll(t, dir, "reset")
+	wantRules(t, checkPreRelease(t, dir))
+}
+
+func TestPreReleaseKeepsVersionDrift(t *testing.T) {
+	dir := newRepo(t)
+	writeSpec(t, dir, "alpha", specYAML("0.1.0", "", "[id]", ""), manifestJSON("alpha", "0.2.0", "@core"))
+	commitAll(t, dir, "alpha")
+	wantRules(t, checkPreRelease(t, dir), contractgate.RuleVersionDrift)
+}
+
+func TestNotPreReleaseBreakingChangeStillNeedsMajor(t *testing.T) {
+	dir := breakingBranch(t, "1.1.0", "feature(alpha): Drop name\n\nWhy.\n\nBREAKING CHANGE: name is gone")
+	wantRules(t, check(t, dir), contractgate.RuleBreakingNotMajor)
+}

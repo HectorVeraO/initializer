@@ -98,7 +98,12 @@ func rules(vs []string) string {
 
 func check(t *testing.T, dir string) (rulesFound []string, paths []string) {
 	t.Helper()
-	violations, err := versions.CheckBumps(context.Background(), dir, "main")
+	return checkWith(t, dir, false)
+}
+
+func checkWith(t *testing.T, dir string, preRelease bool) (rulesFound []string, paths []string) {
+	t.Helper()
+	violations, err := versions.CheckBumps(context.Background(), dir, "main", preRelease)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +402,7 @@ func TestMissingTagsOutsideRepositoryIsAnError(t *testing.T) {
 
 func TestCheckBumpsUnknownBaseIsAnError(t *testing.T) {
 	dir := baseRepo(t)
-	_, err := versions.CheckBumps(context.Background(), dir, "no-such-rev")
+	_, err := versions.CheckBumps(context.Background(), dir, "no-such-rev", false)
 	if err == nil {
 		t.Fatal("want an error")
 	}
@@ -410,7 +415,7 @@ func TestCancelledContextStopsWork(t *testing.T) {
 	if err == nil {
 		t.Fatal("want an error")
 	}
-	_, err = versions.CheckBumps(ctx, t.TempDir(), "main")
+	_, err = versions.CheckBumps(ctx, t.TempDir(), "main", false)
 	if err == nil {
 		t.Fatal("want an error")
 	}
@@ -509,5 +514,98 @@ func TestCheckBumpsComparesAgainstTheMergeBaseNotTheMainTip(t *testing.T) {
 	found, _ := check(t, dir)
 	if len(found) != 0 {
 		t.Fatalf("got %v", found)
+	}
+}
+
+func TestPreReleaseChangeKeptAtInitialVersionPasses(t *testing.T) {
+	dir := baseRepo(t)
+	writeAt(t, dir, "specs/alpha/openapi.yaml", "openapi: 3.0.3\ninfo: {}\n")
+	commitAll(t, dir, "change")
+	found, _ := checkWith(t, dir, true)
+	if len(found) != 0 {
+		t.Fatalf("got %v", found)
+	}
+}
+
+func TestPreReleaseResetFromHigherVersionPasses(t *testing.T) {
+	dir := baseRepo(t)
+	runGit(t, dir, "switch", "main")
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("1.1.1"))
+	commitAll(t, dir, "main at 1.1.1")
+	runGit(t, dir, "switch", "topic")
+	runGit(t, dir, "merge", "--no-edit", "main")
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("0.1.0"))
+	writeAt(t, dir, "specs/alpha/openapi.yaml", "openapi: 3.0.3\ninfo: {}\n")
+	commitAll(t, dir, "reset")
+	found, _ := checkWith(t, dir, true)
+	if len(found) != 0 {
+		t.Fatalf("got %v", found)
+	}
+}
+
+func TestPreReleaseVersionOtherThanInitialFailsOnItsManifest(t *testing.T) {
+	dir := baseRepo(t)
+	writeAt(t, dir, "specs/alpha/openapi.yaml", "openapi: 3.0.3\ninfo: {}\n")
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("0.2.0"))
+	commitAll(t, dir, "bump")
+	found, paths := checkWith(t, dir, true)
+	if rules(found) != versions.RuleVersionNotPrerelease || paths[0] != "specs/alpha/spec.manifest.json" {
+		t.Fatalf("got %v %v", found, paths)
+	}
+}
+
+func TestPreReleaseNewComponentAboveInitialVersionFails(t *testing.T) {
+	dir := baseRepo(t)
+	writeAt(t, dir, "go-srv/internal/platform/flags/module.manifest.json",
+		moduleManifest("flags", "0.2.0", `["go-srv/internal/platform/flags/"]`, `[]`))
+	commitAll(t, dir, "new module")
+	found, paths := checkWith(t, dir, true)
+	if rules(found) != versions.RuleVersionNotPrerelease || paths[0] != "go-srv/internal/platform/flags/module.manifest.json" {
+		t.Fatalf("got %v %v", found, paths)
+	}
+}
+
+func TestPreReleaseUnparseableVersionIsOnlyInvalid(t *testing.T) {
+	dir := baseRepo(t)
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("1.0"))
+	commitAll(t, dir, "bad")
+	found, _ := checkWith(t, dir, true)
+	if rules(found) != versions.RuleVersionInvalid {
+		t.Fatalf("got %v", found)
+	}
+}
+
+func TestPreReleaseKeepsPathOverlapRule(t *testing.T) {
+	dir := baseRepo(t)
+	writeAt(t, dir, "go-srv/internal/platform/other/module.manifest.json",
+		moduleManifest("other", "0.1.0", `["mise.toml"]`, `[]`))
+	commitAll(t, dir, "overlap")
+	found, _ := checkWith(t, dir, true)
+	if rules(found) != versions.RuleComponentPathOverlap {
+		t.Fatalf("got %v", found)
+	}
+}
+
+func TestPreReleaseOffComponentAboveInitialVersionPasses(t *testing.T) {
+	dir := baseRepo(t)
+	runGit(t, dir, "switch", "main")
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("1.1.1"))
+	commitAll(t, dir, "main at 1.1.1")
+	runGit(t, dir, "switch", "topic")
+	runGit(t, dir, "merge", "--no-edit", "main")
+	commitAll(t, dir, "empty")
+	found, _ := checkWith(t, dir, false)
+	if len(found) != 0 {
+		t.Fatalf("got %v", found)
+	}
+}
+
+func TestPreReleaseViolationCarriesRefL76(t *testing.T) {
+	dir := baseRepo(t)
+	writeAt(t, dir, "specs/alpha/spec.manifest.json", specManifest("0.2.0"))
+	commitAll(t, dir, "bump")
+	violations, err := versions.CheckBumps(context.Background(), dir, "main", true)
+	if err != nil || len(violations) != 1 || violations[0].Ref != "L76" {
+		t.Fatalf("got %+v %v", violations, err)
 	}
 }
