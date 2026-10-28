@@ -1,0 +1,13 @@
+{
+  "/api": {
+    "target": "http://localhost:10100"
+  },
+  // initializer:module identity
+  "/kratos": {
+    "target": "http://localhost:10100"
+  },
+  // initializer:end identity
+  "/health": {
+    "target": "http://localhost:10100"
+  }
+}

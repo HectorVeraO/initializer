@@ -1,5 +1,8 @@
+.deploy/local/.example.env
+.deploy/local/README.md
 .deploy/local/docker-compose.yml
 .deploy/local/kratos/kratos.yml
+.deploy/local/postgres-init/10-init.sh
 .gitattributes
 .gitignore
 .initializer/project/flags.yaml
@@ -23,7 +26,9 @@ go-srv/internal/platform/parameters/parameters_test.go
 ng-web/.vscode/settings.json
 ng-web/AGENTS.md
 ng-web/cookbooks/notes.md
+ng-web/nginx.conf.template
 ng-web/package.json
+ng-web/proxy.conf.json
 ng-web/src/app/platform/core/index.ts
 ng-web/src/app/platform/core/module.manifest.json
 ng-web/src/app/platform/core/module.ts

@@ -17,6 +17,7 @@ services:
       timeout: 3s
       retries: 10
 
+  # initializer:module identity
   # One-shot, idempotent: creates or updates role and database `kratos` (L11).
   postgres-init:
     image: postgres:18
@@ -64,6 +65,7 @@ services:
     # --dev only in this local file (L11); --sqa-opt-out stops recurring telemetry.
     command: serve -c /etc/config/kratos/kratos.yml --dev --sqa-opt-out
     restart: unless-stopped
+  # initializer:end identity
 
 volumes:
   postgres-data:

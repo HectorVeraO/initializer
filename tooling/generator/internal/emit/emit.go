@@ -12,13 +12,13 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
-	"strings"
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/gorewrite"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/lockfile"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/markers"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/render"
 )
@@ -34,17 +34,6 @@ const goCompositionRoot = "go-srv/cmd/server/modules.go"
 
 // webCompositionRoot is the rendered composition root of the ng-web stack.
 const webCompositionRoot = "ng-web/src/app/platform/modules.ts"
-
-// featureFlagsID is the module whose configuration core's .deploy/local files
-// carry.
-const featureFlagsID = "feature-flags"
-
-// envTemplateFile and deployReadmeFile hold the feature-flags configuration
-// that a project without that module must not receive.
-const (
-	envTemplateFile  = ".deploy/local/.example.env"
-	deployReadmeFile = ".deploy/local/README.md"
-)
 
 // BuildOptions are the inputs of one project build.
 type BuildOptions struct {
@@ -129,7 +118,7 @@ func (b *builder) run() (Project, error) {
 	for _, spec := range p.Specs {
 		entry := lockfile.Spec{Spec: spec.Spec, Version: spec.Version}
 		for _, file := range spec.Files {
-			delivered, err := b.copyFile(file)
+			delivered, err := b.copyFile(file, "")
 			if err != nil {
 				return Project{}, err
 			}
@@ -146,7 +135,7 @@ func (b *builder) run() (Project, error) {
 				ImplementsSpec: module.ImplementsSpec,
 			}
 			for _, file := range module.Files {
-				delivered, err := b.copyFile(file)
+				delivered, err := b.copyFile(file, module.Module)
 				if err != nil {
 					return Project{}, err
 				}
@@ -181,7 +170,7 @@ func (b *builder) add(p string, data []byte) error {
 
 // copyFile reads one catalog file from the checkout, checks it against the
 // catalog, applies its transform and records it at its delivered path.
-func (b *builder) copyFile(file catalog.File) (lockfile.File, error) {
+func (b *builder) copyFile(file catalog.File, owner string) (lockfile.File, error) {
 	dest := file.Path
 	if file.Target != "" {
 		dest = file.Target
@@ -200,7 +189,7 @@ func (b *builder) copyFile(file catalog.File) (lockfile.File, error) {
 	if sourceSum != file.SHA256 {
 		return lockfile.File{}, fmt.Errorf("source %s changed since the catalog was built", file.Path)
 	}
-	delivered, err := b.transform(file.Path, data)
+	delivered, err := b.transform(file.Path, data, owner)
 	if err != nil {
 		return lockfile.File{}, err
 	}
@@ -218,7 +207,14 @@ func (b *builder) copyFile(file catalog.File) (lockfile.File, error) {
 }
 
 // transform applies the copy rule of the source path.
-func (b *builder) transform(sourcePath string, data []byte) ([]byte, error) {
+func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byte, error) {
+	if _, hasMarkers := markers.SyntaxFor(sourcePath); hasMarkers && owner == manifest.CoreModule {
+		dropped, err := markers.Drop(sourcePath, data, b.hasModule)
+		if err != nil {
+			return nil, err
+		}
+		data = dropped
+	}
 	switch {
 	case sourcePath == gorewrite.GoModPath:
 		out, err := gorewrite.RewriteModuleLine(data, b.source, b.target)
@@ -228,12 +224,6 @@ func (b *builder) transform(sourcePath string, data []byte) ([]byte, error) {
 		return out, nil
 	case sourcePath == composeFile:
 		return rewriteComposeName(data, b.opts.Plan.ComposeName, b.project)
-	case (sourcePath == envTemplateFile || sourcePath == deployReadmeFile) && !b.hasModule(featureFlagsID):
-		out, err := dropFlagsConfig(sourcePath, data)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", sourcePath, err)
-		}
-		return out, nil
 	case gorewrite.ShouldRewrite(sourcePath):
 		out, _, err := gorewrite.RewriteImports(sourcePath, data, b.source, b.target)
 		if err != nil {
@@ -254,45 +244,6 @@ func (b *builder) hasModule(id string) bool {
 		}
 	}
 	return false
-}
-
-// dropFlagsConfig removes the feature-flags block of core's env template (the
-// comment lines from "# feature-flags:" through the APP_FLAGS_FILE
-// assignment, with the blank line before them) or of the deploy README (the
-// "## Feature flags" section). It fails when the block is absent, so a
-// reworded source cannot ship the block silently.
-func dropFlagsConfig(sourcePath string, data []byte) ([]byte, error) {
-	lines := strings.SplitAfter(string(data), "\n")
-	start, end := -1, -1
-	for i, line := range lines {
-		text := strings.TrimRight(line, "\r\n")
-		switch sourcePath {
-		case envTemplateFile:
-			if start < 0 && strings.HasPrefix(text, "# feature-flags:") {
-				start = i
-			}
-			if start >= 0 && strings.HasPrefix(text, "APP_FLAGS_FILE=") {
-				end = i + 1
-			}
-		default:
-			if start < 0 && text == "## Feature flags" {
-				start = i
-			} else if start >= 0 && strings.HasPrefix(text, "## ") {
-				end = i
-			}
-		}
-		if end >= 0 {
-			break
-		}
-	}
-	if start < 0 || end < 0 {
-		return nil, errors.New("the feature-flags block is missing; update dropFlagsConfig with its source")
-	}
-	if sourcePath == envTemplateFile && start > 0 && strings.TrimSpace(lines[start-1]) == "" {
-		start--
-	}
-	kept := append(append([]string{}, lines[:start]...), lines[end:]...)
-	return []byte(strings.Join(kept, "")), nil
 }
 
 // rewriteComposeName replaces line 1 "name: <from>" by "name: <to>".

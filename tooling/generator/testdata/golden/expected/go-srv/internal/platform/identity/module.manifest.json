@@ -8,6 +8,6 @@
   "requiresCore": "^0.1.0",
   "requiresModules": [],
   "tablePrefixes": ["iam"],
-  "files": [".deploy/local/kratos/", "go-srv/internal/platform/identity/"],
+  "files": [".deploy/local/kratos/", ".deploy/local/postgres-init/", "go-srv/internal/platform/identity/"],
   "exclude": []
 }
