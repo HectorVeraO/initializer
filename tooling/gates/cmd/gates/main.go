@@ -62,7 +62,7 @@ func runWith(args []string, stdout, stderr io.Writer, now func() time.Time, gete
 	case "versions":
 		return runVersions(args[1:], stdout, stderr, getenv)
 	case "tags":
-		return runTags(args[1:], stdout, stderr)
+		return runTags(args[1:], stdout, stderr, getenv)
 	default:
 		fmt.Fprintf(stderr, "unknown subcommand %q\n%s\n", args[0], usage)
 		return exitUsage
@@ -258,7 +258,7 @@ func runVersions(args []string, stdout, stderr io.Writer, getenv func(string) st
 	return finish(violations, stdout, stderr, getenv)
 }
 
-func runTags(args []string, stdout, stderr io.Writer) int {
+func runTags(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	fs := flag.NewFlagSet("gates tags", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	root := fs.String("root", ".", "repository root")
@@ -281,6 +281,15 @@ func runTags(args []string, stdout, stderr io.Writer) int {
 	preRelease, ok := loadPreRelease(rootDir, noticeTags, stderr)
 	if !ok {
 		return exitUsage
+	}
+	// Stdout carries only tag names (tags.yml reads it), so findings go to stderr.
+	violations, err := versions.CheckTagContent(context.Background(), rootDir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
+	if len(violations) > 0 {
+		return finish(violations, stderr, stderr, getenv)
 	}
 	if preRelease {
 		return exitOK

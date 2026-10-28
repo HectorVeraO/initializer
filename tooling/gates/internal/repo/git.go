@@ -266,6 +266,32 @@ func ListFiles(dir, rev, pathspec string) ([]string, error) {
 	return files, nil
 }
 
+// ListBlobs returns the object id of every file at rev, keyed by its
+// repo-relative path with forward slashes.
+func ListBlobs(dir, rev string) (map[string]string, error) {
+	err := validateRev(rev)
+	if err != nil {
+		return nil, err
+	}
+	out, _, err := git(dir, "ls-tree", "-r", "-z", rev)
+	if err != nil {
+		return nil, err
+	}
+	blobs := map[string]string{}
+	for _, entry := range strings.Split(string(out), "\x00") {
+		if entry == "" {
+			continue
+		}
+		meta, name, found := strings.Cut(entry, "\t")
+		fields := strings.Fields(meta)
+		if !found || len(fields) != 3 {
+			return nil, fmt.Errorf("unexpected ls-tree entry %q", entry)
+		}
+		blobs[name] = fields[2]
+	}
+	return blobs, nil
+}
+
 // ListTags returns the names of the tags of the repository at dir, sorted.
 func ListTags(dir string) ([]string, error) {
 	out, _, err := git(dir, "tag", "--list")

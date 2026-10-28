@@ -97,7 +97,7 @@ Run from the relevant subproject directory before pushing, each command prefixed
 | Angular (`ng-web`) | `npm run lint`, `npm run build`, `npm test -- --watch=false` |
 | Playwright E2E (`initializer-e2e`) | `npm run typecheck`, `npm run lint` |
 | Generator (`tooling/generator`) | `gofmt -l .` (empty), `go vet ./...`, `go test ./...` |
-| Gates CLI (`tooling/gates`) | `gofmt -l .` (empty), `go vet ./...`, `go test ./...`, `go run ./cmd/gates flags --root ../..`, `... migrations --root ../..`, `... contracts --root ../..` (oasdiff from `mise install`), `... versions --root ../..` |
+| Gates CLI (`tooling/gates`) | `gofmt -l .` (empty), `go vet ./...`, `go test ./...`, `go run ./cmd/gates flags --root ../..`, `... migrations --root ../..`, `... contracts --root ../..` (oasdiff from `mise install`), `... versions --root ../..`, `... tags --root ../..` |
 | TCK runner (`specs`) | `npm run typecheck`, `npm run check:tags`, `npm run test:scripts`; against a running instance: `TCK_BASE_URL=http://localhost:10100 npm run tck` (CI job `tck`) |
 | No real suite | `initializer-e2e` (one skipped placeholder spec; run `npm test` there once real specs exist) |
 
@@ -184,7 +184,7 @@ Assume the source branch is GREEN at the start: tests pass, lint is clean, build
 
 ## Platform rules
 
-Full text: `.claude/references/architecture.md` -> "Platform rules". `tooling/gates` enforces `flags.yaml` (`gates flags`), migration names and table prefixes (`gates migrations`), contract structure and breaking changes (`gates contracts`, with `oasdiff`) and manifest version bumps (`gates versions`) in CI job `gates`; agents and reviewers apply the remaining rules by reading.
+Full text: `.claude/references/architecture.md` -> "Platform rules". `tooling/gates` enforces `flags.yaml` (`gates flags`), migration names and table prefixes (`gates migrations`), contract structure and breaking changes (`gates contracts`, with `oasdiff`), manifest version bumps (`gates versions`) and tags that name other content (`gates tags`) in CI job `gates`; agents and reviewers apply the remaining rules by reading.
 
 - **Trunk-based development**, five rules for agents:
   1. No flag on a bugfix or refactor (`A -> A'`): fix `A` directly, with a regression test.
