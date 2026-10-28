@@ -345,7 +345,7 @@ func TestBootstrapReportsNoEmailFormatProblem(t *testing.T) {
 
 	_, err := env.build(map[string]string{"APP_BOOTSTRAP_ADMIN_EMAIL": "not-an-address"})
 
-	if err == nil || strings.Contains(err.Error(), "invalid configuration") {
+	if err == nil || !strings.Contains(err.Error(), "tenancy: bootstrap: no account has APP_BOOTSTRAP_ADMIN_EMAIL") {
 		t.Fatalf("err = %v, want the bootstrap to run and fail on the unknown account, not on the email format", err)
 	}
 }

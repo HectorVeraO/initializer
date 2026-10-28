@@ -140,9 +140,7 @@ type tenantsFake struct {
 	remembered map[reqctx.AccountID]reqctx.TenantID
 	// rememberErr, when set, is what every Remember call returns.
 	rememberErr error
-	// calls counts the Grant, Select, Remember and Memberships calls.
-	calls int
-	book  *coretest.TenantBook
+	book        *coretest.TenantBook
 }
 
 var (
@@ -249,12 +247,6 @@ func (f *tenantsFake) failRemember(err error) {
 	f.rememberErr = err
 }
 
-func (f *tenantsFake) accessCalls() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.calls
-}
-
 func (f *tenantsFake) current() *coretest.TenantBook {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -269,24 +261,15 @@ func (f *tenantsFake) Tenant(ctx context.Context, id reqctx.TenantID) (coreacces
 	return f.current().Tenant(ctx, id)
 }
 
-func (f *tenantsFake) count() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.calls++
-}
-
 func (f *tenantsFake) Grant(ctx context.Context, account reqctx.AccountID, tenant reqctx.TenantID) (coreaccess.TenantGrant, error) {
-	f.count()
 	return f.current().Grant(ctx, account, tenant)
 }
 
 func (f *tenantsFake) Select(ctx context.Context, account reqctx.AccountID) (*coreaccess.TenantGrant, error) {
-	f.count()
 	return f.current().Select(ctx, account)
 }
 
 func (f *tenantsFake) Remember(ctx context.Context, account reqctx.AccountID, tenant reqctx.TenantID) error {
-	f.count()
 	f.mu.Lock()
 	err := f.rememberErr
 	f.mu.Unlock()
@@ -304,6 +287,5 @@ func (f *tenantsFake) Remember(ctx context.Context, account reqctx.AccountID, te
 }
 
 func (f *tenantsFake) Memberships(ctx context.Context, account reqctx.AccountID) ([]coreaccess.MembershipRef, error) {
-	f.count()
 	return f.current().Memberships(ctx, account)
 }

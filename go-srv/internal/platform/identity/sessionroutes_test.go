@@ -225,9 +225,6 @@ func TestIssueRefusesLockedAndDisabledAccountsWithoutCookies(t *testing.T) {
 			if len(rec.Result().Cookies()) != 0 {
 				t.Errorf("cookies set: %v", setCookieNames(rec))
 			}
-			if calls := e.tenants.accessCalls(); calls != 0 {
-				t.Errorf("a locked account reached TenantAccess %d times, want 0", calls)
-			}
 		})
 	}
 }

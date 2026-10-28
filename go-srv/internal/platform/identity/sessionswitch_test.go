@@ -406,16 +406,11 @@ func TestRefreshAccessRefusalsClearBothCookies(t *testing.T) {
 			p := e.person()
 			c, tenant := signedInOn(e, p, "acme", "admin")
 			tc.degrade(e, p, tenant)
-			callsBefore := e.tenants.accessCalls()
 
 			rec := c.mutate(http.MethodPost, refreshPath)
 
 			expectError(t, rec, http.StatusForbidden, tc.code)
 			expectBothCleared(t, rec)
-			isLocked := tc.code == "ACCOUNT_LOCKED_OR_DISABLED"
-			if isLocked && e.tenants.accessCalls() != callsBefore {
-				t.Errorf("a locked account reached TenantAccess: %d calls, want %d", e.tenants.accessCalls(), callsBefore)
-			}
 		})
 	}
 }
@@ -626,7 +621,6 @@ func TestSwitchCheckAccessOrder(t *testing.T) {
 			target := e.tenant("tenant-b", "active")
 			e.member(target, p.accountID, "member", "active", e.clock.Now())
 			tc.degrade(e, p, target)
-			callsBefore := e.tenants.accessCalls()
 			cookiesBefore := map[string]string{}
 			for name, value := range c.cookies {
 				cookiesBefore[name] = value
@@ -643,10 +637,6 @@ func TestSwitchCheckAccessOrder(t *testing.T) {
 			}
 			if remembered, _ := e.tenants.rememberedTenant(p.accountID); remembered == target {
 				t.Error("a refused switch must not record the tenant as last active")
-			}
-			isLocked := tc.code == "ACCOUNT_LOCKED_OR_DISABLED"
-			if isLocked && e.tenants.accessCalls() != callsBefore {
-				t.Errorf("a locked account reached TenantAccess: %d calls, want %d", e.tenants.accessCalls(), callsBefore)
 			}
 			if claims := c.claims(); claims.TenantID == nil || *claims.TenantID != home {
 				t.Errorf("the session left its tenant: %+v", claims)

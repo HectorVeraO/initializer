@@ -709,7 +709,7 @@ func TestAcceptNewRejectsBeforeCallingTheProvisioner(t *testing.T) {
 	e := newTenEnv(t)
 	tenant := e.tenant("tenant-a")
 	admin := e.account("admin@example.com")
-	_, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
+	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
 	unknown, err := newToken()
 	if err != nil {
 		t.Fatalf("token: %v", err)
@@ -722,8 +722,11 @@ func TestAcceptNewRejectsBeforeCallingTheProvisioner(t *testing.T) {
 	_, suspended := e.svc.AcceptNew(ctx, token, randomPassword(t), "Jane Doe")
 	requireAPIError(t, suspended, 403, api.CodeTenantSuspended)
 
-	if _, provisions := e.accounts.calls(); provisions != 0 {
-		t.Fatalf("the provisioner was called %d times, want 0", provisions)
+	if n := e.count("SELECT count(*) FROM ten_memberships"); n != 0 {
+		t.Fatalf("memberships = %d, want 0", n)
+	}
+	if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
+		t.Fatalf("invitation status = %s, want pending", got)
 	}
 }
 
