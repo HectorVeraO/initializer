@@ -27,8 +27,8 @@ interface TenantSummary {
   slug: string;
 }
 
-const KEY_PATTERN = /^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$/;
-const PREFIX_PATTERN = /^gbk_live_[a-z2-7]{16}$/;
+const KEY_PATTERN = /^ak_live_[a-z2-7]{16}_[a-z2-7]{52}$/;
+const PREFIX_PATTERN = /^ak_live_[a-z2-7]{16}$/;
 const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
 
 /** Random lower-case base32 characters; keys are built at run time, never written as literals. */
@@ -149,8 +149,8 @@ test('CA-03 expired, revoked, unknown, malformed and wrong-secret keys answer th
   expect(revoked.status).toBe('revoked');
   expect(revoked.revokedAt).not.toBeNull();
 
-  const unknownKey = `gbk_live_${randomBase32(16)}_${randomBase32(52)}`;
-  const malformedKey = `gbk_live_${randomBase32(8)}`;
+  const unknownKey = `ak_live_${randomBase32(16)}_${randomBase32(52)}`;
+  const malformedKey = `ak_live_${randomBase32(8)}`;
   const wrongSecret = `${kActive.apiKey.keyPrefix}_${randomBase32(52)}`;
   for (const key of [kRevoked.plainTextKey, unknownKey, malformedKey, wrongSecret]) {
     const client = await apiKeyClient(playwright, key);

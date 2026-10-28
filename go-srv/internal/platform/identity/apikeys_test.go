@@ -11,12 +11,16 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/db"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 )
 
-var plainKeyPattern = regexp.MustCompile(`^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$`)
+var plainKeyPattern = regexp.MustCompile(`^ak_live_[a-z2-7]{16}_[a-z2-7]{52}$`)
 
-// apiKey inserts a key of tenantID built from fresh random parts and returns
-// its plain text. The creator account is a new synthetic person.
+// apiKey inserts a key of tenantID (empty: a key without a tenant) built from
+// fresh random parts and returns its plain text. The creator account is a new
+// synthetic person.
 func (e *sessEnv) apiKey(tenantID string, scopes []string, expiresAt *time.Time) string {
 	e.t.Helper()
 	plain, err := newAPIKey()
@@ -30,7 +34,7 @@ func (e *sessEnv) apiKey(tenantID string, scopes []string, expiresAt *time.Time)
 	creator := e.person()
 	e.exec(`INSERT INTO iam_api_keys (tenant_id, name, key_prefix, secret_hash, hash_scheme, scopes, expires_at, created_by_account_id, created_at)
 VALUES ($1::uuid, 'seeded', $2, $3, 'sha256', $4, $5, $6::uuid, $7)`,
-		tenantID, prefix, hashAPIKeySecret(secret), scopes, expiresAt, creator.accountID, e.clock.Now())
+		tenantArg(tenantID), prefix, hashAPIKeySecret(secret), scopes, expiresAt, creator.accountID, e.clock.Now())
 	return plain
 }
 
@@ -69,11 +73,11 @@ func TestNewAPIKeyAlwaysMatchesTheFormatAndSplits(t *testing.T) {
 		if err != nil {
 			t.Fatalf("newAPIKey: %v", err)
 		}
-		if !plainKeyPattern.MatchString(plain) || len(plain) != 78 {
+		if !plainKeyPattern.MatchString(plain) || len(plain) != 77 {
 			t.Fatalf("key %q does not match the format", plain)
 		}
 		prefix, secret, ok := splitAPIKey(plain)
-		if !ok || len(prefix) != 25 || len(secret) != 52 || prefix+"_"+secret != plain {
+		if !ok || len(prefix) != 24 || len(secret) != 52 || prefix+"_"+secret != plain {
 			t.Fatalf("split = %q %q %v", prefix, secret, ok)
 		}
 		if seen[plain] {
@@ -90,11 +94,11 @@ func TestMalformedAPIKeyValuesAnswerTheUniform401(t *testing.T) {
 	cases := map[string]string{
 		"trailing nl":     good + "\n",
 		"upper case":      strings.ToUpper(good),
-		"short":           good[:77],
+		"short":           good[:76],
 		"long":            good + "a",
 		"bad alphabet":    good[:30] + "1" + good[31:],
-		"wrong label":     "gbk_test_" + good[9:],
-		"missing divider": good[:25] + "a" + good[26:],
+		"wrong label":     "ak_test_" + good[8:],
+		"missing divider": good[:24] + "a" + good[25:],
 	}
 	for name, value := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -197,7 +201,7 @@ func TestCreateAPIKeyRetriesAfterAPrefixCollision(t *testing.T) {
 	service := newAPIKeys(e.pool, e.clock)
 
 	service.generate = sequenceKeys(collidingPlain, fresh)
-	created, err := service.Create(context.Background(), tenant, creator.accountID, "retry", []string{"tenant:read"}, nil)
+	created, err := service.Create(context.Background(), tenantScope(tenant), reqctx.AccountID(creator.accountID), "retry", []string{"tenant:read"}, nil)
 
 	if err != nil {
 		t.Fatalf("create after one collision: %v", err)
@@ -217,10 +221,10 @@ func TestCreateAPIKeyFailsWhenEveryAttemptCollides(t *testing.T) {
 	service := newAPIKeys(e.pool, e.clock)
 
 	service.generate = sequenceKeys(collidingPlain, collidingPlain, collidingPlain, collidingPlain)
-	_, err := service.Create(context.Background(), tenant, creator.accountID, "retry", []string{"tenant:read"}, nil)
+	_, err := service.Create(context.Background(), tenantScope(tenant), reqctx.AccountID(creator.accountID), "retry", []string{"tenant:read"}, nil)
 
-	if err == nil {
-		t.Fatal("create succeeded although every attempt collides")
+	if !db.IsUniqueViolation(err) {
+		t.Fatalf("create error = %v, want a unique violation after every attempt collides", err)
 	}
 }
 
@@ -460,7 +464,7 @@ func TestRevokeAPIKeyIsIdempotentAndScopedToTheTenant(t *testing.T) {
 	}
 }
 
-func TestListAPIKeyScopesIsOrderedByName(t *testing.T) {
+func TestListAPIKeyScopesIsOrderedByNameAndCarriesTheLevel(t *testing.T) {
 	e := newInvEnv(t, "")
 	tenant := e.tenant("tenant-a", "active")
 	_, admin := e.actor(tenant, "admin", false)
@@ -475,6 +479,9 @@ func TestListAPIKeyScopesIsOrderedByName(t *testing.T) {
 	for _, scope := range scopes {
 		if scope.Description == "" {
 			t.Fatalf("scope %q has no description", scope.Name)
+		}
+		if scope.Level != "tenant" {
+			t.Fatalf("scope %q has level %q, want tenant", scope.Name, scope.Level)
 		}
 		names = append(names, scope.Name)
 	}
@@ -500,9 +507,11 @@ func TestResolverRejectionsAreIdenticalAndStatusIsReadAfterTheSecret(t *testing.
 	_, otherSecret, _ := splitAPIKey(other)
 	wrongSecret := validPrefix + "_" + otherSecret
 	unknown, _ := newAPIKey()
+	// The tenant of this key exists in no table: the resolver asks the directory.
+	unknownTenant := e.apiKey(randomUUID(t), []string{"tenant:read"}, nil)
 	rejected := map[string]string{
 		"revoked": revoked, "expired": expired, "expires at now": boundary,
-		"wrong secret": wrongSecret, "unknown prefix": unknown,
+		"wrong secret": wrongSecret, "unknown prefix": unknown, "unknown tenant": unknownTenant,
 		"malformed": valid[:60], "empty": "", "upper": strings.ToUpper(valid),
 	}
 	var reference string
@@ -611,4 +620,175 @@ func TestCreateAPIKeyRefusesAChangedActiveTenant(t *testing.T) {
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+// tenantArg is the SQL argument of a tenant id: NULL when empty.
+func tenantArg(tenantID string) any {
+	if tenantID == "" {
+		return nil
+	}
+	return tenantID
+}
+
+// tenantScope is the key scope of a tenant id.
+func tenantScope(tenantID string) *reqctx.TenantID {
+	scope := reqctx.TenantID(tenantID)
+	return &scope
+}
+
+func TestAPIKeyRoutesFollowTheCallerTable(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	_, admin := e.actor(tenant, "admin", false)
+	_, viewer := e.actor(tenant, "viewer", false)
+	_, viewerOperator := e.actor(tenant, "viewer", true)
+	_, tenantlessOperator := e.actor("", "", true)
+	_, tenantlessPlain := e.actor("", "", false)
+	createBody := createKeyJSON("routes", []string{"tenant:read"}, nil)
+	routes := []struct{ method, path, body string }{
+		{http.MethodGet, "/api/v1/api-keys", ""},
+		{http.MethodGet, "/api/v1/api-key-scopes", ""},
+		{http.MethodPost, "/api/v1/api-keys", createBody},
+		{http.MethodDelete, "/api/v1/api-keys/" + randomUUID(t), ""},
+	}
+
+	t.Run("admin with a tenant passes every route in tenant scope", func(t *testing.T) {
+		wantStatus := []int{http.StatusOK, http.StatusOK, http.StatusCreated, http.StatusNotFound}
+		for i, route := range routes {
+			rec := admin.send(route.method, route.path, route.body)
+			if rec.Code != wantStatus[i] {
+				t.Errorf("%s %s answered %d: %s", route.method, route.path, rec.Code, rec.Body.String())
+			}
+		}
+		stored := e.scan("SELECT count(*)::text FROM iam_api_keys WHERE tenant_id = $1::uuid", tenant)
+		if stored != "1" {
+			t.Errorf("keys stored in the tenant = %s, want 1", stored)
+		}
+	})
+	t.Run("a role below admin is refused, operator or not", func(t *testing.T) {
+		for name, client := range map[string]*sessClient{"viewer": viewer, "viewer operator": viewerOperator} {
+			for _, route := range routes {
+				expectError(t, client.send(route.method, route.path, route.body), http.StatusForbidden, "INSUFFICIENT_ROLE")
+			}
+			if t.Failed() {
+				t.Fatalf("%s was not refused on every route", name)
+			}
+		}
+	})
+	t.Run("an operator without a tenant works in global scope", func(t *testing.T) {
+		list := tenantlessOperator.send(http.MethodGet, "/api/v1/api-keys", "")
+		if list.Code != http.StatusOK {
+			t.Fatalf("list answered %d: %s", list.Code, list.Body.String())
+		}
+		page := decodeData[struct {
+			Items      []ApiKeyView `json:"items"`
+			TotalItems int64        `json:"totalItems"`
+		}](t, list)
+		if len(page.Items) != 0 || page.TotalItems != 0 {
+			t.Errorf("the tenant's key leaked into the global list: %+v", page)
+		}
+		scopes := tenantlessOperator.send(http.MethodGet, "/api/v1/api-key-scopes", "")
+		if scopes.Code != http.StatusOK {
+			t.Errorf("scopes answered %d", scopes.Code)
+		}
+		expectError(t, tenantlessOperator.send(http.MethodDelete, routes[3].path, ""), http.StatusNotFound, "RESOURCE_NOT_FOUND")
+	})
+	t.Run("a session without a tenant that is not an operator is refused", func(t *testing.T) {
+		for _, route := range routes {
+			expectError(t, tenantlessPlain.send(route.method, route.path, route.body), http.StatusForbidden, "ACTIVE_TENANT_REQUIRED")
+		}
+	})
+	t.Run("a key with a tenant lists in tenant scope and nothing else", func(t *testing.T) {
+		key := e.apiKey(tenant, []string{"api-keys:read"}, nil)
+		global := e.apiKey("", []string{"api-keys:read"}, nil)
+		globalPrefix, _, _ := splitAPIKey(global)
+
+		list := e.withKey("/api/v1/api-keys", key)
+		if list.Code != http.StatusOK || strings.Contains(list.Body.String(), globalPrefix) {
+			t.Fatalf("list answered %d: %s", list.Code, list.Body.String())
+		}
+		for _, route := range routes[1:] {
+			expectError(t, e.mutateWithKey(route.method, route.path, key), http.StatusUnauthorized, "SESSION_INVALID")
+		}
+	})
+	t.Run("a key without a tenant cannot list and cannot use the admin routes", func(t *testing.T) {
+		global := e.apiKey("", []string{"api-keys:read"}, nil)
+
+		expectError(t, e.withKey("/api/v1/api-keys", global), http.StatusForbidden, "ACTIVE_TENANT_REQUIRED")
+		for _, route := range routes[1:] {
+			expectError(t, e.mutateWithKey(route.method, route.path, global), http.StatusUnauthorized, "SESSION_INVALID")
+		}
+	})
+}
+
+func TestAnOperatorWithoutATenantMintsNoTenantLevelScope(t *testing.T) {
+	e := newInvEnv(t, "")
+	_, operator := e.actor("", "", true)
+	tooLong := strings.Repeat("n", 101)
+
+	rec := operator.send(http.MethodPost, "/api/v1/api-keys", createKeyJSON(tooLong, []string{"tenant:read", "api-keys:read"}, nil))
+
+	expectIssues(t, rec, []wantIssue{
+		{"name", "FIELD_TOO_LONG"}, {"scopes[0]", "SCOPE_LEVEL_MISMATCH"}, {"scopes[1]", "SCOPE_LEVEL_MISMATCH"},
+	})
+	if stored := e.scan("SELECT count(*)::text FROM iam_api_keys"); stored != "0" {
+		t.Fatalf("keys stored = %s", stored)
+	}
+}
+
+func TestAnOperatorWithoutATenantManagesGlobalKeysOnly(t *testing.T) {
+	e := newInvEnv(t, "")
+	tenant := e.tenant("tenant-a", "active")
+	_, admin := e.actor(tenant, "admin", false)
+	operatorPerson, operator := e.actor("", "", true)
+	service := newAPIKeys(e.pool, e.clock)
+	global, err := service.Create(context.Background(), nil, reqctx.AccountID(operatorPerson.accountID), "global-sync", []string{"tenant:read"}, nil)
+	if err != nil {
+		t.Fatalf("create global key: %v", err)
+	}
+	if !plainKeyPattern.MatchString(global.PlainTextKey) {
+		t.Fatalf("global key %q does not match the format", global.PlainTextKey)
+	}
+	if stored := e.scan("SELECT count(*)::text FROM iam_api_keys WHERE tenant_id IS NULL"); stored != "1" {
+		t.Fatalf("global rows = %s, want 1", stored)
+	}
+	own := decodeData[ApiKeyCreated](t, admin.send(http.MethodPost, "/api/v1/api-keys", createKeyJSON("own", []string{"tenant:read"}, nil)))
+
+	namesOf := func(client *sessClient, query string) []string {
+		rec := client.send(http.MethodGet, "/api/v1/api-keys"+query, "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("list %s: %d %s", query, rec.Code, rec.Body.String())
+		}
+		page := decodeData[struct {
+			Items []ApiKeyView `json:"items"`
+		}](t, rec)
+		names := []string{}
+		for _, item := range page.Items {
+			names = append(names, item.Name)
+		}
+		return names
+	}
+	if got := namesOf(operator, "?sort=name&size=5"); !reflect.DeepEqual(got, []string{"global-sync"}) {
+		t.Fatalf("operator list = %v", got)
+	}
+	if got := namesOf(admin, ""); !reflect.DeepEqual(got, []string{"own"}) {
+		t.Fatalf("admin list = %v", got)
+	}
+	if got := namesOf(operator, "?status=revoked"); len(got) != 0 {
+		t.Fatalf("operator revoked list = %v", got)
+	}
+
+	expectError(t, admin.send(http.MethodDelete, "/api/v1/api-keys/"+global.ApiKey.ID, ""), http.StatusNotFound, "RESOURCE_NOT_FOUND")
+	expectError(t, operator.send(http.MethodDelete, "/api/v1/api-keys/"+own.ApiKey.ID, ""), http.StatusNotFound, "RESOURCE_NOT_FOUND")
+	if untouched := e.scan("SELECT count(*)::text FROM iam_api_keys WHERE revoked_at IS NOT NULL"); untouched != "0" {
+		t.Fatalf("a key outside the scope was revoked (%s rows)", untouched)
+	}
+
+	revoked := operator.send(http.MethodDelete, "/api/v1/api-keys/"+global.ApiKey.ID, "")
+	if revoked.Code != http.StatusOK || decodeData[ApiKeyView](t, revoked).Status != "revoked" {
+		t.Fatalf("revoke global: %d %s", revoked.Code, revoked.Body.String())
+	}
+	if got := namesOf(operator, "?status=revoked"); !reflect.DeepEqual(got, []string{"global-sync"}) {
+		t.Fatalf("operator revoked list = %v", got)
+	}
 }

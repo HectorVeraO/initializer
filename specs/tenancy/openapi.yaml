@@ -254,7 +254,7 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: "Format ^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$. Never combined with a session cookie (409 CREDENTIAL_CONFLICT)."
+      description: "Format ^ak_live_[a-z2-7]{16}_[a-z2-7]{52}$. Never combined with a session cookie (409 CREDENTIAL_CONFLICT)."
   parameters:
     XsrfToken:
       name: X-XSRF-TOKEN

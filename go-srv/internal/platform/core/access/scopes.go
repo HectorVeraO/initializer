@@ -113,7 +113,7 @@ func (r *ScopeRegistry) All() []Scope {
 
 // CheckMint adds one issue to p for every registered scope in scopes that a
 // key bound to tenant may not hold: when tenant is nil, each ScopeTenant
-// scope gets one FIELD_NOT_ALLOWED issue at "<field>[i]" with message
+// scope gets one SCOPE_LEVEL_MISMATCH issue at "<field>[i]" with message
 // "Requires a key bound to a tenant". Unregistered names are skipped (the
 // caller already reports them). A key with a tenant may hold every level.
 func (r *ScopeRegistry) CheckMint(p *api.Problems, field string, scopes []string, tenant *reqctx.TenantID) {
@@ -123,7 +123,7 @@ func (r *ScopeRegistry) CheckMint(p *api.Problems, field string, scopes []string
 	for i, name := range scopes {
 		level, known := r.Level(name)
 		if known && level == ScopeTenant {
-			p.Add(fmt.Sprintf("%s[%d]", field, i), api.CodeFieldNotAllowed, "Requires a key bound to a tenant")
+			p.Add(fmt.Sprintf("%s[%d]", field, i), api.CodeScopeLevelMismatch, "Requires a key bound to a tenant")
 		}
 	}
 }

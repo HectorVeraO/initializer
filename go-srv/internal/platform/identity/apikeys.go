@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	apiKeyPrefixLabel  = "gbk_live_"
+	apiKeyPrefixLabel  = "ak_live_"
 	apiKeyIDChars      = 16
 	apiKeySecretChars  = 52
 	apiKeyIDBytes      = 10
@@ -45,7 +45,7 @@ const (
 )
 
 var (
-	apiKeyPattern = regexp.MustCompile(`^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$`)
+	apiKeyPattern = regexp.MustCompile(`^ak_live_[a-z2-7]{16}_[a-z2-7]{52}$`)
 	base32Lower   = base32.StdEncoding.WithPadding(base32.NoPadding)
 )
 
@@ -72,9 +72,11 @@ type ApiKeyCreated struct {
 type ScopeInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	// Level is "tenant" (only a key with a tenant may hold the scope) or "any".
+	Level string `json:"level"`
 }
 
-// newAPIKey returns a fresh key: the prefix label, 16 characters of id and 52
+// newAPIKey returns a fresh key: the "ak_live_" label, 16 characters of id and 52
 // of secret, both lower-case base32 from crypto/rand.
 func newAPIKey() (string, error) {
 	idPart, err := randomBase32(apiKeyIDBytes)
@@ -99,7 +101,7 @@ func randomBase32(size int) (string, error) {
 	return encoded, nil
 }
 
-// splitAPIKey strictly parses a key into its public prefix (first 25
+// splitAPIKey strictly parses a key into its public prefix (first 24
 // characters) and its secret (last 52).
 func splitAPIKey(value string) (string, string, bool) {
 	isWellFormed := len(value) == apiKeyLength && apiKeyPattern.MatchString(value)
@@ -159,14 +161,38 @@ func utcOrNil(t *time.Time) *time.Time {
 	return &utc
 }
 
-// Create stores a key for the tenant and returns it with its plain text, which
-// is not kept. The input is validated by the caller; a past expiresAt is
-// accepted (the key is born expired).
-func (s *apiKeys) Create(ctx context.Context, tenantID, actorID, name string, scopes []string, expiresAt *time.Time) (ApiKeyCreated, error) {
-	tenant, tenantOK := api.ParseUUID(tenantID)
-	actor, actorOK := api.ParseUUID(actorID)
+// scopeArg returns the SQL argument for a key scope: nil (SQL NULL) for a
+// global key, else the canonical tenant UUID. ok is false for a tenant id that
+// is not a UUID.
+func scopeArg(scope *reqctx.TenantID) (arg any, ok bool) {
+	if scope == nil {
+		return nil, true
+	}
+	tenant, isUUID := api.ParseUUID(string(*scope))
+	if !isUUID {
+		return nil, false
+	}
+	return tenant, true
+}
+
+// scopeFilter is the SQL condition that selects the keys of scope on
+// placeholder $1, which always carries scopeArg. Built in Go: a global scope
+// is "tenant_id IS NULL" and the $1 comparison keeps the placeholder typed.
+func scopeFilter(scope *reqctx.TenantID) string {
+	if scope == nil {
+		return "(tenant_id IS NULL AND $1::uuid IS NULL)"
+	}
+	return "tenant_id = $1::uuid"
+}
+
+// Create stores a key in scope (nil: a global key) for account and returns it
+// with its plain text, which is not kept. The caller validated the input; a
+// past expiresAt is accepted (the key is born expired).
+func (s *apiKeys) Create(ctx context.Context, scope *reqctx.TenantID, account reqctx.AccountID, name string, scopes []string, expiresAt *time.Time) (ApiKeyCreated, error) {
+	tenant, tenantOK := scopeArg(scope)
+	actor, actorOK := api.ParseUUID(string(account))
 	if !tenantOK || !actorOK || name == "" || len(scopes) == 0 {
-		return ApiKeyCreated{}, errors.New("identity: create api key: tenant id, actor id, name and scopes are required")
+		return ApiKeyCreated{}, errors.New("identity: create api key: tenant scope, account id, name and scopes are required")
 	}
 	now := s.clock.Now()
 	var lastErr error
@@ -207,18 +233,19 @@ var apiKeyStatusFilters = map[string]string{
 // apiKeySortColumns maps the wire sort fields to columns.
 var apiKeySortColumns = map[string]string{"createdAt": "created_at", "name": "name"}
 
-// List pages the tenant's keys with the derived status (every status when
-// status is empty), and the total count.
-func (s *apiKeys) List(ctx context.Context, tenantID, status string, q api.PageQuery) ([]ApiKeyView, int64, error) {
-	tenant, tenantOK := api.ParseUUID(tenantID)
+// List pages the keys of scope (nil: the global keys) with the derived status
+// (every status when status is empty), and the total count.
+func (s *apiKeys) List(ctx context.Context, scope *reqctx.TenantID, status string, q api.PageQuery) ([]ApiKeyView, int64, error) {
+	tenant, tenantOK := scopeArg(scope)
 	filter, filterOK := apiKeyStatusFilters[status]
 	column, columnOK := apiKeySortColumns[q.SortField]
 	if !tenantOK || !filterOK || !columnOK || q.Page < 1 || q.Size < 1 {
-		return nil, 0, errors.New("identity: list api keys: tenant id, status, sort and page are required")
+		return nil, 0, errors.New("identity: list api keys: tenant scope, status, sort and page are required")
 	}
+	where := scopeFilter(scope) + " AND " + filter
 	now := s.clock.Now()
 	var total int64
-	err := s.pool.QueryRow(ctx, "SELECT count(*) FROM iam_api_keys WHERE tenant_id = $1::uuid AND "+filter, tenant, now).Scan(&total)
+	err := s.pool.QueryRow(ctx, "SELECT count(*) FROM iam_api_keys WHERE "+where, tenant, now).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("identity: count api keys: %w", err)
 	}
@@ -227,7 +254,7 @@ func (s *apiKeys) List(ctx context.Context, tenantID, status string, q api.PageQ
 		direction = "DESC"
 	}
 	rows, err := s.pool.Query(ctx,
-		"SELECT "+apiKeyColumns+" FROM iam_api_keys WHERE tenant_id = $1::uuid AND "+filter+
+		"SELECT "+apiKeyColumns+" FROM iam_api_keys WHERE "+where+
 			" ORDER BY "+column+" "+direction+", id "+direction+" LIMIT $3 OFFSET $4",
 		tenant, now, q.Size, q.Offset())
 	if err != nil {
@@ -242,18 +269,19 @@ func (s *apiKeys) List(ctx context.Context, tenantID, status string, q api.PageQ
 	return views, total, nil
 }
 
-// Revoke sets revoked_at when it is null and returns the key. A foreign,
-// unknown or malformed id is 404. Revoking twice keeps the first instant.
-func (s *apiKeys) Revoke(ctx context.Context, tenantID, keyID string) (ApiKeyView, error) {
-	tenant, tenantOK := api.ParseUUID(tenantID)
+// Revoke sets revoked_at when it is null and returns the key. A key outside
+// scope, unknown or malformed is 404 RESOURCE_NOT_FOUND. Revoking twice keeps
+// the first instant.
+func (s *apiKeys) Revoke(ctx context.Context, scope *reqctx.TenantID, keyID string) (ApiKeyView, error) {
+	tenant, tenantOK := scopeArg(scope)
 	id, idOK := api.ParseUUID(keyID)
 	if !tenantOK || !idOK {
 		return ApiKeyView{}, api.NotFound()
 	}
 	now := s.clock.Now()
 	row := s.pool.QueryRow(ctx,
-		"UPDATE iam_api_keys SET revoked_at = COALESCE(revoked_at, $3) WHERE id = $1::uuid AND tenant_id = $2::uuid RETURNING "+apiKeyColumns,
-		id, tenant, now)
+		"UPDATE iam_api_keys SET revoked_at = COALESCE(revoked_at, $3) WHERE id = $2::uuid AND "+scopeFilter(scope)+" RETURNING "+apiKeyColumns,
+		tenant, id, now)
 	view, err := scanAPIKey(row, now)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ApiKeyView{}, api.NotFound()
@@ -272,25 +300,26 @@ type apiKeyRoutes struct {
 }
 
 // mountAPIKeys registers the API key and scope routes. Only the listing
-// accepts an API key; no write route does.
+// accepts an API key; no write route does. A platform operator without an
+// active tenant manages the global keys (those without a tenant).
 func (s *service) mountAPIKeys(h *core.Host) {
 	routes := &apiKeyRoutes{keys: s.apiKeys, scopes: h.Scopes(), writer: h.API()}
-	admin := coreaccess.Policy{Kind: coreaccess.KindSession, MinRole: reqctx.RoleAdmin}
-	list := coreaccess.Policy{Kind: coreaccess.KindSessionOrAPIKey, Scope: "api-keys:read", MinRole: reqctx.RoleAdmin}
+	admin := coreaccess.Policy{Kind: coreaccess.KindSession, MinRole: reqctx.RoleAdmin, TenantlessOperator: true}
+	list := coreaccess.Policy{
+		Kind: coreaccess.KindSessionOrAPIKey, Scope: "api-keys:read", MinRole: reqctx.RoleAdmin, TenantlessOperator: true,
+	}
 	h.Handle("GET /api/v1/api-keys", list, http.HandlerFunc(routes.listAPIKeys))
 	h.Handle("POST /api/v1/api-keys", admin, http.HandlerFunc(routes.createAPIKey))
 	h.Handle("DELETE /api/v1/api-keys/{id}", admin, http.HandlerFunc(routes.revokeAPIKey))
 	h.Handle("GET /api/v1/api-key-scopes", admin, http.HandlerFunc(routes.listScopes))
 }
 
-// callerTenant returns the active tenant of the caller, session or key.
-func callerTenant(r *http.Request) (reqctx.Principal, string, bool) {
+// callerScope returns the caller and the scope of its request: the principal's
+// tenant, nil for a platform operator without one (global keys). Never a body
+// or query field.
+func callerScope(r *http.Request) (reqctx.Principal, *reqctx.TenantID, bool) {
 	principal, ok := reqctx.PrincipalFrom(r.Context())
-	if !ok {
-		return reqctx.Principal{}, "", false
-	}
-	tenantID, hasTenant := activeTenantOf(principal)
-	return principal, tenantID, hasTenant
+	return principal, principal.TenantID, ok
 }
 
 // readScopes validates scopes: a non-empty array of registered, distinct names.
@@ -336,7 +365,7 @@ func readExpiresAt(body *api.Body, p *api.Problems) (*time.Time, bool) {
 }
 
 func (rt *apiKeyRoutes) createAPIKey(w http.ResponseWriter, r *http.Request) {
-	principal, tenantID, ok := callerTenant(r)
+	principal, scope, ok := callerScope(r)
 	if !ok || principal.Kind != reqctx.ActorAccount {
 		rt.writer.Fail(w, r, sessionInvalid())
 		return
@@ -349,14 +378,14 @@ func (rt *apiKeyRoutes) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	var p api.Problems
 	name, nameOK := readTrimmedName(body, &p, "name", maxAPIKeyName)
 	scopes, scopesOK := rt.readScopes(body, &p)
-	rt.scopes.CheckMint(&p, "scopes", scopes, principal.TenantID)
+	rt.scopes.CheckMint(&p, "scopes", scopes, scope)
 	expiresAt, expiresOK := readExpiresAt(body, &p)
 	err = p.Err()
 	if err != nil || !nameOK || !scopesOK || !expiresOK {
 		rt.writer.Fail(w, r, err)
 		return
 	}
-	created, err := rt.keys.Create(r.Context(), tenantID, principal.ActorID, name, scopes, expiresAt)
+	created, err := rt.keys.Create(r.Context(), scope, principal.AccountID, name, scopes, expiresAt)
 	if err != nil {
 		rt.writer.Fail(w, r, err)
 		return
@@ -365,7 +394,7 @@ func (rt *apiKeyRoutes) createAPIKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *apiKeyRoutes) listAPIKeys(w http.ResponseWriter, r *http.Request) {
-	_, tenantID, ok := callerTenant(r)
+	_, scope, ok := callerScope(r)
 	if !ok {
 		rt.writer.Fail(w, r, sessionInvalid())
 		return
@@ -381,7 +410,7 @@ func (rt *apiKeyRoutes) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 		rt.writer.Fail(w, r, err)
 		return
 	}
-	items, total, err := rt.keys.List(r.Context(), tenantID, status, query)
+	items, total, err := rt.keys.List(r.Context(), scope, status, query)
 	if err != nil {
 		rt.writer.Fail(w, r, err)
 		return
@@ -390,12 +419,12 @@ func (rt *apiKeyRoutes) listAPIKeys(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *apiKeyRoutes) revokeAPIKey(w http.ResponseWriter, r *http.Request) {
-	_, tenantID, ok := callerTenant(r)
+	_, scope, ok := callerScope(r)
 	if !ok {
 		rt.writer.Fail(w, r, sessionInvalid())
 		return
 	}
-	view, err := rt.keys.Revoke(r.Context(), tenantID, r.PathValue("id"))
+	view, err := rt.keys.Revoke(r.Context(), scope, r.PathValue("id"))
 	if err != nil {
 		rt.writer.Fail(w, r, err)
 		return
@@ -407,7 +436,7 @@ func (rt *apiKeyRoutes) listScopes(w http.ResponseWriter, r *http.Request) {
 	registered := rt.scopes.All()
 	infos := make([]ScopeInfo, 0, len(registered))
 	for _, scope := range registered {
-		infos = append(infos, ScopeInfo{Name: scope.Name, Description: scope.Description})
+		infos = append(infos, ScopeInfo{Name: scope.Name, Description: scope.Description, Level: scope.Level.String()})
 	}
 	rt.writer.Data(w, r, http.StatusOK, infos)
 }

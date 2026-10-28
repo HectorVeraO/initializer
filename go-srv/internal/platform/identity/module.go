@@ -29,6 +29,8 @@ type service struct {
 	tenancy *tenancy
 	// apiKeys backs the API key routes.
 	apiKeys *apiKeys
+	// keyResolver reads tenants through the host's TenantDirectory, set in Mount.
+	keyResolver *apiKeyResolver
 }
 
 // provideSession builds the token codec and the cookie helpers. A bad
@@ -100,8 +102,8 @@ func (s *service) provide(_ context.Context, b *core.Builder) error {
 	if err != nil {
 		return fmt.Errorf("provide account provisioner: %w", err)
 	}
-	keyResolver := newAPIKeyResolver(b.Pool(), b.Clock(), b.Scopes(), b.Logger())
-	err = b.ProvideAPIKeyResolver(keyResolver)
+	s.keyResolver = newAPIKeyResolver(b.Pool(), b.Clock(), b.Scopes(), b.Logger())
+	err = b.ProvideAPIKeyResolver(s.keyResolver)
 	if err != nil {
 		return fmt.Errorf("provide api key resolver: %w", err)
 	}
@@ -138,8 +140,10 @@ func (s *service) provideKratos(b *core.Builder) {
 	}
 }
 
-// mount registers the session routes and the /kratos/ proxy.
+// mount wires the API key resolver to the host tenant directory and registers
+// the session, tenancy and API key routes.
 func (s *service) mount(_ context.Context, h *core.Host) error {
+	s.keyResolver.tenants = h.TenantDirectory()
 	s.mountSession(h)
 	s.mountTenancy(h)
 	s.mountAPIKeys(h)

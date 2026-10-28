@@ -25,7 +25,7 @@ test.describe('Core: API keys', () => {
       await apiKeysPage.create(name, 'tenant:read');
       // The value stays in this local only: never logged, attached or written.
       const plainKey = await secretDialog.secret();
-      expect(plainKey).toMatch(/^gbk_live_/);
+      expect(plainKey).toMatch(/^ak_live_/);
       await secretDialog.close();
 
       await expect(apiKeysPage.row(name)).toBeVisible();

@@ -260,7 +260,8 @@
       "FIELD_INVALID_FORMAT": "The value has an invalid format",
       "FIELD_NOT_ALLOWED": "The value is not one of the allowed options",
       "FIELD_DUPLICATE": "The value is repeated",
-      "FIELD_MIN_ITEMS": "There are too few items"
+      "FIELD_MIN_ITEMS": "There are too few items",
+      "SCOPE_LEVEL_MISMATCH": "This scope needs a key bound to a tenant"
     }
   }
 }

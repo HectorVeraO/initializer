@@ -83,8 +83,20 @@ describe('api error codes', () => {
     expect(new Set(values).size).toBe(34);
   });
 
-  it('lists the 10 core issue codes of the registry', () => {
-    expect(Object.values(IssueCode)).toEqual(['BODY_MALFORMED', 'FIELD_REQUIRED', 'FIELD_TYPE_INVALID', 'FIELD_TOO_SHORT', 'FIELD_TOO_LONG', 'FIELD_OUT_OF_RANGE', 'FIELD_INVALID_FORMAT', 'FIELD_NOT_ALLOWED', 'FIELD_DUPLICATE', 'FIELD_MIN_ITEMS']);
+  it('lists the 11 issue codes of the registry that core and the api-keys module raise', () => {
+    expect(Object.values(IssueCode)).toEqual([
+      'BODY_MALFORMED',
+      'FIELD_REQUIRED',
+      'FIELD_TYPE_INVALID',
+      'FIELD_TOO_SHORT',
+      'FIELD_TOO_LONG',
+      'FIELD_OUT_OF_RANGE',
+      'FIELD_INVALID_FORMAT',
+      'FIELD_NOT_ALLOWED',
+      'FIELD_DUPLICATE',
+      'FIELD_MIN_ITEMS',
+      'SCOPE_LEVEL_MISMATCH'
+    ]);
   });
 
   it('sends only the role and operator codes to the forbidden page', () => {

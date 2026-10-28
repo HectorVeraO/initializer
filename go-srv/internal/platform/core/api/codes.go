@@ -30,16 +30,17 @@ const (
 // Issue codes raised by core; they appear in error.issues[].code under a
 // 422 VALIDATION_FAILED.
 const (
-	CodeBodyMalformed    Code = "BODY_MALFORMED"
-	CodeFieldRequired    Code = "FIELD_REQUIRED"
-	CodeFieldTypeInvalid Code = "FIELD_TYPE_INVALID"
-	CodeFieldTooShort    Code = "FIELD_TOO_SHORT"
-	CodeFieldTooLong     Code = "FIELD_TOO_LONG"
-	CodeFieldOutOfRange  Code = "FIELD_OUT_OF_RANGE"
-	CodeFieldInvalidFmt  Code = "FIELD_INVALID_FORMAT"
-	CodeFieldNotAllowed  Code = "FIELD_NOT_ALLOWED"
-	CodeFieldDuplicate   Code = "FIELD_DUPLICATE"
-	CodeFieldMinItems    Code = "FIELD_MIN_ITEMS"
+	CodeBodyMalformed      Code = "BODY_MALFORMED"
+	CodeFieldRequired      Code = "FIELD_REQUIRED"
+	CodeFieldTypeInvalid   Code = "FIELD_TYPE_INVALID"
+	CodeFieldTooShort      Code = "FIELD_TOO_SHORT"
+	CodeFieldTooLong       Code = "FIELD_TOO_LONG"
+	CodeFieldOutOfRange    Code = "FIELD_OUT_OF_RANGE"
+	CodeFieldInvalidFmt    Code = "FIELD_INVALID_FORMAT"
+	CodeFieldNotAllowed    Code = "FIELD_NOT_ALLOWED"
+	CodeFieldDuplicate     Code = "FIELD_DUPLICATE"
+	CodeFieldMinItems      Code = "FIELD_MIN_ITEMS"
+	CodeScopeLevelMismatch Code = "SCOPE_LEVEL_MISMATCH"
 )
 
 // CodeInfo describes one registered code.
@@ -58,6 +59,7 @@ const (
 	raisedByIdentity   = "identity"
 	raisedByParameters = "parameters"
 	raisedByFlags      = "feature-flags"
+	raisedByAPIKeys    = "api-keys"
 )
 
 // Registry returns a fresh copy of the authoritative table of every error and
@@ -110,6 +112,7 @@ func Registry() []CodeInfo {
 		{CodeFieldDuplicate, http.StatusUnprocessableEntity, true, raisedByCore},
 		{CodeFieldMinItems, http.StatusUnprocessableEntity, true, raisedByCore},
 		{"PASSWORD_REJECTED", http.StatusUnprocessableEntity, true, raisedByIdentity},
+		{CodeScopeLevelMismatch, http.StatusUnprocessableEntity, true, raisedByAPIKeys},
 		{"PARAMETER_KEY_INVALID", http.StatusUnprocessableEntity, true, raisedByParameters},
 		{"PARAMETER_TYPE_MISMATCH", http.StatusUnprocessableEntity, true, raisedByParameters},
 		{"PARAMETER_OUT_OF_RANGE", http.StatusUnprocessableEntity, true, raisedByParameters},

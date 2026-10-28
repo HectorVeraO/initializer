@@ -104,7 +104,7 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: "Format ^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$. Never combined with a session cookie (409 CREDENTIAL_CONFLICT)."
+      description: "Format ^ak_live_[a-z2-7]{16}_[a-z2-7]{52}$. Never combined with a session cookie (409 CREDENTIAL_CONFLICT)."
   parameters:
     XsrfToken:
       name: X-XSRF-TOKEN
@@ -276,6 +276,7 @@ components:
         - FIELD_DUPLICATE
         - FIELD_MIN_ITEMS
         - PASSWORD_REJECTED
+        - SCOPE_LEVEL_MISMATCH
     SuccessEnvelope:
       type: object
       required: [data, meta, error]
@@ -297,7 +298,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
-        keyPrefix: { type: string, pattern: '^gbk_live_[a-z2-7]{16}$' }
+        keyPrefix: { type: string, pattern: '^ak_live_[a-z2-7]{16}$' }
         scopes: { type: array, items: { type: string } }
         status: { $ref: '#/components/schemas/ApiKeyStatus' }
         expiresAt: { type: [string, 'null'], format: date-time }
@@ -308,14 +309,19 @@ components:
       required: [apiKey, plainTextKey]
       properties:
         apiKey: { $ref: '#/components/schemas/ApiKeyView' }
-        plainTextKey: { type: string, pattern: '^gbk_live_[a-z2-7]{16}_[a-z2-7]{52}$' }
+        plainTextKey: { type: string, pattern: '^ak_live_[a-z2-7]{16}_[a-z2-7]{52}$' }
     ScopeInfo:
       type: object
-      required: [name, description]
+      required: [name, description, level]
       properties:
         name: { type: string, pattern: '^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$' }
         description: { type: string }
+        level:
+          type: string
+          enum: [tenant, any]
+          description: "tenant: only a key with a tenant may hold it; any: a key with or without a tenant"
     CreateApiKeyRequest:
+      description: The key's tenant is the caller's active tenant; a platform operator without an active tenant creates a key without a tenant.
       type: object
       properties:
         name: { type: string, description: 1-100 characters after trimming }
