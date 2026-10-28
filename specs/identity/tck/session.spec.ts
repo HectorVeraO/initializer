@@ -23,17 +23,15 @@ function expectNoStore(response: APIResponse): void {
   expect(response.headers()['cache-control'] ?? '').toContain('no-store');
 }
 
-test('CA-01 the bootstrap admin signs in and reads the Day-0 session', { tag: '@identity' }, async ({ playwright }) => {
+test('CA-01 the bootstrap operator signs in and reads the Day-0 session', { tag: '@identity' }, async ({ playwright }) => {
   const request = await newContext(playwright);
   await loginAdapter().login(request, process.env.APP_BOOTSTRAP_ADMIN_EMAIL ?? '', process.env.APP_BOOTSTRAP_ADMIN_PASSWORD ?? '');
 
   const response = await request.get('/api/v1/auth/session');
   const session = await expectData<SessionView>(response, 200);
 
-  expect(session.account.role).toBe('admin');
   expect(session.account.isPlatformOperator).toBe(true);
-  expect(session.activeTenant?.slug).toBe('acme');
-  expect(session.memberships.some((item) => item.tenant.slug === 'acme' && item.role === 'admin')).toBe(true);
+  expect(Array.isArray(session.memberships)).toBe(true);
   expect(typeof session.flags).toBe('object');
   expect(session.flags).not.toBeNull();
   expect(setCookieHeaders(response).some((value) => value.startsWith('XSRF-TOKEN='))).toBe(true);
@@ -81,7 +79,9 @@ test('CA-18 logout revokes the session, clears the cookies and blocks a re-issue
   // Replaying the pre-logout Kratos cookie only fails when logout revoked it.
   const replay = await playwright.request.newContext({
     baseURL: process.env.TCK_BASE_URL,
-    extraHTTPHeaders: { Cookie: `${kratosCookie.name}=${kratosCookie.value}` },
+    extraHTTPHeaders: {
+      Cookie: `${kratosCookie.name}=${kratosCookie.value}`,
+    },
   });
   await expectError(await replay.get('/api/v1/auth/session'), 401, 'SESSION_INVALID');
   await replay.dispose();

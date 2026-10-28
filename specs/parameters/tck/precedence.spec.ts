@@ -13,7 +13,7 @@ test.describe('parameters precedence', () => {
   let tenantA: SeededTenant;
   let tenantB: SeededTenant;
 
-  test('P1 a tenant override wins for its tenant only', { tag: '@parameters' }, async ({ playwright }) => {
+  test('P1 a tenant override wins for its tenant only', { tag: ['@parameters', '@tenancy'] }, async ({ playwright }) => {
     operator = await bootstrapOperator(playwright);
     const created = await defineParameter(operator, {
       key,
@@ -37,14 +37,14 @@ test.describe('parameters precedence', () => {
     expect([readB.effectiveValue, readB.source]).toEqual([3, 'global']);
   });
 
-  test('P2 clearing an override restores the global value and is idempotent', { tag: '@parameters' }, async () => {
+  test('P2 clearing an override restores the global value and is idempotent', { tag: ['@parameters', '@tenancy'] }, async () => {
     for (const attempt of [1, 2]) {
       const cleared = await expectView(await mutate(tenantA.admin, 'DELETE', overridePath(key)), 200, key);
       expect([attempt, cleared.effectiveValue, cleared.source]).toEqual([attempt, 3, 'global']);
     }
   });
 
-  test('P3 a tenant cannot clear another tenant override', { tag: '@parameters' }, async () => {
+  test('P3 a tenant cannot clear another tenant override', { tag: ['@parameters', '@tenancy'] }, async () => {
     await expectView(await mutate(tenantA.admin, 'PUT', overridePath(key), { value: 5 }), 200, key);
 
     const clearedB = await expectView(await mutate(tenantB.admin, 'DELETE', overridePath(key)), 200, key);
