@@ -29,10 +29,10 @@ export function flattenReport(report) {
 }
 
 /**
- * Checks every listed test against the manifests' `tckTags`.
+ * Checks every listed test against the manifests' `tckTags` and `cooperatesWith`.
  * Returns one message per violation; empty means the tags are consistent.
  * @param {{ file: string, line: number, title: string, tags: string[] }[]} tests files relative to the specs root
- * @param {{ spec: string, tckTags: string[] }[]} manifests
+ * @param {{ spec: string, tckTags: string[], cooperatesWith?: string[] }[]} manifests
  * @returns {string[]}
  */
 export function checkTests(tests, manifests) {
@@ -48,12 +48,15 @@ export function checkTests(tests, manifests) {
     if (!test.tags.some((tag) => owner.tckTags.includes(tag))) {
       problems.push(`TCK_TEST_UNTAGGED: ${where} lacks a tag of specs/${owner.spec}`);
     }
-    for (const other of manifests) {
-      if (other.spec === owner.spec) {
+    const cooperating = owner.cooperatesWith ?? [];
+    for (const tag of test.tags) {
+      if (owner.tckTags.includes(tag) || cooperating.includes(tag)) {
         continue;
       }
-      const foreign = test.tags.filter((tag) => other.tckTags.includes(tag) && !owner.tckTags.includes(tag));
-      for (const tag of foreign) {
+      const other = manifests.find((manifest) => manifest.spec !== owner.spec && manifest.tckTags.includes(tag));
+      if (other === undefined) {
+        problems.push(`TCK_TAG_FOREIGN: ${where} carries ${tag}, which no installed spec declares`);
+      } else {
         problems.push(`TCK_TAG_FOREIGN: ${where} carries ${tag} of specs/${other.spec}`);
       }
     }

@@ -1,0 +1,1 @@
+{ "schema": 1, "spec": "feature-flags", "tckTags": ["@feature-flags"], "tckEnv": {}, "cooperatesWith": ["@beta"] }

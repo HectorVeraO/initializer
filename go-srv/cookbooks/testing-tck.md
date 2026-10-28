@@ -36,6 +36,13 @@ Read before writing or changing tests in `go-srv`. Project-wide test discipline:
 - Each scenario is tagged with its module: `@core`, `@identity`, `@parameters`, `@feature-flags`, `@otel` (five tags with `@core`; `@core` and `@otel` run against an instance with no module installed). The runner selects tags by the modules installed in the instance.
 - Run it from the repo root against an instance started with `APP_DATABASE_URL` and the output of `node specs/scripts/tck-env.mjs` exported: `TCK_BASE_URL=http://localhost:10100 npm --prefix specs run tck`. CI job `tck` does exactly this.
 - The TCK of a module lives next to its contract in `specs/<module>/tck/` and shares the contract's version tag (`spec-<module>-vX.Y.Z`).
+- A scenario may call routes of: its own spec; the specs of the modules its module requires, transitively; the specs named in its own spec's `cooperatesWith`. It carries its own spec's tag, plus the tag of each cooperating spec whose routes it calls, and it runs only when every one of its tags is installed. The runner inverts the uninstalled cooperating tags in both passes; `check:tags` accepts a co-tag only for a declared cooperating spec and reports any other foreign or unknown tag as `TCK_TAG_FOREIGN`.
+- Authoring rules for `specs/<s>/tck/`:
+  - Imports resolve in every selection that installs `<s>`: only `@playwright/test`, Node built-ins, `specs/tck-support/index.ts` and `envelope.ts`, `specs/tck-support/actors/**` when `<s>`'s module requires identity, and files inside `specs/<s>/tck/` (Playwright loads every matching file before `--grep` filters, and `npm run typecheck` compiles them all).
+  - Tags are test-level: every test states its full list in its own `{ tag: [...] }`, own tag first (`{ tag: ['@parameters', '@tenancy'] }`); no describe-level tags.
+  - A `beforeAll`/`beforeEach` that calls a cooperating spec's routes lives in a file whose every test carries that cooperation tag.
+  - Only tenancy's invitations create a second account.
+  - The bootstrap operator's tenant depends on the selection: a scenario not co-tagged `@tenancy` asserts neither state.
 - Scenarios are written as Given / When / Then from the module spec; one scenario per invariant.
 - The TCK is separate from the Playwright UI suite in `initializer-e2e/`. Do not put API contract checks in the UI suite.
 
