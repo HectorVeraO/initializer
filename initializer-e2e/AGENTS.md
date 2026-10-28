@@ -61,6 +61,13 @@ A change to a web frontend ships its happy-path e2e here: new for a new flow, up
 Baseline capture (Healthy Baseline Rule, root `AGENTS.md`): only when something fails, run `npm test` (one project: `npx playwright test --project=chromium`) on a `git stash -u` baseline and on your change, and diff both outputs under `.me/<slug>/logs/` (recipe: `.claude/references/test-rules.md` rule 7). Rerun a single failure once before treating it as real. If proven pre-existing, STOP and ASK.
 <!-- AGENTIC-SETUP:AUTOGEN:test-mode-e2e END -->
 
+## Platform module layout
+
+- Page Objects of a module live in `src/pages/platform/<module>/`; specs in `tests/e2e/platform/<module>/`.
+- A module's fixtures live in `src/fixtures/platform/<module>.ts`. Register a Page Object of a module there (`ShellPage` is registered in `fixtures/platform/identity.ts`); a file for a module that requires identity extends `./identity`. Register in `src/fixtures/test.ts` only a Page Object that belongs to no single module.
+- `src/fixtures/test.ts` must compile in a tree that installs only `core`; a spec imports `test` from the fixture file of the module it covers.
+- The platform suite runs with `npm run test:platform`.
+
 ## Lessons Learned
 
 <!-- AGENTIC-SETUP:AUTOGEN:lessons-learned-header START -->
