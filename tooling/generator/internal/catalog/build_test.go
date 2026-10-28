@@ -203,6 +203,17 @@ func TestIssueCodes(t *testing.T) {
 			edit(t, r, paramsManifest, `"requiresModules": [],`, `"requiresModules": [{"module": "feature-flags", "range": "^0.1.0"}],`)
 			edit(t, r, flagsManifest, `"requiresModules": [],`, `"requiresModules": [{"module": "parameters", "range": "^0.1.0"}],`)
 		}, []string{"DEPENDENCY_CYCLE"}},
+		{"edge only the web manifest declares", func(t *testing.T, r fstest.MapFS) {
+			addNgCore(r)
+			addNgModule(r, "parameters", false, `{"parameters": "0.1.0"}`)
+			addNgModule(r, "feature-flags", false, `{"feature-flags": "0.1.0"}`)
+			edit(t, r, ngRoot+"parameters/module.manifest.json", `"requiresModules": [],`, `"requiresModules": [{"module": "feature-flags", "range": "^0.1.0"}],`)
+		}, []string{"REQUIRES_STACK_MISMATCH"}},
+		{"edge only the backend manifest declares", func(t *testing.T, r fstest.MapFS) {
+			addNgCore(r)
+			addNgModule(r, "parameters", false, `{"parameters": "0.1.0"}`)
+			edit(t, r, paramsManifest, `"requiresModules": [],`, `"requiresModules": [{"module": "feature-flags", "range": "^0.1.0"}],`)
+		}, []string{"REQUIRES_STACK_MISMATCH"}},
 		{"file under a spec folder without manifest", func(t *testing.T, r fstest.MapFS) {
 			put(r, "specs/stray/readme.md", "stray\n")
 		}, []string{"FILE_UNOWNED"}},
@@ -692,4 +703,46 @@ func TestCooperationTag(t *testing.T) {
 			t.Errorf("CooperationTag(%q) = %q, %v; want %q, %v", tc.path, tag, ok, tc.tag, tc.ok)
 		}
 	}
+}
+
+func TestRequirementParityMessageNamesMissingAndExtra(t *testing.T) {
+	cases := []struct {
+		name        string
+		mutate      func(t *testing.T, repo fstest.MapFS)
+		wantMessage string
+	}{
+		{"edge only the web manifest declares", func(t *testing.T, r fstest.MapFS) {
+			addNgCore(r)
+			addNgModule(r, "parameters", false, `{"parameters": "0.1.0"}`)
+			addNgModule(r, "feature-flags", false, `{"feature-flags": "0.1.0"}`)
+			edit(t, r, ngRoot+"parameters/module.manifest.json", `"requiresModules": [],`, `"requiresModules": [{"module": "feature-flags", "range": "^0.1.0"}],`)
+		}, "missing [], extra [feature-flags]"},
+		{"edge only the backend manifest declares", func(t *testing.T, r fstest.MapFS) {
+			addNgCore(r)
+			addNgModule(r, "parameters", false, `{"parameters": "0.1.0"}`)
+			edit(t, r, paramsManifest, `"requiresModules": [],`, `"requiresModules": [{"module": "feature-flags", "range": "^0.1.0"}],`)
+		}, "missing [feature-flags], extra []"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := cleanRepo(t)
+			tc.mutate(t, repo)
+			_, issues := buildRepo(t, repo)
+			assertCodes(t, issues, "REQUIRES_STACK_MISMATCH")
+			if !strings.Contains(issues[0].Message, tc.wantMessage) {
+				t.Fatalf("message = %q, want it to contain %q", issues[0].Message, tc.wantMessage)
+			}
+		})
+	}
+}
+
+func TestRequirementParityAllowsDifferentRanges(t *testing.T) {
+	repo := cleanRepo(t)
+	addNgCore(repo)
+	addNgModule(repo, "parameters", false, `{"parameters": "0.1.0"}`)
+	edit(t, repo, paramsManifest, `"requiresModules": [],`, `"requiresModules": [{"module": "feature-flags", "range": "^0.1.0"}],`)
+	edit(t, repo, ngRoot+"parameters/module.manifest.json", `"requiresModules": [],`, `"requiresModules": [{"module": "feature-flags", "range": "0.1.0"}],`)
+	addNgModule(repo, "feature-flags", false, `{"feature-flags": "0.1.0"}`)
+	_, issues := buildRepo(t, repo)
+	assertCodes(t, issues)
 }

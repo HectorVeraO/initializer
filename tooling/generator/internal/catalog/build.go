@@ -32,6 +32,7 @@ const (
 	CodeTCKTagUnknown         = "TCK_TAG_UNKNOWN"
 	CodeRequiresUnsatisfied   = "REQUIRES_UNSATISFIED"
 	CodeDependencyCycle       = "DEPENDENCY_CYCLE"
+	CodeRequiresStackMismatch = "REQUIRES_STACK_MISMATCH"
 	CodeFileUnowned           = "FILE_UNOWNED"
 	CodeFileOwnershipConflict = "FILE_OWNERSHIP_CONFLICT"
 	CodeTargetConflict        = "TARGET_CONFLICT"
