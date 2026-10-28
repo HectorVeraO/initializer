@@ -453,6 +453,25 @@ describe('ApiKeysPage', () => {
     expect(boxes.map((box) => box.getAttribute('data-key'))).toEqual(['probe:whoami']);
   });
 
+  it('drops a selected tenant-level scope when the session turns tenantless', async () => {
+    const fixture = await open([], 0, [...SCOPES, ANY_SCOPE]);
+
+    await fill(fixture, 'ci', ['tenant:read', 'probe:whoami']);
+
+    visitor.set(accessContext(TENANTLESS_OPERATOR));
+    (await nextCall('GET', SCOPES_URL)).flush(okEnvelope([...SCOPES, ANY_SCOPE]));
+    (await nextCall('GET', LIST_URL)).flush(pageOf([]));
+    await settle(fixture);
+    await submit(fixture);
+
+    const post = await nextCall('POST', LIST_URL);
+
+    expect(post.request.body).toEqual({ name: 'ci', scopes: ['probe:whoami'], expiresAt: null });
+    post.flush(okEnvelope({ apiKey: apiKey('ci'), plainTextKey: SYNTHETIC_KEY }), { status: 201, statusText: 'Created' });
+    (await nextCall('GET', LIST_URL)).flush(pageOf([apiKey('ci')]));
+    await settle(fixture);
+  });
+
   it('refetches when the active tenant changes', async () => {
     const fixture = await open([apiKey('ci')]);
 
