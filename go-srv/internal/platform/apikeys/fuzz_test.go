@@ -1,8 +1,6 @@
-package identity_test
+package apikeys
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -11,27 +9,18 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity"
 )
 
 // FuzzAPIKeyHeader sends arbitrary X-API-Key values to a key-accepting route:
 // no value may authenticate (no key exists) or crash the server.
 func FuzzAPIKeyHeader(f *testing.F) {
-	seed := make([]byte, 32)
-	_, err := rand.Read(seed)
-	if err != nil {
-		f.Fatalf("random: %v", err)
-	}
-	handler := coretest.New(f, []core.Module{identity.Module()}, coretest.Options{
-		Database: true,
-		Config:   map[string]string{"APP_SESSION_KEYS": "fuzz-1:" + base64.RawURLEncoding.EncodeToString(seed)},
-	})
+	handler := coretest.New(f, []core.Module{Module()}, coretest.Options{Database: true})
 	for _, value := range []string{"", " ", "ak_live_", "ak_live_" + strings.Repeat("a", 16) + "_", "\x00", "a\nb", "\xff\xfe"} {
 		f.Add(value)
 	}
 	f.Fuzz(func(t *testing.T, value string) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/tenant", nil)
-		req.Header.Set("X-API-Key", value)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/api-keys", nil)
+		req.Header.Set(apiKeyHeader, value)
 		rec := httptest.NewRecorder()
 
 		handler.ServeHTTP(rec, req)
@@ -49,7 +38,7 @@ func FuzzAPIKeyHeader(f *testing.F) {
 // prefix, a divider and a 52 character secret.
 func FuzzSplitAPIKey(f *testing.F) {
 	pattern := regexp.MustCompile(`^ak_live_[a-z2-7]{16}_[a-z2-7]{52}$`)
-	valid, err := identity.NewAPIKey()
+	valid, err := newAPIKey()
 	if err != nil {
 		f.Fatalf("new key: %v", err)
 	}
@@ -60,14 +49,14 @@ func FuzzSplitAPIKey(f *testing.F) {
 		f.Add(value)
 	}
 	f.Fuzz(func(t *testing.T, value string) {
-		prefix, secret, ok := identity.SplitAPIKey(value)
+		prefix, secret, ok := splitAPIKey(value)
 
 		isFormat := pattern.MatchString(value) && len(value) == 77
 		if ok != isFormat {
-			t.Fatalf("SplitAPIKey(%q) ok = %v, format match = %v", value, ok, isFormat)
+			t.Fatalf("splitAPIKey(%q) ok = %v, format match = %v", value, ok, isFormat)
 		}
 		if ok && (prefix != value[:24] || secret != value[25:] || len(secret) != 52) {
-			t.Fatalf("SplitAPIKey(%q) = %q, %q", value, prefix, secret)
+			t.Fatalf("splitAPIKey(%q) = %q, %q", value, prefix, secret)
 		}
 		if !ok && (prefix != "" || secret != "") {
 			t.Fatalf("a rejected value leaked parts: %q, %q", prefix, secret)

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "stack": "go-srv",
+  "module": "api-keys",
+  "version": "0.1.0",
+  "implied": false,
+  "implementsSpec": { "api-keys": "0.1.0" },
+  "requiresCore": "^0.1.0",
+  "requiresModules": [{ "module": "identity", "range": "^0.1.0" }],
+  "tablePrefixes": ["apk"],
+  "files": ["go-srv/internal/platform/apikeys/"],
+  "exclude": []
+}

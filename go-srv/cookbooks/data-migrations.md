@@ -6,18 +6,19 @@ Read before creating or changing a table, column, index or migration file. The f
 
 Every table matches `^[a-z]{2,4}_[a-z0-9_]+$`: a 2 to 4 letter module prefix, an underscore, a snake_case name.
 
-- Valid: `sys_parameters`, `ten_memberships`, `iam_api_keys`.
+- Valid: `sys_parameters`, `ten_memberships`, `apk_keys`.
 - Invalid: `parameters` (no prefix), `parameter_definitions` (prefix longer than 4 letters), `Sys_Parameters` (uppercase).
 
 ## Prefix registry
 
-The registry the lint reads is each module's `go-srv/internal/platform/<module>/module.manifest.json` `tablePrefixes` (2 to 4 lowercase letters, no underscore). The table below is the human index: `cor_`, `ten_` and `iam_` are enforced once their module ships a manifest that claims them; until then the lint does not stop another manifest from claiming them, so check this table in review.
+The registry the lint reads is each module's `go-srv/internal/platform/<module>/module.manifest.json` `tablePrefixes` (2 to 4 lowercase letters, no underscore). The table below is the human index: `cor_`, `ten_`, `iam_` and `apk_` are enforced once their module ships a manifest that claims them; until then the lint does not stop another manifest from claiming them, so check this table in review.
 
 | Prefix | Module | Tables |
 |---|---|---|
 | `cor_` | Core migration runner: goose version tables | `cor_migrations_<module>` (one goose version table per module) |
 | `ten_` | Tenancy | `ten_tenants`, `ten_memberships`, `ten_invitations` |
-| `iam_` | Identity | `iam_accounts`, `iam_api_keys` |
+| `iam_` | Identity | `iam_accounts` |
+| `apk_` | API keys | `apk_keys` |
 | `sys_` | Parameters | `sys_parameters`, `sys_parameter_overrides` |
 | `flg_` | Feature flags | `flg_overrides`, `flg_tenant_overrides` |
 
@@ -54,7 +55,7 @@ Rules:
 - No PR drops or renames a column, table, JSON property or event field that current code uses.
 - No migration rewrites a large table in one statement or holds a long lock; batch it.
 - Every new foreign key and every column used in a tenant-scoped lookup has an index.
-- Tenant-owned tables carry a non-null `tenant_id` and every tenant-scoped unique constraint includes it.
+- Tenant-owned tables carry a non-null `tenant_id` and every tenant-scoped unique constraint includes it. A table whose rows may belong to no tenant (`apk_keys`) carries a nullable `tenant_id`; NULL means the global scope.
 
 ## Checklist
 

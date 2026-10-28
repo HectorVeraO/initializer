@@ -43,13 +43,3 @@ func NewAccounts(pool *pgxpool.Pool, clk clock.Clock, admin *kratos.Admin, opera
 	port := newAccountDirectory(pool, clk, admin, operatorEmails)
 	return port, port
 }
-
-// SplitAPIKey runs splitAPIKey.
-func SplitAPIKey(value string) (string, string, bool) {
-	return splitAPIKey(value)
-}
-
-// NewAPIKey runs newAPIKey.
-func NewAPIKey() (string, error) {
-	return newAPIKey()
-}

@@ -68,7 +68,7 @@ const (
 func Registry() []CodeInfo {
 	return []CodeInfo{
 		{CodeSessionInvalid, http.StatusUnauthorized, false, raisedByCore},
-		{CodeAPIKeyInvalidOrRevoked, http.StatusUnauthorized, false, "core, identity"},
+		{CodeAPIKeyInvalidOrRevoked, http.StatusUnauthorized, false, "core, api-keys"},
 		{CodeCSRFTokenInvalid, http.StatusForbidden, false, raisedByCore},
 		{CodeInsufficientScope, http.StatusForbidden, false, raisedByCore},
 		{CodeInsufficientRole, http.StatusForbidden, false, raisedByCore},
@@ -76,7 +76,7 @@ func Registry() []CodeInfo {
 		{CodeActiveTenantRequired, http.StatusForbidden, false, raisedByCore},
 		{CodeTenantMismatch, http.StatusForbidden, false, raisedByCore},
 		{CodeTenantAccessDenied, http.StatusForbidden, false, "core, tenancy"},
-		{CodeTenantSuspended, http.StatusForbidden, false, "tenancy, identity"},
+		{CodeTenantSuspended, http.StatusForbidden, false, "tenancy, api-keys"},
 		{CodeMembershipRevoked, http.StatusForbidden, false, raisedByTenancy},
 		{"ACCOUNT_LOCKED_OR_DISABLED", http.StatusForbidden, false, "identity, tenancy"},
 		{"INVITATION_EMAIL_MISMATCH", http.StatusForbidden, false, raisedByTenancy},

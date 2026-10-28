@@ -2,21 +2,15 @@ package identity
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/session"
 )
@@ -199,163 +193,4 @@ func FuzzResolve(f *testing.F) {
 			t.Fatalf("an unsigned cookie authenticated: %+v", result)
 		}
 	})
-}
-
-// fakeDirectory is a TenantDirectory answering from a map.
-type fakeDirectory struct {
-	tenants map[reqctx.TenantID]coreaccess.TenantRef
-	err     error
-}
-
-func (d *fakeDirectory) TenantExists(_ context.Context, id reqctx.TenantID) (bool, error) {
-	_, found := d.tenants[id]
-	return found, d.err
-}
-
-func (d *fakeDirectory) Tenant(_ context.Context, id reqctx.TenantID) (coreaccess.TenantRef, bool, error) {
-	ref, found := d.tenants[id]
-	return ref, found, d.err
-}
-
-type keyResolverFixture struct {
-	resolver  *apiKeyResolver
-	directory *fakeDirectory
-	pool      *pgxpool.Pool
-	clock     *settableClock
-	logs      *bytes.Buffer
-}
-
-func newKeyResolverFixture(t *testing.T) *keyResolverFixture {
-	t.Helper()
-	pool := newTestPool(t)
-	scopes := coreaccess.NewScopeRegistry()
-	for _, name := range []string{"tenant:read", "api-keys:read"} {
-		err := scopes.Register(name, "synthetic", coreaccess.ScopeTenant)
-		if err != nil {
-			t.Fatalf("register %s: %v", name, err)
-		}
-	}
-	clk := &settableClock{now: time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)}
-	logs := &bytes.Buffer{}
-	logger := slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	resolver := newAPIKeyResolver(pool, clk, scopes, logger)
-	directory := &fakeDirectory{tenants: map[reqctx.TenantID]coreaccess.TenantRef{}}
-	resolver.tenants = directory
-	return &keyResolverFixture{resolver: resolver, directory: directory, pool: pool, clock: clk, logs: logs}
-}
-
-// key inserts a key row (tenantID nil: a key without a tenant) and returns its
-// plain text. No tenant or account table is involved.
-func (f *keyResolverFixture) key(t *testing.T, tenantID any, scopes []string) string {
-	t.Helper()
-	plain, err := newAPIKey()
-	if err != nil {
-		t.Fatalf("new key: %v", err)
-	}
-	prefix, secret, _ := splitAPIKey(plain)
-	_, err = f.pool.Exec(context.Background(),
-		`INSERT INTO iam_api_keys (tenant_id, name, key_prefix, secret_hash, scopes, created_by_account_id)
-VALUES ($1::uuid, 'seeded', $2, $3, $4, $5::uuid)`,
-		tenantID, prefix, hashAPIKeySecret(secret), scopes, randomUUID(t))
-	if err != nil {
-		t.Fatalf("insert key: %v", err)
-	}
-	return plain
-}
-
-func TestKeyResolverGivesAKeyWithoutATenantAPrincipalWithoutOne(t *testing.T) {
-	f := newKeyResolverFixture(t)
-	key := f.key(t, nil, []string{"tenant:read", "removed:scope"})
-	prefix, _, _ := splitAPIKey(key)
-
-	principal, err := f.resolver.Resolve(context.Background(), keyRequest(key))
-
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
-	}
-	if principal.Kind != reqctx.ActorAPIKey || principal.ActorID != "apikey:"+prefix ||
-		principal.TenantID != nil || principal.TenantSlug != "" ||
-		!reflect.DeepEqual(principal.Scopes, []string{"tenant:read"}) {
-		t.Fatalf("principal = %+v", principal)
-	}
-}
-
-func TestKeyResolverReadsTheTenantOfAKeyThroughTheDirectory(t *testing.T) {
-	f := newKeyResolverFixture(t)
-	tenantID := reqctx.TenantID(randomUUID(t))
-	f.directory.tenants[tenantID] = coreaccess.TenantRef{ID: tenantID, Slug: "acme", Name: "Acme", Status: coreaccess.TenantActive}
-	key := f.key(t, string(tenantID), []string{"tenant:read"})
-
-	principal, err := f.resolver.Resolve(context.Background(), keyRequest(key))
-
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
-	}
-	if principal.TenantID == nil || *principal.TenantID != tenantID || principal.TenantSlug != "acme" ||
-		!reflect.DeepEqual(principal.Scopes, []string{"tenant:read"}) {
-		t.Fatalf("principal = %+v", principal)
-	}
-}
-
-func TestKeyResolverAnswersTheSame401ForAnUnknownTenantAndASuspendedOneOnlyAfterTheSecret(t *testing.T) {
-	f := newKeyResolverFixture(t)
-	suspended := reqctx.TenantID(randomUUID(t))
-	f.directory.tenants[suspended] = coreaccess.TenantRef{ID: suspended, Slug: "gone", Status: coreaccess.TenantSuspended}
-	unknownTenantKey := f.key(t, randomUUID(t), []string{"tenant:read"})
-	suspendedKey := f.key(t, string(suspended), []string{"tenant:read"})
-	other, _ := newAPIKey()
-	_, wrongSecret, _ := splitAPIKey(other)
-	suspendedPrefix, _, _ := splitAPIKey(suspendedKey)
-	suspendedWrongSecret := suspendedPrefix + "_" + wrongSecret
-
-	_, unknownErr := f.resolver.Resolve(context.Background(), keyRequest(unknownTenantKey))
-	_, suspendedErr := f.resolver.Resolve(context.Background(), keyRequest(suspendedKey))
-	_, wrongSecretErr := f.resolver.Resolve(context.Background(), keyRequest(suspendedWrongSecret))
-
-	var unknown, suspendedAPI, wrong *api.Error
-	if !errors.As(unknownErr, &unknown) || unknown.Status != http.StatusUnauthorized || unknown.Code != api.CodeAPIKeyInvalidOrRevoked {
-		t.Fatalf("unknown tenant: %v", unknownErr)
-	}
-	if !errors.As(suspendedErr, &suspendedAPI) || suspendedAPI.Status != http.StatusForbidden || suspendedAPI.Code != api.CodeTenantSuspended {
-		t.Fatalf("suspended tenant: %v", suspendedErr)
-	}
-	if !errors.As(wrongSecretErr, &wrong) || wrong.Status != http.StatusUnauthorized || wrong.Code != api.CodeAPIKeyInvalidOrRevoked || wrong.Message != unknown.Message {
-		t.Fatalf("wrong secret of a suspended tenant's key: %v", wrongSecretErr)
-	}
-	if !strings.Contains(f.logs.String(), `"reason":"tenant_unknown"`) ||
-		!strings.Contains(f.logs.String(), `"reason":"tenant_suspended"`) {
-		t.Fatalf("rejection reasons are not logged: %s", f.logs.String())
-	}
-	if strings.Contains(f.logs.String(), unknownTenantKey) || strings.Contains(f.logs.String(), suspendedKey) {
-		t.Fatal("a key reached the log")
-	}
-}
-
-func TestKeyResolverFailsOperationallyWithoutADirectoryOrWhenItFails(t *testing.T) {
-	f := newKeyResolverFixture(t)
-	tenantID := reqctx.TenantID(randomUUID(t))
-	key := f.key(t, string(tenantID), []string{"tenant:read"})
-
-	f.directory.err = errors.New("directory down")
-	_, err := f.resolver.Resolve(context.Background(), keyRequest(key))
-	var apiErr *api.Error
-	if err == nil || errors.As(err, &apiErr) {
-		t.Fatalf("a failing directory must be operational, got %v", err)
-	}
-
-	f.resolver.tenants = nil
-	_, err = f.resolver.Resolve(context.Background(), keyRequest(key))
-	if err == nil || errors.As(err, &apiErr) {
-		t.Fatalf("a missing directory must be operational, got %v", err)
-	}
-	_, err = f.resolver.Resolve(context.Background(), keyRequest("not-a-key"))
-	if err == nil || errors.As(err, &apiErr) {
-		t.Fatalf("a missing directory must be operational for any request, got %v", err)
-	}
-}
-
-func keyRequest(key string) *http.Request {
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/api-keys", nil)
-	req.Header.Set(apiKeyHeader, key)
-	return req
 }

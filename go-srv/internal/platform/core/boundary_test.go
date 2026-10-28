@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -350,6 +351,112 @@ func importGroupProblems(modulePath, path string, src []byte) []string {
 	return problems
 }
 
+// manifestFile is the module manifest each module directory carries.
+const manifestFile = "module.manifest.json"
+
+// tableTokenPattern matches a token shaped like a table name: a 2 to 4 letter
+// prefix, an underscore and a snake_case name.
+var tableTokenPattern = regexp.MustCompile(`\b([a-z]{2,4})_[a-z0-9_]+\b`)
+
+// corePrefix is core's migration ledger prefix; every module may name it.
+const corePrefix = "cor"
+
+// moduleRootOf returns the directory of the Go module the listing describes.
+func moduleRootOf(packages []listedPackage) string {
+	for _, p := range packages {
+		if p.Module != nil && p.Module.Dir != "" {
+			return p.Module.Dir
+		}
+	}
+	return ""
+}
+
+// readTablePrefixes returns, for every non-core module directory under
+// internal/platform, the table prefixes its manifest claims. A directory
+// without a readable manifest claims none.
+func readTablePrefixes(root string) map[string][]string {
+	claims := map[string][]string{}
+	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(platformDir)))
+	if err != nil {
+		return claims
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "core" {
+			continue
+		}
+		data, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(platformDir), entry.Name(), manifestFile))
+		if readErr != nil {
+			continue
+		}
+		var manifest struct {
+			TablePrefixes []string `json:"tablePrefixes"`
+		}
+		if json.Unmarshal(data, &manifest) == nil {
+			claims[entry.Name()] = manifest.TablePrefixes
+		}
+	}
+	return claims
+}
+
+// ruleNoForeignTables is rule 6: no Go file of a module (tests included,
+// testdata excluded) names a table whose prefix another module claims.
+func ruleNoForeignTables(packages []listedPackage) []string {
+	root := moduleRootOf(packages)
+	claims := readTablePrefixes(root)
+	ownerOfPrefix := map[string]string{}
+	for dir, prefixes := range claims {
+		for _, prefix := range prefixes {
+			ownerOfPrefix[prefix] = dir
+		}
+	}
+	var problems []string
+	for dir := range claims {
+		moduleDir := filepath.Join(root, filepath.FromSlash(platformDir), dir)
+		walkErr := filepath.WalkDir(moduleDir, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() && entry.Name() == "testdata" {
+				return filepath.SkipDir
+			}
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+				return nil
+			}
+			problems = append(problems, foreignTablesIn(root, path, dir, ownerOfPrefix)...)
+			return nil
+		})
+		if walkErr != nil {
+			problems = append(problems, fmt.Sprintf("rule 6: cannot scan %s: %v", moduleDir, walkErr))
+		}
+	}
+	return problems
+}
+
+// foreignTablesIn reports every token of path whose prefix is claimed by a
+// module other than self.
+func foreignTablesIn(root, path, self string, ownerOfPrefix map[string]string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []string{fmt.Sprintf("rule 6: cannot read %s: %v", path, err)}
+	}
+	rel, relErr := filepath.Rel(root, path)
+	if relErr != nil {
+		rel = path
+	}
+	var problems []string
+	for i, line := range strings.Split(string(data), "\n") {
+		for _, match := range tableTokenPattern.FindAllStringSubmatch(line, -1) {
+			prefix := match[1]
+			owner, claimed := ownerOfPrefix[prefix]
+			if prefix == corePrefix || !claimed || owner == self {
+				continue
+			}
+			problems = append(problems, fmt.Sprintf("rule 6: %s:%d names %s, owned by %s", filepath.ToSlash(rel), i+1, match[0], owner))
+		}
+	}
+	return problems
+}
+
 // allProblems applies every rule to the listing.
 func allProblems(t *testing.T, packages []listedPackage) []string {
 	t.Helper()
@@ -360,6 +467,7 @@ func allProblems(t *testing.T, packages []listedPackage) []string {
 	problems = append(problems, ruleServerImports(modulePath, packages)...)
 	problems = append(problems, ruleModulePathLeaks(modulePath, packages)...)
 	problems = append(problems, ruleCoreSubpackagesNotRoot(modulePath, packages)...)
+	problems = append(problems, ruleNoForeignTables(packages)...)
 	sort.Strings(problems)
 	return problems
 }
@@ -486,6 +594,59 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 				"internal/platform/core/coretestx/x.go": "package coretestx\n\nimport _ \"example.com/boundary/internal/platform/core\"\n",
 			},
 			want: "rule 5",
+		},
+		{
+			name: "rule 2 tenancy imports identity",
+			files: map[string]string{
+				"internal/platform/core/core.go":         "package core\n",
+				"internal/platform/identity/identity.go": "package identity\n",
+				"internal/platform/tenancy/tenancy.go":   "package tenancy\n\nimport _ \"example.com/boundary/internal/platform/identity\"\n",
+			},
+			want: "rule 2",
+		},
+		{
+			name: "rule 2 apikeys imports tenancy",
+			files: map[string]string{
+				"internal/platform/core/core.go":       "package core\n",
+				"internal/platform/tenancy/tenancy.go": "package tenancy\n",
+				"internal/platform/apikeys/apikeys.go": "package apikeys\n\nimport _ \"example.com/boundary/internal/platform/tenancy\"\n",
+			},
+			want: "rule 2",
+		},
+		{
+			name: "rule 6 tenancy file names an identity table",
+			files: map[string]string{
+				"internal/platform/core/core.go":                  "package core\n",
+				"internal/platform/identity/identity.go":          "package identity\n",
+				"internal/platform/identity/module.manifest.json": "{\"tablePrefixes\": [\"iam\"]}\n",
+				"internal/platform/tenancy/store.go":              "package tenancy\n\nvar query = \"SELECT id FROM iam_accounts\"\n",
+				"internal/platform/tenancy/module.manifest.json":  "{\"tablePrefixes\": [\"ten\"]}\n",
+			},
+			want: "rule 6: internal/platform/tenancy/store.go:3 names iam_accounts, owned by identity",
+		},
+		{
+			name: "rule 6 test files are scanned too",
+			files: map[string]string{
+				"internal/platform/core/core.go":                 "package core\n",
+				"internal/platform/tenancy/tenancy.go":           "package tenancy\n",
+				"internal/platform/tenancy/module.manifest.json": "{\"tablePrefixes\": [\"ten\"]}\n",
+				"internal/platform/apikeys/apikeys.go":           "package apikeys\n",
+				"internal/platform/apikeys/keys_test.go":         "package apikeys\n\nvar fixture = \"INSERT INTO ten_tenants (id) VALUES (1)\"\n",
+				"internal/platform/apikeys/module.manifest.json": "{\"tablePrefixes\": [\"apk\"]}\n",
+			},
+			want: "rule 6: internal/platform/apikeys/keys_test.go:3 names ten_tenants, owned by tenancy",
+		},
+		{
+			name: "rule 6 allows own tables, core ledgers, unclaimed prefixes and testdata",
+			files: map[string]string{
+				"internal/platform/core/core.go":                  "package core\n",
+				"internal/platform/identity/identity.go":          "package identity\n",
+				"internal/platform/identity/module.manifest.json": "{\"tablePrefixes\": [\"iam\"]}\n",
+				"internal/platform/tenancy/store.go":              "package tenancy\n\nvar a = \"ten_tenants\"\nvar b = \"cor_migrations_tenancy\"\nvar c = \"ak_live_x\"\n",
+				"internal/platform/tenancy/module.manifest.json":  "{\"tablePrefixes\": [\"ten\"]}\n",
+				"internal/platform/tenancy/testdata/x/x.go":       "package x\n\nvar d = \"iam_accounts\"\n",
+			},
+			want: "",
 		},
 		{
 			name: "clean module reports nothing",

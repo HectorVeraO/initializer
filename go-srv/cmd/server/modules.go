@@ -3,6 +3,7 @@
 package main
 
 import (
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/apikeys"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/featureflags"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity"
@@ -14,6 +15,7 @@ import (
 func installedModules() []core.Module {
 	return []core.Module{
 		identity.Module(),
+		apikeys.Module(),
 		featureflags.Module(),
 		parameters.Module(),
 		tenancy.Module(),
