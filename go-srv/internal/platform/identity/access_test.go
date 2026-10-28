@@ -71,18 +71,6 @@ func (e *accessEnv) account() identity.Account {
 	return account
 }
 
-func (e *accessEnv) tenant(slug, status string) string {
-	e.t.Helper()
-	return e.scanString(
-		"INSERT INTO ten_tenants (slug, name, status) VALUES ($1, $1, $2) RETURNING id::text", slug, status)
-}
-
-func (e *accessEnv) member(tenantID, accountID, role, status string, createdAt time.Time) {
-	e.t.Helper()
-	e.exec(`INSERT INTO ten_memberships (tenant_id, account_id, role, status, created_at)
-VALUES ($1::uuid, $2::uuid, $3, $4, $5)`, tenantID, accountID, role, status, createdAt)
-}
-
 func (e *accessEnv) setAccountStatus(accountID, status string) {
 	e.t.Helper()
 	e.exec("UPDATE iam_accounts SET status = $2 WHERE id = $1::uuid", accountID, status)

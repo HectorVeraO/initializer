@@ -57,6 +57,7 @@ type CodeInfo struct {
 const (
 	raisedByCore       = "core"
 	raisedByIdentity   = "identity"
+	raisedByTenancy    = "tenancy"
 	raisedByParameters = "parameters"
 	raisedByFlags      = "feature-flags"
 	raisedByAPIKeys    = "api-keys"
@@ -74,22 +75,22 @@ func Registry() []CodeInfo {
 		{CodePlatformOperatorNeeded, http.StatusForbidden, false, raisedByCore},
 		{CodeActiveTenantRequired, http.StatusForbidden, false, raisedByCore},
 		{CodeTenantMismatch, http.StatusForbidden, false, raisedByCore},
-		{CodeTenantAccessDenied, http.StatusForbidden, false, "core, identity"},
-		{CodeTenantSuspended, http.StatusForbidden, false, raisedByIdentity},
-		{CodeMembershipRevoked, http.StatusForbidden, false, raisedByIdentity},
-		{"ACCOUNT_LOCKED_OR_DISABLED", http.StatusForbidden, false, raisedByIdentity},
-		{"INVITATION_EMAIL_MISMATCH", http.StatusForbidden, false, raisedByIdentity},
+		{CodeTenantAccessDenied, http.StatusForbidden, false, "core, tenancy"},
+		{CodeTenantSuspended, http.StatusForbidden, false, "tenancy, identity"},
+		{CodeMembershipRevoked, http.StatusForbidden, false, raisedByTenancy},
+		{"ACCOUNT_LOCKED_OR_DISABLED", http.StatusForbidden, false, "identity, tenancy"},
+		{"INVITATION_EMAIL_MISMATCH", http.StatusForbidden, false, raisedByTenancy},
 		{CodeResourceNotFound, http.StatusNotFound, false, "core, every module"},
 		{CodeRouteNotFound, http.StatusNotFound, false, raisedByCore},
 		{"FLAG_NOT_DEFINED_IN_MANIFEST", http.StatusNotFound, false, raisedByFlags},
-		{"INVITATION_INVALID", http.StatusNotFound, false, raisedByIdentity},
+		{"INVITATION_INVALID", http.StatusNotFound, false, raisedByTenancy},
 		{CodeCredentialConflict, http.StatusConflict, false, raisedByCore},
 		{CodeActiveTenantChanged, http.StatusConflict, false, raisedByCore},
-		{"LAST_TENANT_ADMIN", http.StatusConflict, false, raisedByIdentity},
-		{"MEMBERSHIP_ALREADY_ACTIVE", http.StatusConflict, false, raisedByIdentity},
-		{"INVITATION_NOT_PENDING", http.StatusConflict, false, raisedByIdentity},
-		{"INVITATION_REQUIRED", http.StatusConflict, false, raisedByIdentity},
-		{"TENANT_SLUG_TAKEN", http.StatusConflict, false, raisedByIdentity},
+		{"LAST_TENANT_ADMIN", http.StatusConflict, false, raisedByTenancy},
+		{"MEMBERSHIP_ALREADY_ACTIVE", http.StatusConflict, false, raisedByTenancy},
+		{"INVITATION_NOT_PENDING", http.StatusConflict, false, raisedByTenancy},
+		{"INVITATION_REQUIRED", http.StatusConflict, false, raisedByTenancy},
+		{"TENANT_SLUG_TAKEN", http.StatusConflict, false, raisedByTenancy},
 		{"IDENTITY_ALREADY_EXISTS", http.StatusConflict, false, raisedByIdentity},
 		{"SYSTEM_PARAMETER_PROTECTED", http.StatusConflict, false, raisedByParameters},
 		{"PARAMETER_ALREADY_EXISTS", http.StatusConflict, false, raisedByParameters},

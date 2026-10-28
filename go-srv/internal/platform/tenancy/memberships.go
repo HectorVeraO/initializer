@@ -1,4 +1,4 @@
-package identity
+package tenancy
 
 import (
 	"context"
@@ -15,8 +15,26 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 )
 
-// MembershipView is the MembershipView schema (also the session view item).
-type MembershipView = membershipView
+const (
+	statusActive    = "active"
+	statusSuspended = "suspended"
+)
+
+// tenantSummary is the TenantSummary schema.
+type tenantSummary struct {
+	ID     string `json:"id"`
+	Slug   string `json:"slug"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// MembershipView is the MembershipView schema.
+type MembershipView struct {
+	ID     string        `json:"id"`
+	Tenant tenantSummary `json:"tenant"`
+	Role   string        `json:"role"`
+	Status string        `json:"status"`
+}
 
 // MemberAccount is the MemberAccount schema.
 type MemberAccount struct {
@@ -81,13 +99,13 @@ func planTransition(role, status string, newRole *reqctx.Role, newStatus *string
 // two admins cannot both pass. A foreign, unknown or malformed id is 404.
 func (s *tenancy) UpdateMembership(ctx context.Context, tenantID, membershipID string, role *reqctx.Role, status *string) (MemberView, error) {
 	if role == nil && status == nil {
-		return MemberView{}, errors.New("identity: update membership: a role or a status is required")
+		return MemberView{}, errors.New("tenancy: update membership: a role or a status is required")
 	}
 	if role != nil && !role.Valid() {
-		return MemberView{}, errors.New("identity: update membership: invalid role")
+		return MemberView{}, errors.New("tenancy: update membership: invalid role")
 	}
 	if status != nil && !isMembershipStatus(*status) {
-		return MemberView{}, errors.New("identity: update membership: invalid status")
+		return MemberView{}, errors.New("tenancy: update membership: invalid status")
 	}
 	tenant, tenantOK := api.ParseUUID(tenantID)
 	id, idOK := api.ParseUUID(membershipID)
@@ -173,7 +191,7 @@ func (s *tenancy) readMemberView(ctx context.Context, tenant Tenant, m Membershi
 	}
 	holder, exists := found[id]
 	if !exists {
-		return MemberView{}, errors.New("identity: member account missing")
+		return MemberView{}, errors.New("tenancy: member account missing")
 	}
 	account := MemberAccount{ID: string(holder.ID), Email: holder.Email, FullName: holder.FullName}
 	return MemberView{
@@ -199,19 +217,19 @@ func (s *tenancy) ListMembers(ctx context.Context, tenantID string, statuses []s
 	tenantUUID, tenantOK := api.ParseUUID(tenantID)
 	column, sortOK := memberSortColumn(q.SortField)
 	if !tenantOK || !sortOK || len(statuses) == 0 || q.Page < 1 || q.Size < 1 {
-		return nil, 0, errors.New("identity: list members: tenant id, statuses, a known sort field and a page are required")
+		return nil, 0, errors.New("tenancy: list members: tenant id, statuses, a known sort field and a page are required")
 	}
 	const filter = "m.tenant_id = $1::uuid AND m.status = ANY($2) AND ($3 = '' OR m.role = $3)"
 	var total int64
 	err := s.pool.QueryRow(ctx,
 		"SELECT count(*) FROM ten_memberships m WHERE "+filter, tenantUUID, statuses, role).Scan(&total)
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: count members: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: count members: %w", err)
 	}
 	tenantRow := s.pool.QueryRow(ctx, "SELECT "+tenantColumns+" FROM ten_tenants WHERE id = $1::uuid", tenantUUID)
 	tenant, err := scanTenant(tenantRow)
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: read tenant: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: read tenant: %w", err)
 	}
 	direction := sortDirection(q)
 	rows, err := s.pool.Query(ctx,
@@ -220,7 +238,7 @@ FROM ten_memberships m
 WHERE `+filter+" ORDER BY "+column+" "+direction+", m.id "+direction+" LIMIT $4 OFFSET $5",
 		tenantUUID, statuses, role, q.Size, q.Offset())
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: list members: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: list members: %w", err)
 	}
 	type memberRow struct {
 		id, role, status, accountID string
@@ -232,7 +250,7 @@ WHERE `+filter+" ORDER BY "+column+" "+direction+", m.id "+direction+" LIMIT $4 
 		return item, scanErr
 	})
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: list members: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: list members: %w", err)
 	}
 	ids := make([]reqctx.AccountID, 0, len(page))
 	for _, item := range page {
@@ -240,13 +258,13 @@ WHERE `+filter+" ORDER BY "+column+" "+direction+", m.id "+direction+" LIMIT $4 
 	}
 	found, err := s.accounts.Get(ctx, ids)
 	if err != nil {
-		return nil, 0, fmt.Errorf("identity: read member accounts: %w", err)
+		return nil, 0, fmt.Errorf("tenancy: read member accounts: %w", err)
 	}
 	views := make([]MemberView, 0, len(page))
 	for _, item := range page {
 		holder, exists := found[reqctx.AccountID(item.accountID)]
 		if !exists {
-			return nil, 0, errors.New("identity: member account missing")
+			return nil, 0, errors.New("tenancy: member account missing")
 		}
 		views = append(views, MemberView{
 			MembershipView: newMembershipView(item.id, tenant, item.role, item.status),

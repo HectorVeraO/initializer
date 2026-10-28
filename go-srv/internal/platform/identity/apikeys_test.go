@@ -316,14 +316,8 @@ func TestAPIKeyWriteRoutesRefuseViewersAndKeys(t *testing.T) {
 		{http.MethodPost, "/api/v1/api-keys"},
 		{http.MethodDelete, "/api/v1/api-keys/" + randomUUID(t)},
 		{http.MethodGet, "/api/v1/api-key-scopes"},
-		{http.MethodPost, "/api/v1/tenants"},
-		{http.MethodPatch, "/api/v1/tenants/" + randomUUID(t) + "/status"},
-		{http.MethodPatch, "/api/v1/memberships/" + randomUUID(t)},
-		{http.MethodPost, "/api/v1/invitations"},
-		{http.MethodDelete, "/api/v1/invitations/" + randomUUID(t)},
-		{http.MethodPost, "/api/v1/invitations/accept"},
-		{http.MethodGet, "/api/v1/memberships"},
-		{http.MethodGet, "/api/v1/invitations"},
+		{http.MethodPost, "/api/v1/probe"},
+		{http.MethodGet, "/api/v1/probe"},
 	}
 	for _, route := range routes {
 		t.Run("key only "+route.method+" "+route.path, func(t *testing.T) {
@@ -534,7 +528,7 @@ func TestResolverRejectionsAreIdenticalAndStatusIsReadAfterTheSecret(t *testing.
 	}
 
 	// A suspended tenant answers 403 only to a verified, usable key.
-	e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", tenant)
+	e.tenants.setTenantStatus(tenant, "suspended")
 	expectError(t, e.withKey("/api/v1/tenant", valid), http.StatusForbidden, "TENANT_SUSPENDED")
 	for name, key := range rejected {
 		rec := e.withKey("/api/v1/tenant", key)
@@ -543,7 +537,7 @@ func TestResolverRejectionsAreIdenticalAndStatusIsReadAfterTheSecret(t *testing.
 			t.Fatalf("%s: suspension changed the rejection", name)
 		}
 	}
-	e.exec("UPDATE ten_tenants SET status = 'active' WHERE id = $1::uuid", tenant)
+	e.tenants.setTenantStatus(tenant, "active")
 	if rec := e.withKey("/api/v1/tenant", valid); rec.Code != http.StatusOK {
 		t.Fatalf("reactivated tenant answered %d", rec.Code)
 	}

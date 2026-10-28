@@ -6,7 +6,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
@@ -37,16 +36,6 @@ func (a *Access) CheckAccount(ctx context.Context, accountID string) (bool, erro
 // LinkIdentity runs linkIdentity.
 func (a *Access) LinkIdentity(ctx context.Context, kratosIdentityID, email string) (Account, error) {
 	return a.inner.linkIdentity(ctx, kratosIdentityID, email)
-}
-
-// NewTenantAccess builds identity's TenantAccess over pool.
-func NewTenantAccess(pool *pgxpool.Pool, clk clock.Clock) coreaccess.TenantAccess {
-	return newTenantAccess(pool, clk)
-}
-
-// NewTenantDirectory builds identity's TenantDirectory over pool.
-func NewTenantDirectory(pool *pgxpool.Pool) coreaccess.TenantDirectory {
-	return &tenantDirectory{pool: pool}
 }
 
 // NewAccounts builds identity's account Directory and Provisioner.

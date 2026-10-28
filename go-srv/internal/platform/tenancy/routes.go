@@ -1,4 +1,4 @@
-package identity
+package tenancy
 
 import (
 	"net/http"
@@ -15,7 +15,13 @@ import (
 const (
 	maxFullNameLength = 100
 	maxEmailChars     = 254
+	minPasswordLength = 12
+	maxPasswordLength = 64
 )
+
+func sessionInvalid() *api.Error {
+	return api.NewError(http.StatusUnauthorized, api.CodeSessionInvalid, "Session is missing or invalid.")
+}
 
 var tokenPattern43 = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 
@@ -30,10 +36,8 @@ type tenancyRoutes struct {
 	writer  *api.Writer
 }
 
-// mountTenancy registers the tenant, membership and invitation routes.
-func (s *service) mountTenancy(h *core.Host) {
-	s.tenancy.accounts = h.AccountDirectory()
-	s.tenancy.provisioner = h.AccountProvisioner()
+// mountRoutes registers the tenant, membership and invitation routes.
+func (s *service) mountRoutes(h *core.Host) {
 	routes := &tenancyRoutes{tenancy: s.tenancy, writer: h.API()}
 	admin := coreaccess.Policy{Kind: coreaccess.KindSession, MinRole: reqctx.RoleAdmin}
 	operator := coreaccess.Policy{Kind: coreaccess.KindSession, PlatformOperator: true}

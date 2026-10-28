@@ -1,9 +1,10 @@
-package identity
+package tenancy
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,6 +28,16 @@ func newTenantAccess(pool *pgxpool.Pool, clk clock.Clock) *tenantAccess {
 	return &tenantAccess{pool: pool, clock: clk}
 }
 
+func forbidden(code api.Code, message string) *api.Error {
+	return api.NewError(http.StatusForbidden, code, message)
+}
+
+func isAccessDenial(err error) bool {
+	var apiErr *api.Error
+	isAPIError := errors.As(err, &apiErr)
+	return isAPIError && apiErr.Status == http.StatusForbidden
+}
+
 // Grant checks the membership of account on tenant: one query joins the
 // membership to its tenant, so a non-member learns nothing about the tenant.
 func (a *tenantAccess) Grant(ctx context.Context, account reqctx.AccountID, tenant reqctx.TenantID) (coreaccess.TenantGrant, error) {
@@ -46,7 +57,7 @@ JOIN ten_memberships m ON m.tenant_id = t.id AND m.account_id = $2::uuid WHERE t
 		return coreaccess.TenantGrant{}, denied
 	}
 	if err != nil {
-		return coreaccess.TenantGrant{}, fmt.Errorf("identity: read membership: %w", err)
+		return coreaccess.TenantGrant{}, fmt.Errorf("tenancy: read membership: %w", err)
 	}
 	if ref.Status == coreaccess.TenantSuspended {
 		return coreaccess.TenantGrant{}, forbidden(api.CodeTenantSuspended, "The tenant is suspended.")
@@ -77,7 +88,7 @@ func (a *tenantAccess) Select(ctx context.Context, account reqctx.AccountID) (*c
 WHERE account_id = $1::uuid AND last_selected_at IS NOT NULL
 ORDER BY last_selected_at DESC, id LIMIT 1`, accountID).Scan(&remembered)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("identity: read last selected tenant: %w", err)
+		return nil, fmt.Errorf("tenancy: read last selected tenant: %w", err)
 	}
 	if remembered != nil {
 		grant, err := a.Grant(ctx, reqctx.AccountID(accountID), reqctx.TenantID(*remembered))
@@ -105,7 +116,7 @@ ORDER BY m.created_at, m.id LIMIT 1`, accountID).Scan(
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("identity: select tenant: %w", err)
+		return nil, fmt.Errorf("tenancy: select tenant: %w", err)
 	}
 	grant.Role = reqctx.Role(role)
 	return &grant, nil
@@ -117,7 +128,7 @@ func (a *tenantAccess) Remember(ctx context.Context, account reqctx.AccountID, t
 	accountID, accountOK := canonicalID(string(account))
 	tenantID, tenantOK := canonicalID(string(tenant))
 	if !accountOK || !tenantOK {
-		return errors.New("identity: remember tenant: ids must be UUIDs")
+		return errors.New("tenancy: remember tenant: ids must be UUIDs")
 	}
 	now := a.clock.Now()
 	tag, err := a.pool.Exec(ctx,
@@ -128,7 +139,7 @@ WHERE account_id = $1::uuid AND tenant_id = $2::uuid`,
 		return mapError("remember tenant", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return errors.New("identity: remember tenant: no membership")
+		return errors.New("tenancy: remember tenant: no membership")
 	}
 	return nil
 }
@@ -146,7 +157,7 @@ func (a *tenantAccess) Memberships(ctx context.Context, account reqctx.AccountID
 FROM ten_memberships m JOIN ten_tenants t ON t.id = m.tenant_id
 WHERE m.account_id = $1::uuid AND m.status = 'active' ORDER BY t.slug, m.id`, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("identity: list memberships: %w", err)
+		return nil, fmt.Errorf("tenancy: list memberships: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -155,14 +166,14 @@ WHERE m.account_id = $1::uuid AND m.status = 'active' ORDER BY t.slug, m.id`, ac
 		err := rows.Scan(&item.ID, &item.Tenant.ID, &item.Tenant.Slug, &item.Tenant.Name,
 			&item.Tenant.Status, &role, &item.Status)
 		if err != nil {
-			return nil, fmt.Errorf("identity: scan membership: %w", err)
+			return nil, fmt.Errorf("tenancy: scan membership: %w", err)
 		}
 		item.Role = reqctx.Role(role)
 		list = append(list, item)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, fmt.Errorf("identity: list memberships: %w", err)
+		return nil, fmt.Errorf("tenancy: list memberships: %w", err)
 	}
 	return list, nil
 }

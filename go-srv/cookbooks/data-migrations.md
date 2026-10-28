@@ -16,8 +16,8 @@ The registry the lint reads is each module's `go-srv/internal/platform/<module>/
 | Prefix | Module | Tables |
 |---|---|---|
 | `cor_` | Core migration runner: goose version tables | `cor_migrations_<module>` (one goose version table per module) |
-| `ten_` | Tenancy and memberships (core) | `ten_tenants`, `ten_memberships`, `ten_invitations` |
-| `iam_` | Identity and API keys (core) | `iam_accounts`, `iam_api_keys` |
+| `ten_` | Tenancy | `ten_tenants`, `ten_memberships`, `ten_invitations` |
+| `iam_` | Identity | `iam_accounts`, `iam_api_keys` |
 | `sys_` | Parameters | `sys_parameters`, `sys_parameter_overrides` |
 | `flg_` | Feature flags | `flg_overrides`, `flg_tenant_overrides` |
 

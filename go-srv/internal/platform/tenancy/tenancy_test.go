@@ -1,10 +1,8 @@
-package identity
+package tenancy
 
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -17,7 +15,6 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 )
 
 const (
@@ -32,45 +29,26 @@ var (
 	tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 )
 
-// tenEnv is the tenancy service over a fresh database, a fake Kratos admin
-// API and a clock the test moves.
+// tenEnv is the tenancy service over a fresh database, fake accounts and a
+// clock the test moves.
 type tenEnv struct {
-	t      *testing.T
-	pool   *pgxpool.Pool
-	store  *store
-	clock  *settableClock
-	kratos *fakeKratos
-	svc    *tenancy
-	access *access
+	t        *testing.T
+	pool     *pgxpool.Pool
+	store    *store
+	clock    *settableClock
+	svc      *tenancy
+	accounts *accountsFake
 }
 
 func newTenEnv(t *testing.T, operatorEmails ...string) *tenEnv {
 	t.Helper()
 	pool := newTestPool(t)
 	clk := &settableClock{now: tenStart}
-	fake := newFakeKratos(t)
-	adminURL, err := url.Parse(fake.server.URL)
-	if err != nil {
-		t.Fatalf("parse fake url: %v", err)
-	}
-	base, err := url.Parse(tenPublicBase)
-	if err != nil {
-		t.Fatalf("parse base url: %v", err)
-	}
-	cfg := Config{PublicBaseURL: base, InvitationTTL: tenTTL, PlatformOperatorEmails: operatorEmails}
-	svc := newTenancy(pool, clk, cfg)
-	port := newAccountDirectory(pool, clk, kratos.NewAdmin(adminURL), operatorEmails)
-	svc.accounts = port
-	svc.provisioner = port
-	return &tenEnv{
-		t:      t,
-		pool:   pool,
-		store:  newStore(pool, clk),
-		clock:  clk,
-		kratos: fake,
-		svc:    svc,
-		access: newAccess(pool, clk, operatorEmails),
-	}
+	fake := newAccountsFake(operatorEmails...)
+	svc := newTenancy(pool, clk, Config{PublicBaseURL: mustParseURL(t, tenPublicBase), InvitationTTL: tenTTL})
+	svc.accounts = fake
+	svc.provisioner = fake
+	return &tenEnv{t: t, pool: pool, store: newStore(pool, clk), clock: clk, svc: svc, accounts: fake}
 }
 
 func (e *tenEnv) exec(sql string, args ...any) {
@@ -93,12 +71,16 @@ func (e *tenEnv) count(sql string, args ...any) int {
 
 func (e *tenEnv) tenant(slug string) Tenant {
 	e.t.Helper()
-	return mustTenant(e.t, e.store, slug)
+	tenant, err := e.store.InsertTenant(context.Background(), slug, "Tenant "+slug)
+	if err != nil {
+		e.t.Fatalf("insert tenant %s: %v", slug, err)
+	}
+	return tenant
 }
 
 func (e *tenEnv) account(email string) Account {
 	e.t.Helper()
-	return mustAccount(e.t, e.store, email)
+	return e.accounts.seed(email)
 }
 
 func (e *tenEnv) member(tenantID, accountID, role, status string) Membership {
@@ -227,12 +209,9 @@ func TestOnlyTheTokenHashIsStored(t *testing.T) {
 
 	rows, err := e.pool.Query(context.Background(), `
 SELECT 'ten_tenants', kv.value FROM ten_tenants t, jsonb_each_text(to_jsonb(t)) kv
-UNION ALL SELECT 'iam_accounts', kv.value FROM iam_accounts t, jsonb_each_text(to_jsonb(t)) kv
 UNION ALL SELECT 'ten_memberships', kv.value FROM ten_memberships t, jsonb_each_text(to_jsonb(t)) kv
 UNION ALL SELECT 'ten_invitations', kv.value FROM ten_invitations t, jsonb_each_text(to_jsonb(t)) kv
-  WHERE kv.key <> 'token_hash'
-UNION ALL SELECT 'iam_api_keys', kv.value FROM iam_api_keys t, jsonb_each_text(to_jsonb(t)) kv
-  WHERE kv.key NOT IN ('secret_hash')`)
+  WHERE kv.key <> 'token_hash'`)
 	if err != nil {
 		t.Fatalf("scan columns: %v", err)
 	}
@@ -345,7 +324,7 @@ func TestOnlyAPlatformOperatorMayInviteAnOperatorAddress(t *testing.T) {
 	if n := e.count("SELECT count(*) FROM ten_invitations"); n != 0 {
 		t.Fatalf("invitations = %d, want 0", n)
 	}
-	e.exec("UPDATE iam_accounts SET is_platform_operator = true WHERE id = $1::uuid", admin.ID)
+	e.accounts.setOperator(admin.ID, true)
 	created, err := e.svc.CreateInvitation(context.Background(), tenant.ID, admin.ID, operatorEmail, reqctx.RoleMember)
 	if err != nil || created.Invitation.Status != "pending" {
 		t.Fatalf("operator invite: status=%s err=%v", created.Invitation.Status, err)
@@ -508,11 +487,11 @@ func TestAcceptInvitationFailures(t *testing.T) {
 	}{
 		{"email mismatch", "other@example.com", nil, 403, CodeInvitationEmailMismatch},
 		{"locked account", janeEmail, func(e *tenEnv, _ Tenant, jane Account) {
-			e.exec("UPDATE iam_accounts SET status = 'locked' WHERE id = $1::uuid", jane.ID)
-		}, 403, CodeAccountLockedOrDisabled},
+			e.accounts.setStatus(jane.ID, accounts.StatusLocked)
+		}, 403, codeAccountLockedOrDisabled},
 		{"disabled account", janeEmail, func(e *tenEnv, _ Tenant, jane Account) {
-			e.exec("UPDATE iam_accounts SET status = 'disabled' WHERE id = $1::uuid", jane.ID)
-		}, 403, CodeAccountLockedOrDisabled},
+			e.accounts.setStatus(jane.ID, accounts.StatusDisabled)
+		}, 403, codeAccountLockedOrDisabled},
 		{"suspended tenant", janeEmail, func(e *tenEnv, tenant Tenant, _ Account) {
 			e.exec("UPDATE ten_tenants SET status = 'suspended' WHERE id = $1::uuid", tenant.ID)
 		}, 403, api.CodeTenantSuspended},
@@ -549,7 +528,7 @@ func TestAcceptInvitationRejectsAnUnknownAccount(t *testing.T) {
 
 	_, err := e.svc.AcceptInvitation(context.Background(), "00000000-0000-4000-8000-000000000001", token)
 
-	requireAPIError(t, err, 403, CodeAccountLockedOrDisabled)
+	requireAPIError(t, err, 403, codeAccountLockedOrDisabled)
 	if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
 		t.Fatalf("invitation status after failure = %s, want pending", got)
 	}
@@ -622,11 +601,11 @@ func TestAcceptInvitationReactivatesTheSameMembership(t *testing.T) {
 	}
 }
 
-func TestAcceptNewCreatesIdentityAccountAndMembership(t *testing.T) {
+func TestAcceptNewProvisionsTheAccountAndAddsTheMembership(t *testing.T) {
 	e := newTenEnv(t, janeEmail)
 	tenant := e.tenant("tenant-a")
 	operator := e.account("admin@example.com")
-	e.exec("UPDATE iam_accounts SET is_platform_operator = true WHERE id = $1::uuid", operator.ID)
+	e.accounts.setOperator(operator.ID, true)
 	created, token := e.invite(tenant.ID, operator.ID, janeEmail, reqctx.RoleMember)
 	password := randomPassword(t)
 
@@ -641,28 +620,18 @@ func TestAcceptNewCreatesIdentityAccountAndMembership(t *testing.T) {
 	if got.Membership.Role != "member" || got.Membership.Status != "active" || got.Membership.Tenant.ID != tenant.ID {
 		t.Fatalf("membership view: %+v", got.Membership)
 	}
-	var isOperator bool
-	var identityID string
-	err = e.pool.QueryRow(context.Background(),
-		"SELECT is_platform_operator, kratos_identity_id::text FROM iam_accounts WHERE id = $1::uuid", got.Account.ID).
-		Scan(&isOperator, &identityID)
-	if err != nil || !isOperator {
-		t.Fatalf("operator flag = %v err=%v", isOperator, err)
+	holders, err := e.accounts.ByEmail(context.Background(), janeEmail)
+	if err != nil || len(holders) != 1 || string(holders[0].ID) != got.Account.ID || !holders[0].PlatformOperator {
+		t.Fatalf("provisioned accounts = %+v err=%v, want the listed email provisioned as an operator", holders, err)
 	}
-	if identityID != e.kratos.identities[janeEmail] {
-		t.Fatalf("account is not linked to the created identity")
+	if row := e.membershipRow(tenant.ID, got.Account.ID); row.Role != "member" || row.Status != "active" {
+		t.Fatalf("membership row: %+v", row)
 	}
 	if got := e.invitationStatus(created.Invitation.ID); got != "accepted" {
 		t.Fatalf("invitation status = %s", got)
 	}
-	var sent bool
-	for _, req := range e.kratos.received() {
-		if req.Method == "POST" && strings.Contains(req.Body, password) {
-			sent = true
-		}
-	}
-	if !sent {
-		t.Fatalf("the password never reached the Kratos create call")
+	if !e.accounts.receivedPassword(password) {
+		t.Fatalf("the password never reached the provisioner")
 	}
 }
 
@@ -677,86 +646,65 @@ func TestAcceptNewDoesNotGrantOperatorWhenTheEmailIsNotListed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept new: %v", err)
 	}
-	var isOperator bool
-	err = e.pool.QueryRow(context.Background(),
-		"SELECT is_platform_operator FROM iam_accounts WHERE id = $1::uuid", got.Account.ID).Scan(&isOperator)
-	if err != nil || isOperator {
-		t.Fatalf("operator flag = %v err=%v, want false", isOperator, err)
+	holders, err := e.accounts.Get(context.Background(), []reqctx.AccountID{reqctx.AccountID(got.Account.ID)})
+	if err != nil || holders[reqctx.AccountID(got.Account.ID)].PlatformOperator {
+		t.Fatalf("holders = %+v err=%v, want no operator flag", holders, err)
 	}
 }
 
-func TestAcceptNewWithExistingIdentityKeepsTheInvitationPendingAndAcceptRecovers(t *testing.T) {
+func TestAcceptNewWithAnExistingAccountKeepsTheInvitationPendingAndAcceptRecovers(t *testing.T) {
 	e := newTenEnv(t)
 	tenant := e.tenant("tenant-a")
 	admin := e.account("admin@example.com")
+	jane := e.account(janeEmail)
 	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
-	identityID := e.kratos.addIdentity(janeEmail)
 
 	_, err := e.svc.AcceptNew(context.Background(), token, randomPassword(t), "Jane Doe")
 
-	requireAPIError(t, err, 409, CodeIdentityAlreadyExists)
+	requireAPIError(t, err, 409, accounts.CodeIdentityAlreadyExists)
 	if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
 		t.Fatalf("invitation status = %s, want pending", got)
 	}
-	if e.kratos.count("POST") != 0 {
-		t.Fatalf("an identity was created although one existed")
-	}
-	account, err := e.access.linkIdentity(context.Background(), identityID, janeEmail)
-	if err != nil {
-		t.Fatalf("link identity: %v", err)
-	}
-	view, err := e.svc.AcceptInvitation(context.Background(), account.ID, token)
+	view, err := e.svc.AcceptInvitation(context.Background(), jane.ID, token)
 	if err != nil || view.Role != "member" {
-		t.Fatalf("accept after link: %+v err=%v", view, err)
+		t.Fatalf("accept after the conflict: %+v err=%v", view, err)
 	}
 }
 
-func TestAcceptNewKratosCreateConflictIsIdentityAlreadyExists(t *testing.T) {
-	e := newTenEnv(t)
-	tenant := e.tenant("tenant-a")
-	admin := e.account("admin@example.com")
-	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
-	e.kratos.addIdentity(janeEmail)
-	e.kratos.hideFirstFind = true
-
-	_, err := e.svc.AcceptNew(context.Background(), token, randomPassword(t), "Jane Doe")
-
-	requireAPIError(t, err, 409, CodeIdentityAlreadyExists)
-	if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
-		t.Fatalf("invitation status = %s", got)
+func TestAcceptNewPassesProvisionerRefusalsThroughAndLeavesTheInvitationPending(t *testing.T) {
+	var rejected api.Problems
+	rejected.Add("password", accounts.CodePasswordRejected, "The password was rejected by the password policy.")
+	cases := map[string]struct {
+		refusal error
+		status  int
+		code    api.Code
+	}{
+		"identity exists": {api.NewError(409, accounts.CodeIdentityAlreadyExists, "An account with this email already exists."), 409, accounts.CodeIdentityAlreadyExists},
+		"password policy": {rejected.Err(), 422, api.CodeValidationFailed},
+		"unavailable":     {api.NewError(503, accounts.CodeIdentityProviderUnavailable, "Sign-in is unavailable right now."), 503, accounts.CodeIdentityProviderUnavailable},
 	}
-	if n := e.count("SELECT count(*) FROM iam_accounts WHERE email = $1", janeEmail); n != 0 {
-		t.Fatalf("accounts = %d, want 0", n)
-	}
-}
-
-func TestAcceptNewWithUnavailableKratosRollsBack(t *testing.T) {
-	cases := map[string]func(f *fakeKratos){
-		"lookup fails": func(f *fakeKratos) { f.failures = 1 },
-		"create fails": func(f *fakeKratos) { f.rejectStatus = 503 },
-	}
-	for name, breakKratos := range cases {
+	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newTenEnv(t)
 			tenant := e.tenant("tenant-a")
 			admin := e.account("admin@example.com")
 			created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
-			breakKratos(e.kratos)
+			e.accounts.failProvision(tc.refusal)
 
 			_, err := e.svc.AcceptNew(context.Background(), token, randomPassword(t), "Jane Doe")
 
-			requireAPIError(t, err, 503, CodeIdentityProviderUnavailable)
+			requireAPIError(t, err, tc.status, tc.code)
 			if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
 				t.Fatalf("invitation status = %s", got)
 			}
-			if n := e.count("SELECT count(*) FROM iam_accounts WHERE email = $1", janeEmail); n != 0 {
-				t.Fatalf("accounts = %d, want 0", n)
+			if n := e.count("SELECT count(*) FROM ten_memberships"); n != 0 {
+				t.Fatalf("memberships = %d, want 0", n)
 			}
 		})
 	}
 }
 
-func TestAcceptNewRejectsBeforeCallingKratos(t *testing.T) {
+func TestAcceptNewRejectsBeforeCallingTheProvisioner(t *testing.T) {
 	e := newTenEnv(t)
 	tenant := e.tenant("tenant-a")
 	admin := e.account("admin@example.com")
@@ -773,8 +721,8 @@ func TestAcceptNewRejectsBeforeCallingKratos(t *testing.T) {
 	_, suspended := e.svc.AcceptNew(ctx, token, randomPassword(t), "Jane Doe")
 	requireAPIError(t, suspended, 403, api.CodeTenantSuspended)
 
-	if n := len(e.kratos.received()); n != 0 {
-		t.Fatalf("Kratos received %d requests, want 0", n)
+	if _, provisions := e.accounts.calls(); provisions != 0 {
+		t.Fatalf("the provisioner was called %d times, want 0", provisions)
 	}
 }
 
@@ -970,24 +918,16 @@ func TestUpdateMembershipWithoutChangeLeavesUpdatedAt(t *testing.T) {
 func FuzzAcceptInvitationToken(f *testing.F) {
 	pool := newTestPool(f)
 	clk := &settableClock{now: tenStart}
-	base, err := url.Parse(tenPublicBase)
-	if err != nil {
-		f.Fatalf("parse: %v", err)
-	}
-	svc := newTenancy(pool, clk, Config{PublicBaseURL: base, InvitationTTL: tenTTL})
-	port := newAccountDirectory(pool, clk, nil, nil)
-	svc.accounts = port
-	svc.provisioner = port
+	svc := newTenancy(pool, clk, Config{PublicBaseURL: mustParseURL(f, tenPublicBase), InvitationTTL: tenTTL})
+	fake := newAccountsFake()
+	svc.accounts = fake
+	svc.provisioner = fake
 	st := newStore(pool, clk)
 	tenant, err := st.InsertTenant(context.Background(), "tenant-a", "Tenant A")
 	if err != nil {
 		f.Fatalf("tenant: %v", err)
 	}
-	name := "Jane Doe"
-	account, err := st.UpsertAccount(context.Background(), randomUUID(f), janeEmail, &name)
-	if err != nil {
-		f.Fatalf("account: %v", err)
-	}
+	account := fake.seed(janeEmail)
 	for _, seed := range []string{"", "x", "' OR 1=1 --", "%", "\x00", strings.Repeat("A", 43), strings.Repeat("A", 4096), "../../etc/passwd"} {
 		f.Add(seed)
 	}
@@ -1090,29 +1030,36 @@ func TestServicesRejectMalformedInput(t *testing.T) {
 	}
 }
 
-func TestAcceptNewAfterProvisionFailureLeavesAccountAndAcceptRecovers(t *testing.T) {
+func TestAcceptNewFailingAfterProvisionLeavesTheAccountAndAcceptRecovers(t *testing.T) {
 	ctx := context.Background()
 	e := newTenEnv(t)
 	tenant := e.tenant("tenant-a")
 	admin := e.account("admin@example.com")
-	jane := e.account(janeEmail)
-	e.member(tenant.ID, jane.ID, "member", "revoked")
 	created, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
-	e.kratos.rejectStatus = http.StatusInternalServerError
+	e.exec(`CREATE FUNCTION it_reject_membership() RETURNS trigger AS $$
+		BEGIN RAISE EXCEPTION 'membership write rejected'; END; $$ LANGUAGE plpgsql`)
+	e.exec(`CREATE TRIGGER it_reject_membership BEFORE INSERT ON ten_memberships
+		FOR EACH ROW EXECUTE FUNCTION it_reject_membership()`)
 
 	_, err := e.svc.AcceptNew(ctx, token, randomPassword(t), "Jane Doe")
 
-	requireAPIError(t, err, 503, CodeIdentityProviderUnavailable)
+	var apiErr *api.Error
+	if err == nil || errors.As(err, &apiErr) {
+		t.Fatalf("err = %v, want an operational error", err)
+	}
 	if got := e.invitationStatus(created.Invitation.ID); got != "pending" {
 		t.Fatalf("invitation status = %s, want pending", got)
 	}
+	holders, err := e.accounts.ByEmail(ctx, janeEmail)
+	if err != nil || len(holders) != 1 {
+		t.Fatalf("holders = %+v err=%v, want the provisioned account to stay", holders, err)
+	}
 
-	e.kratos.rejectStatus = 0
-	e.kratos.identities[janeEmail] = "11111111-1111-4111-8111-111111111111"
+	e.exec("DROP TRIGGER it_reject_membership ON ten_memberships")
 	_, err = e.svc.AcceptNew(ctx, token, randomPassword(t), "Jane Doe")
-	requireAPIError(t, err, 409, CodeIdentityAlreadyExists)
+	requireAPIError(t, err, 409, accounts.CodeIdentityAlreadyExists)
 
-	view, err := e.svc.AcceptInvitation(ctx, jane.ID, token)
+	view, err := e.svc.AcceptInvitation(ctx, string(holders[0].ID), token)
 	if err != nil || view.Status != statusActive {
 		t.Fatalf("accept after failure: %+v err=%v", view, err)
 	}
@@ -1127,7 +1074,7 @@ func TestAcceptInvitationComparesEmailsCaseInsensitively(t *testing.T) {
 	admin := e.account("admin@example.com")
 	jane := e.account(janeEmail)
 	_, token := e.invite(tenant.ID, admin.ID, janeEmail, reqctx.RoleMember)
-	e.svc.accounts = upperCaseDirectory{inner: e.svc.accounts}
+	e.accounts.upperCase = true
 
 	view, err := e.svc.AcceptInvitation(context.Background(), jane.ID, token)
 
@@ -1142,7 +1089,6 @@ func TestCreateInvitationSeesActiveMemberAmongAccountsSharingTheEmail(t *testing
 	admin := e.account("admin@example.com")
 	older := e.account("shared@example.com")
 	newer := e.account("shared@example.com")
-	e.exec("UPDATE iam_accounts SET created_at = created_at + interval '1 hour' WHERE id = $1::uuid", newer.ID)
 	e.member(tenant.ID, older.ID, "member", "revoked")
 	e.member(tenant.ID, newer.ID, "member", "active")
 
@@ -1151,52 +1097,13 @@ func TestCreateInvitationSeesActiveMemberAmongAccountsSharingTheEmail(t *testing
 	requireAPIError(t, err, 409, CodeMembershipAlreadyActive)
 }
 
-// upperCaseDirectory answers every email upper-cased, as a store that does not
-// normalize would. iam_accounts_email_lower forbids seeding such a row, so the
-// accounts port is the only place the case can be injected.
-type upperCaseDirectory struct {
-	inner accounts.Directory
-}
-
-func (d upperCaseDirectory) Get(ctx context.Context, ids []reqctx.AccountID) (map[reqctx.AccountID]accounts.Ref, error) {
-	found, err := d.inner.Get(ctx, ids)
-	for id, ref := range found {
-		ref.Email = strings.ToUpper(ref.Email)
-		found[id] = ref
-	}
-	return found, err
-}
-
-func (d upperCaseDirectory) ByEmail(ctx context.Context, email string) ([]accounts.Ref, error) {
-	return d.inner.ByEmail(ctx, email)
-}
-
-// holeDirectory answers every account except the hidden ones, as a directory
-// that lost a row would.
-type holeDirectory struct {
-	inner  accounts.Directory
-	hidden map[reqctx.AccountID]bool
-}
-
-func (d holeDirectory) Get(ctx context.Context, ids []reqctx.AccountID) (map[reqctx.AccountID]accounts.Ref, error) {
-	found, err := d.inner.Get(ctx, ids)
-	for id := range d.hidden {
-		delete(found, id)
-	}
-	return found, err
-}
-
-func (d holeDirectory) ByEmail(ctx context.Context, email string) ([]accounts.Ref, error) {
-	return d.inner.ByEmail(ctx, email)
-}
-
 func requireMissingMemberAccount(t *testing.T, err error) {
 	t.Helper()
 	var apiErr *api.Error
 	if err == nil || errors.As(err, &apiErr) {
 		t.Fatalf("err = %v, want an operational error that answers 500", err)
 	}
-	if !strings.Contains(err.Error(), "identity: member account missing") {
+	if !strings.Contains(err.Error(), "tenancy: member account missing") {
 		t.Fatalf("err = %v, want member account missing", err)
 	}
 }
@@ -1213,7 +1120,7 @@ func TestListMembersFillsAccountDataFromTheDirectoryInCreatedAtOrder(t *testing.
 	e.exec("UPDATE ten_memberships SET created_at = $2 WHERE id = $1::uuid", zedMembership.ID, time.Unix(1000, 0).UTC())
 	e.exec("UPDATE ten_memberships SET created_at = $2 WHERE id = $1::uuid", midMembership.ID, time.Unix(2000, 0).UTC())
 	e.exec("UPDATE ten_memberships SET created_at = $2 WHERE id = $1::uuid", amyMembership.ID, time.Unix(3000, 0).UTC())
-	e.svc.accounts = upperCaseDirectory{inner: e.svc.accounts}
+	e.accounts.upperCase = true
 	emails := func(views []MemberView) string {
 		var out []string
 		for _, view := range views {
@@ -1261,7 +1168,7 @@ func TestListMembersWithAMissingAccountIsAnOperationalError(t *testing.T) {
 	lost := e.account("lost@example.com")
 	e.member(tenant.ID, kept.ID, "member", statusActive)
 	e.member(tenant.ID, lost.ID, "member", statusActive)
-	e.svc.accounts = holeDirectory{inner: e.svc.accounts, hidden: map[reqctx.AccountID]bool{reqctx.AccountID(lost.ID): true}}
+	e.accounts.hide(lost.ID)
 
 	_, _, err := e.svc.ListMembers(context.Background(), tenant.ID, []string{statusActive}, "",
 		api.PageQuery{Page: 1, Size: 10, SortField: "createdAt"})
@@ -1276,7 +1183,7 @@ func TestUpdateMembershipWithAMissingAccountIsAnOperationalError(t *testing.T) {
 	lost := e.account("lost@example.com")
 	e.member(tenant.ID, admin.ID, "admin", statusActive)
 	lostMembership := e.member(tenant.ID, lost.ID, "member", statusActive)
-	e.svc.accounts = holeDirectory{inner: e.svc.accounts, hidden: map[reqctx.AccountID]bool{reqctx.AccountID(lost.ID): true}}
+	e.accounts.hide(lost.ID)
 	role := reqctx.RoleViewer
 
 	_, err := e.svc.UpdateMembership(context.Background(), tenant.ID, lostMembership.ID, &role, nil)

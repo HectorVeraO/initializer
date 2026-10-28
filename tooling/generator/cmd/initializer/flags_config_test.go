@@ -108,12 +108,37 @@ func TestGenerateWithoutFeatureFlagsShipsNoFlagsConfig(t *testing.T) {
 	}
 }
 
-// A project with feature-flags keeps the configuration, byte for byte.
-func TestGenerateWithFeatureFlagsKeepsFlagsConfig(t *testing.T) {
+// A project with feature-flags keeps its configuration lines and sections.
+// The repository copy also carries the blocks of the other modules, so the
+// byte-for-byte comparison lives in the test below.
+func TestGenerateWithFeatureFlagsOnlyKeepsFlagsConfig(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
 	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
 		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "feature-flags")
+	if code != exitOK {
+		t.Fatalf("generate exit %d: %s", code, stderr)
+	}
+	data, err := os.ReadFile(filepath.Join(out, ".deploy", "local", ".example.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "APP_FLAGS_FILE") {
+		t.Error(".example.env lost the feature-flags configuration")
+	}
+	if strings.Contains(string(data), "APP_BOOTSTRAP_TENANT_SLUG") {
+		t.Error(".example.env carries tenancy configuration without the tenancy module")
+	}
+}
+
+// A project with feature-flags keeps the configuration, byte for byte. The
+// repository copy carries the blocks of every module that has one, so the
+// project selects tenancy too.
+func TestGenerateWithFeatureFlagsAndTenancyKeepsConfigByteForByte(t *testing.T) {
+	root, catalogPath := realCatalog(t)
+	out := filepath.Join(t.TempDir(), "out")
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "feature-flags,tenancy")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
 	}

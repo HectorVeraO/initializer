@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "stack": "go-srv",
+  "module": "tenancy",
+  "version": "0.1.0",
+  "implied": false,
+  "implementsSpec": { "tenancy": "0.1.0" },
+  "requiresCore": "^0.1.0",
+  "requiresModules": [{ "module": "identity", "range": "^0.1.0" }],
+  "tablePrefixes": ["ten"],
+  "files": ["go-srv/internal/platform/tenancy/"],
+  "exclude": []
+}

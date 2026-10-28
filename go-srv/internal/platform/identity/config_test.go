@@ -30,9 +30,8 @@ func parse(t *testing.T, settings map[string]string) (Config, string) {
 	return cfg, err.Error()
 }
 
-func bootstrapTriple() map[string]string {
+func bootstrapPair() map[string]string {
 	return map[string]string{
-		keyBootstrapSlug:     "acme",
 		keyBootstrapEmail:    "admin@example.com",
 		keyBootstrapPassword: "change-me-local-only",
 	}
@@ -53,7 +52,7 @@ func TestDefaultsParseWithoutProblems(t *testing.T) {
 		t.Fatalf("problems: %s", problems)
 	}
 	if cfg.SessionTTL != 10*time.Minute || cfg.SessionRefreshMaxAge != 24*time.Hour ||
-		cfg.InvitationTTL != 168*time.Hour || cfg.Bootstrap.Timeout != 60*time.Second {
+		cfg.Bootstrap.Timeout != 60*time.Second {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 	if cfg.KratosPublicURL.String() != "http://127.0.0.1:10133" || cfg.KratosAdminURL.String() != "http://127.0.0.1:10134" {
@@ -88,10 +87,6 @@ func TestDurationBoundaries(t *testing.T) {
 		{"refresh 10m", keyRefreshMaxAge, "10m", false},
 		{"refresh 24h", keyRefreshMaxAge, "24h", false},
 		{"refresh 25h", keyRefreshMaxAge, "25h", true},
-		{"invitation 59m", keyInvitationTTL, "59m", true},
-		{"invitation 1h", keyInvitationTTL, "1h", false},
-		{"invitation 720h", keyInvitationTTL, "720h", false},
-		{"invitation 721h", keyInvitationTTL, "721h", true},
 		{"bootstrap timeout 4s", keyBootstrapTimeout, "4s", true},
 		{"bootstrap timeout 5s", keyBootstrapTimeout, "5s", false},
 		{"bootstrap timeout 10m", keyBootstrapTimeout, "10m", false},
@@ -136,32 +131,6 @@ func TestKratosURLMustBeAbsoluteHTTP(t *testing.T) {
 	}
 }
 
-func TestSlugBoundaries(t *testing.T) {
-	tests := []struct {
-		slug  string
-		valid bool
-	}{
-		{"ab", false},
-		{"abc", true},
-		{strings.Repeat("a", 40), true},
-		{strings.Repeat("a", 41), false},
-		{"-abc", false},
-		{"abc-", false},
-		{"Abc", false},
-		{"ab_c", false},
-		{"123e4567-e89b-42d3-a456-426614174000", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.slug, func(t *testing.T) {
-			_, problems := parse(t, with(bootstrapTriple(), keyBootstrapSlug, tc.slug))
-			got := !strings.Contains(problems, keyBootstrapSlug)
-			if got != tc.valid {
-				t.Fatalf("valid=%v, problems=%q", got, problems)
-			}
-		})
-	}
-}
-
 func TestBootstrapEmailRules(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -177,7 +146,7 @@ func TestBootstrapEmailRules(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg, problems := parse(t, with(bootstrapTriple(), keyBootstrapEmail, tc.email))
+			cfg, problems := parse(t, with(bootstrapPair(), keyBootstrapEmail, tc.email))
 			got := !strings.Contains(problems, keyBootstrapEmail)
 			if got != tc.valid {
 				t.Fatalf("valid=%v, problems=%q", got, problems)
@@ -194,11 +163,11 @@ func TestBootstrapEmailLengthBoundary(t *testing.T) {
 	if len(at254) != 254 || strings.HasSuffix(at254, ".") {
 		t.Fatalf("fixture is wrong: len=%d", len(at254))
 	}
-	_, problems := parse(t, with(bootstrapTriple(), keyBootstrapEmail, at254))
+	_, problems := parse(t, with(bootstrapPair(), keyBootstrapEmail, at254))
 	if problems != "" {
 		t.Fatalf("254 characters rejected: %q", problems)
 	}
-	_, problems = parse(t, with(bootstrapTriple(), keyBootstrapEmail, at254+"d"))
+	_, problems = parse(t, with(bootstrapPair(), keyBootstrapEmail, at254+"d"))
 	if !strings.Contains(problems, keyBootstrapEmail) {
 		t.Fatalf("255 characters accepted")
 	}
@@ -212,7 +181,7 @@ func TestBootstrapPasswordLength(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(fmt.Sprint(tc.length), func(t *testing.T) {
 			password := strings.Repeat("p", tc.length)
-			_, problems := parse(t, with(bootstrapTriple(), keyBootstrapPassword, password))
+			_, problems := parse(t, with(bootstrapPair(), keyBootstrapPassword, password))
 			got := !strings.Contains(problems, keyBootstrapPassword)
 			if got != tc.valid {
 				t.Fatalf("valid=%v, problems=%q", got, problems)
@@ -229,24 +198,28 @@ func TestBootstrapPasswordCountsCharactersNotBytes(t *testing.T) {
 	if utf8.RuneCountInString(password) != 12 || len(password) != 24 {
 		t.Fatal("fixture is wrong")
 	}
-	_, problems := parse(t, with(bootstrapTriple(), keyBootstrapPassword, password))
+	_, problems := parse(t, with(bootstrapPair(), keyBootstrapPassword, password))
 	if problems != "" {
 		t.Fatalf("problems: %q", problems)
 	}
 }
 
-func TestBootstrapIsAllOrNone(t *testing.T) {
-	triple := bootstrapTriple()
-	cfg, problems := parse(t, triple)
+func TestBootstrapIsEnabledOnlyWithEmailAndPassword(t *testing.T) {
+	pair := bootstrapPair()
+	cfg, problems := parse(t, pair)
 	if problems != "" || !cfg.Bootstrap.Enabled {
-		t.Fatalf("full triple: enabled=%v problems=%q", cfg.Bootstrap.Enabled, problems)
+		t.Fatalf("full pair: enabled=%v problems=%q", cfg.Bootstrap.Enabled, problems)
 	}
-	if cfg.Bootstrap.TenantName != "acme" {
-		t.Fatalf("name must default to the slug, got %q", cfg.Bootstrap.TenantName)
+	if cfg.Bootstrap.AdminEmail != "admin@example.com" {
+		t.Fatalf("admin email = %q", cfg.Bootstrap.AdminEmail)
 	}
-	for _, missing := range []string{keyBootstrapSlug, keyBootstrapEmail, keyBootstrapPassword} {
+	cfg, problems = parse(t, nil)
+	if problems != "" || cfg.Bootstrap.Enabled {
+		t.Fatalf("unset: enabled=%v problems=%q, want disabled without problems", cfg.Bootstrap.Enabled, problems)
+	}
+	for _, missing := range []string{keyBootstrapEmail, keyBootstrapPassword} {
 		partial := map[string]string{}
-		for k, v := range triple {
+		for k, v := range pair {
 			if k != missing {
 				partial[k] = v
 			}
@@ -255,41 +228,25 @@ func TestBootstrapIsAllOrNone(t *testing.T) {
 		if !strings.Contains(problems, missing) {
 			t.Errorf("missing %s: problems=%q", missing, problems)
 		}
+		if !strings.Contains(problems, "is required when another APP_BOOTSTRAP_ADMIN_* variable is set") {
+			t.Errorf("missing %s: problems=%q do not state the rule", missing, problems)
+		}
 		if cfg.Bootstrap.Enabled {
 			t.Errorf("missing %s: bootstrap enabled", missing)
 		}
 	}
 }
 
-func TestBootstrapReportsEveryMissingKey(t *testing.T) {
-	partial := map[string]string{keyBootstrapSlug: "acme"}
-	_, problems := parse(t, partial)
-	for _, missing := range []string{keyBootstrapEmail, keyBootstrapPassword} {
-		if !strings.Contains(problems, missing) {
-			t.Errorf("missing %s not reported: problems=%q", missing, problems)
-		}
-	}
-}
+func TestBootstrapIgnoresTheTenantKeys(t *testing.T) {
+	settings := bootstrapPair()
+	settings["APP_BOOTSTRAP_TENANT_SLUG"] = "Not A Slug"
+	settings["APP_BOOTSTRAP_TENANT_NAME"] = strings.Repeat("n", 101)
+	settings["APP_INVITATION_TTL"] = "1s"
 
-func TestBootstrapTenantNameLimitAppliesWithoutBootstrap(t *testing.T) {
-	_, problems := parse(t, map[string]string{keyBootstrapName: strings.Repeat("n", 101)})
-	if !strings.Contains(problems, keyBootstrapName) {
-		t.Fatalf("101 characters accepted without bootstrap: %q", problems)
-	}
-}
+	cfg, problems := parse(t, settings)
 
-func TestBootstrapTenantNameRules(t *testing.T) {
-	cfg, problems := parse(t, with(bootstrapTriple(), keyBootstrapName, "  Acme Corp  "))
-	if problems != "" || cfg.Bootstrap.TenantName != "Acme Corp" {
-		t.Fatalf("name=%q problems=%q", cfg.Bootstrap.TenantName, problems)
-	}
-	_, problems = parse(t, with(bootstrapTriple(), keyBootstrapName, strings.Repeat("n", 100)))
-	if problems != "" {
-		t.Fatalf("100 characters: %q", problems)
-	}
-	_, problems = parse(t, with(bootstrapTriple(), keyBootstrapName, strings.Repeat("n", 101)))
-	if !strings.Contains(problems, keyBootstrapName) {
-		t.Fatalf("101 characters accepted")
+	if problems != "" || !cfg.Bootstrap.Enabled {
+		t.Fatalf("enabled=%v problems=%q, want the tenancy keys left to tenancy", cfg.Bootstrap.Enabled, problems)
 	}
 }
 
@@ -311,12 +268,10 @@ func TestSeveralProblemsAreReportedTogetherWithoutValues(t *testing.T) {
 	secret := "tiny-pw"
 	_, problems := parse(t, map[string]string{
 		keySessionTTL:        "99h",
-		keyInvitationTTL:     "1s",
 		keyKratosAdminURL:    "not a url",
-		keyBootstrapSlug:     "acme",
 		keyBootstrapPassword: secret,
 	})
-	keys := []string{keySessionTTL, keyInvitationTTL, keyKratosAdminURL, keyBootstrapEmail, keyBootstrapPassword}
+	keys := []string{keySessionTTL, keyKratosAdminURL, keyBootstrapEmail, keyBootstrapPassword}
 	for _, key := range keys {
 		if !strings.Contains(problems, key) {
 			t.Errorf("problems do not name %s: %q", key, problems)
@@ -330,8 +285,8 @@ func TestSeveralProblemsAreReportedTogetherWithoutValues(t *testing.T) {
 }
 
 func TestSecretsAreRedactedInFmtAndSlog(t *testing.T) {
-	cfg, _ := parse(t, bootstrapTriple())
-	password := bootstrapTriple()[keyBootstrapPassword]
+	cfg, _ := parse(t, bootstrapPair())
+	password := bootstrapPair()[keyBootstrapPassword]
 	got := fmt.Sprintf("%v %+v %#v", cfg.Bootstrap.AdminPassword, cfg.Bootstrap, cfg.SessionKeys)
 	if strings.Contains(got, password) || !strings.Contains(got, "[redacted]") {
 		t.Fatalf("fmt output: %s", got)
@@ -359,21 +314,6 @@ func FuzzNormalizeEmail(f *testing.F) {
 		}
 		if reader.Err() != nil || got != strings.ToLower(got) || len(got) > maxEmailLength || strings.ContainsAny(got, " \t\r\n<>") {
 			t.Fatalf("accepted %q as %q", raw, got)
-		}
-	})
-}
-
-func FuzzIsValidSlug(f *testing.F) {
-	for _, seed := range []string{"acme", "ab", "123e4567-e89b-42d3-a456-426614174000", "-a-", "A_B", ""} {
-		f.Add(seed)
-	}
-	f.Fuzz(func(t *testing.T, slug string) {
-		if !isValidSlug(slug) {
-			return
-		}
-		tooShortOrLong := len(slug) < 3 || len(slug) > 40
-		if tooShortOrLong || strings.ToLower(slug) != slug || strings.HasPrefix(slug, "-") || strings.HasSuffix(slug, "-") {
-			t.Fatalf("accepted %q", slug)
 		}
 	})
 }
