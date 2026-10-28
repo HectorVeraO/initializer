@@ -244,8 +244,16 @@ func TestCheckEqualSelectionsWithDifferentTypedModulesAreOneLeg(t *testing.T) {
 func TestCheckOfNoFilesNamesEveryLeg(t *testing.T) {
 	cat := fixture.Load(t).Catalog
 	issues := legs.Check(cat, nil)
-	if len(issues) != len(legs.Derive(cat)) {
-		t.Fatalf("issues = %d, legs = %d", len(issues), len(legs.Derive(cat)))
+	got := driftMessages(issues)
+	derived := legs.Derive(cat)
+	if len(issues) != len(derived) {
+		t.Fatalf("issues = %d, legs = %d", len(issues), len(derived))
+	}
+	for _, leg := range derived {
+		want := "testdata/ci no selection file for stacks " + strings.Join(leg.Stacks, ",") + " modules " + strings.Join(leg.Modules, ",")
+		if got[want] != legs.CodeDrift {
+			t.Errorf("missing %q in %v", want, got)
+		}
 	}
 }
 
