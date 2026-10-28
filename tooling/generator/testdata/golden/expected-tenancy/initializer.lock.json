@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "generator": "0.1.0",
-  "catalogSha256": "6f25e8c6858e38677d3ab88b980278643c0b74ebd990595afdd5199d03936a35",
+  "catalogSha256": "bcbd8bcdd60ed802efdbf7e97b02c50622fc36ad072c6ad0af08e2f80acbab44",
   "selection": {
     "schema": 1,
     "project": {
@@ -175,7 +175,11 @@
         },
         {
           "path": "go-srv/internal/platform/identity/module.manifest.json",
-          "sha256": "be33fb17f81973c34fa1e861433b22535bf1f96de2a21ad411a303abe32aaa58"
+          "sha256": "5daed183df7d61787d855b3fe1730f3d1f0b8771d77b106633da466192ea1102"
+        },
+        {
+          "path": "specs/tck-support/actors/index.ts",
+          "sha256": "396cec03e107759767f77d38a9adeddc967a3d7d140cbc0aadf4e3003587d765"
         }
       ]
     },
@@ -189,7 +193,7 @@
       "files": [
         {
           "path": "go-srv/internal/platform/parameters/module.manifest.json",
-          "sha256": "d6ef5d50aaa83a1475e1a16a9cb736daf0b4701e24d4ec7999c474011d9f848b"
+          "sha256": "ad62a041192ac8db109cfe488eb77ae8580f5bcf0b57b5e5e8d71322cab06cbb"
         },
         {
           "path": "go-srv/internal/platform/parameters/parameters.go",

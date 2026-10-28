@@ -1,12 +1,18 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
+
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/legs"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 )
 
 // realCheckoutRoot returns the checkout root that holds tooling/generator.
@@ -122,6 +128,219 @@ func TestGenerateWithFeatureFlagsKeepsFlagsConfig(t *testing.T) {
 		}
 		if string(got) != string(want) {
 			t.Errorf("%s differs from the repository copy", p)
+		}
+	}
+}
+
+// A core-only project ships nothing of identity.
+func TestGenerateCoreOnlyShipsNoIdentity(t *testing.T) {
+	root, catalogPath := realCatalog(t)
+	out := filepath.Join(t.TempDir(), "out")
+	selection := writeSelection(t, `{"schema":1,"project":{"name":"acme-backend","goModule":"example.com/acme/backend"},"stacks":["go-srv"],"modules":[]}`)
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out, "--selection", selection)
+	if code != exitOK {
+		t.Fatalf("generate exit %d: %s", code, stderr)
+	}
+	for _, absent := range []string{"go-srv/internal/platform/identity", ".deploy/local/kratos", ".deploy/local/postgres-init", "specs/tck-support/actors"} {
+		if _, err := os.Stat(filepath.Join(out, filepath.FromSlash(absent))); err == nil {
+			t.Errorf("core-only project ships %s", absent)
+		}
+	}
+	for _, p := range []string{".deploy/local/docker-compose.yml", ".deploy/local/.example.env", ".deploy/local/README.md"} {
+		data, err := os.ReadFile(filepath.Join(out, filepath.FromSlash(p)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, banned := range []string{"KRATOS_PG_PASSWORD", "APP_SESSION_KEYS", "kratos", "postgres-init"} {
+			if strings.Contains(string(data), banned) {
+				t.Errorf("%s mentions %q in a core-only project", p, banned)
+			}
+		}
+	}
+	if strings.Contains(stderr, "module_required") {
+		t.Errorf("core alone pulls nothing: %s", stderr)
+	}
+}
+
+// moduleRequiredEvents returns the module_required records on stderr.
+func moduleRequiredEvents(t *testing.T, stderr string) []map[string]any {
+	t.Helper()
+	var events []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(stderr), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			continue
+		}
+		if record["msg"] == "module_required" {
+			events = append(events, record)
+		}
+	}
+	return events
+}
+
+func TestGenerateLogsEachPulledModuleOnStderrOnly(t *testing.T) {
+	root, catalogPath := realCatalog(t)
+	out := filepath.Join(t.TempDir(), "out")
+	code, stdout, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "parameters")
+	if code != exitOK {
+		t.Fatalf("generate exit %d: %s", code, stderr)
+	}
+	events := moduleRequiredEvents(t, stderr)
+	if len(events) != 1 {
+		t.Fatalf("want one module_required event, got %v", events)
+	}
+	event := events[0]
+	if event["level"] != "INFO" || event["module"] != "identity" || event["required_by"] != "parameters" || event["stack"] != "go-srv" {
+		t.Fatalf("event = %v", event)
+	}
+	if strings.Contains(stdout, "module_required") {
+		t.Fatalf("stdout carries the event: %s", stdout)
+	}
+	files := tree(t, out)
+	for p, content := range files {
+		if strings.Contains(content, "module_required") {
+			t.Errorf("%s carries the event", p)
+		}
+	}
+}
+
+func TestGenerateLogsNothingWhenTheSelectionNamesTheRequirement(t *testing.T) {
+	root, catalogPath := realCatalog(t)
+	for name, modules := range map[string]string{"named": "identity,parameters", "all": ""} {
+		t.Run(name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out")
+			args := []string{"generate", "--root", root, "--catalog", catalogPath, "--out", out,
+				"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv"}
+			if modules == "" {
+				args = append(args, "--all-modules")
+			} else {
+				args = append(args, "--modules", modules)
+			}
+			code, _, stderr := execute(t, args...)
+			if code != exitOK {
+				t.Fatalf("generate exit %d: %s", code, stderr)
+			}
+			if events := moduleRequiredEvents(t, stderr); len(events) != 0 {
+				t.Fatalf("unexpected events %v", events)
+			}
+		})
+	}
+}
+
+// A refused selection announces no pull: the project is never generated.
+func TestGenerateRefusedSelectionLogsNoPull(t *testing.T) {
+	root, catalogPath := realCatalog(t)
+	busy := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(busy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(busy, "existing.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string][]string{
+		"unknown module":   {"--out", filepath.Join(t.TempDir(), "out"), "--modules", "parameters,no-such-module"},
+		"non-empty output": {"--out", busy, "--modules", "parameters"},
+	}
+	for name, extra := range cases {
+		t.Run(name, func(t *testing.T) {
+			args := append([]string{"generate", "--root", root, "--catalog", catalogPath,
+				"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv"}, extra...)
+			code, _, stderr := execute(t, args...)
+			if code != exitIssues {
+				t.Fatalf("generate exit %d, want %d: %s", code, exitIssues, stderr)
+			}
+			if events := moduleRequiredEvents(t, stderr); len(events) != 0 {
+				t.Fatalf("refused selection logged %v", events)
+			}
+		})
+	}
+}
+
+func TestGenerateWithTwoRequirersListsBothSorted(t *testing.T) {
+	root, catalogPath := realCatalog(t)
+	out := filepath.Join(t.TempDir(), "out")
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "parameters,feature-flags")
+	if code != exitOK {
+		t.Fatalf("generate exit %d: %s", code, stderr)
+	}
+	events := moduleRequiredEvents(t, stderr)
+	if len(events) != 1 || events[0]["required_by"] != "feature-flags,parameters" {
+		t.Fatalf("events = %v", events)
+	}
+}
+
+func decodeRealCatalog(t *testing.T, path string) catalog.Catalog {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, issues := catalog.Decode(data)
+	if len(issues) > 0 {
+		t.Fatalf("decode catalog: %v", issues)
+	}
+	return built
+}
+
+// The CI selection files are exactly the covering set of the catalog.
+func TestCISelectionsAreTheCoveringSet(t *testing.T) {
+	root, catalogPath := realCatalog(t)
+	dir := filepath.Join(root, "tooling", "generator", "testdata", "ci")
+	names, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil || len(names) == 0 {
+		t.Fatalf("no selection files under %s: %v", dir, err)
+	}
+	files := map[string]manifest.Selection{}
+	for _, path := range names {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		selection, issues := manifest.DecodeSelection(filepath.Base(path), data)
+		if len(issues) > 0 {
+			t.Fatalf("%s: %v", path, issues)
+		}
+		files[filepath.Base(path)] = selection
+	}
+	for _, found := range legs.Check(decodeRealCatalog(t, catalogPath), files) {
+		t.Errorf("%s %s: %s", found.Code, found.Path, found.Message)
+	}
+}
+
+// Identity owns the Kratos deployment files and the TCK actors, core none.
+func TestIdentityOwnsTheKratosAndActorFiles(t *testing.T) {
+	root, catalogPath := realCatalog(t)
+	built := decodeRealCatalog(t, catalogPath)
+	owned := map[string]map[string]bool{}
+	for _, stack := range built.Stacks {
+		if stack.Stack != "go-srv" {
+			continue
+		}
+		for _, module := range stack.Modules {
+			owned[module.Module] = map[string]bool{}
+			for _, file := range module.Files {
+				owned[module.Module][file.Path] = true
+			}
+		}
+	}
+	listed, err := exec.Command("git", "-C", root, "ls-files", "--",
+		".deploy/local/kratos/", ".deploy/local/postgres-init/", "specs/tck-support/actors/").Output()
+	if err != nil {
+		t.Fatalf("git ls-files: %v", err)
+	}
+	paths := strings.Fields(string(listed))
+	sort.Strings(paths)
+	if len(paths) == 0 {
+		t.Fatal("no tracked file under the Kratos and actors folders")
+	}
+	for _, p := range paths {
+		if !owned["identity"][p] {
+			t.Errorf("%s is not owned by go-srv identity", p)
+		}
+		if owned["core"][p] {
+			t.Errorf("%s is owned by go-srv core", p)
 		}
 	}
 }

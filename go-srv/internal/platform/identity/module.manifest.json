@@ -3,7 +3,7 @@
   "stack": "go-srv",
   "module": "identity",
   "version": "0.1.0",
-  "implied": true,
+  "implied": false,
   "implementsSpec": { "identity": "0.1.0" },
   "requiresCore": "^0.1.0",
   "requiresModules": [],
@@ -11,7 +11,8 @@
   "files": [
     ".deploy/local/kratos/",
     ".deploy/local/postgres-init/",
-    "go-srv/internal/platform/identity/"
+    "go-srv/internal/platform/identity/",
+    "specs/tck-support/actors/"
   ],
   "exclude": []
 }

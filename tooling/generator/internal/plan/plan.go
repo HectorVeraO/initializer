@@ -399,13 +399,34 @@ func (r *resolver) checkFrontendSpecs(selected []int, stacks []StackPlan) {
 					if !backendSpecs[spec] {
 						position := findModule(stack, module.Module)
 						pointer := fmt.Sprintf("/stacks/%d/modules/%d/implementsSpec/%s", entry, position, strings.NewReplacer("~", "~0", "/", "~1").Replace(spec))
-						r.add(CodeSpecNotInBackend, catalogSource, pointer,
-							fmt.Sprintf("no selected backend module implements spec %q", spec))
+						r.add(CodeSpecNotInBackend, catalogSource, pointer, r.specNotInBackendMessage(spec, planned.Stack, module.Module))
 					}
 				}
 			}
 		}
 	}
+}
+
+// specNotInBackendMessage is the SPEC_NOT_IN_BACKEND text: it names the
+// backend catalog modules that implement spec, when there are any.
+func (r *resolver) specNotInBackendMessage(spec, stack, module string) string {
+	message := fmt.Sprintf("no selected backend module implements spec %q (needed by %s %s)", spec, stack, module)
+	var implementers []string
+	for _, entry := range r.cat.Stacks {
+		if entry.Role != roleBackend {
+			continue
+		}
+		for _, candidate := range entry.Modules {
+			if _, found := candidate.ImplementsSpec[spec]; found {
+				implementers = append(implementers, candidate.Module)
+			}
+		}
+	}
+	if len(implementers) == 0 {
+		return message
+	}
+	sort.Strings(implementers)
+	return fmt.Sprintf("%s; select module %q or drop stack %s", message, strings.Join(implementers, ","), stack)
 }
 
 // assemble applies step 6 and builds the Plan.
@@ -522,4 +543,48 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// Pull is a module the requirement closure added to one stack.
+type Pull struct {
+	// Module is the pulled module id.
+	Module string
+	// RequiredBy lists the present modules of the stack whose requiresModules
+	// names Module, sorted bytewise.
+	RequiredBy []string
+	// Stack is the stack name.
+	Stack string
+}
+
+// Pulls returns the modules of p that the requirement closure added, ordered
+// by stack then module. It returns nil when sel is --all-modules.
+func Pulls(p Plan, sel manifest.Selection) []Pull {
+	if sel.AllModules {
+		return nil
+	}
+	typed := map[string]bool{coreID: true}
+	for _, id := range sel.Modules {
+		typed[id] = true
+	}
+	var pulls []Pull
+	for _, stack := range p.Stacks {
+		requirers := map[string][]string{}
+		for _, module := range stack.Modules {
+			for _, requirement := range module.RequiresModules {
+				requirers[requirement.Module] = append(requirers[requirement.Module], module.Module)
+			}
+		}
+		var found []Pull
+		for _, module := range stack.Modules {
+			by := requirers[module.Module]
+			if typed[module.Module] || len(by) == 0 {
+				continue
+			}
+			sort.Strings(by)
+			found = append(found, Pull{Module: module.Module, RequiredBy: by, Stack: stack.Stack})
+		}
+		sort.Slice(found, func(i, j int) bool { return found[i].Module < found[j].Module })
+		pulls = append(pulls, found...)
+	}
+	return pulls
 }

@@ -360,6 +360,13 @@ func generateProject(in generateInput, stdout, stderr io.Writer, logger *slog.Lo
 		return exitIssues
 	}
 
+	for _, pull := range plan.Pulls(resolved, in.selection) {
+		logger.Info("module_required",
+			slog.String("module", pull.Module),
+			slog.String("required_by", strings.Join(pull.RequiredBy, ",")),
+			slog.String("stack", pull.Stack))
+	}
+
 	sum := sha256.Sum256(catalogBytes)
 	project, err := emit.Build(emit.BuildOptions{Root: root, Plan: resolved, CatalogSHA256: hex.EncodeToString(sum[:])})
 	if err != nil {

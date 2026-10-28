@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "generator": "0.1.0",
-  "catalogSha256": "6f25e8c6858e38677d3ab88b980278643c0b74ebd990595afdd5199d03936a35",
+  "catalogSha256": "bcbd8bcdd60ed802efdbf7e97b02c50622fc36ad072c6ad0af08e2f80acbab44",
   "selection": {
     "schema": 1,
     "project": {
@@ -160,7 +160,11 @@
         },
         {
           "path": "go-srv/internal/platform/identity/module.manifest.json",
-          "sha256": "be33fb17f81973c34fa1e861433b22535bf1f96de2a21ad411a303abe32aaa58"
+          "sha256": "5daed183df7d61787d855b3fe1730f3d1f0b8771d77b106633da466192ea1102"
+        },
+        {
+          "path": "specs/tck-support/actors/index.ts",
+          "sha256": "396cec03e107759767f77d38a9adeddc967a3d7d140cbc0aadf4e3003587d765"
         }
       ]
     },
@@ -174,7 +178,7 @@
       "files": [
         {
           "path": "go-srv/internal/platform/parameters/module.manifest.json",
-          "sha256": "d6ef5d50aaa83a1475e1a16a9cb736daf0b4701e24d4ec7999c474011d9f848b"
+          "sha256": "ad62a041192ac8db109cfe488eb77ae8580f5bcf0b57b5e5e8d71322cab06cbb"
         },
         {
           "path": "go-srv/internal/platform/parameters/parameters.go",
@@ -193,8 +197,7 @@
       "module": "core",
       "version": "0.1.0",
       "implementsSpec": {
-        "core": "0.1.0",
-        "identity": "0.1.0"
+        "core": "0.1.0"
       },
       "files": [
         {
@@ -215,11 +218,29 @@
         },
         {
           "path": "ng-web/src/app/platform/core/module.manifest.json",
-          "sha256": "dce781bc1e9d7c530d928c1e36979fed26d6872cac7cfe9a4fa0b9d62eb565d4"
+          "sha256": "717b84626a565180ae800e1b689eb142c1d3cb4b100dad167ea31371e7c7d50d"
         },
         {
           "path": "ng-web/src/app/platform/core/module.ts",
           "sha256": "005a9dafda7551bc23cb368fbf7a796ec8321cd616e49ce817335ce7524cd97f"
+        }
+      ]
+    },
+    {
+      "stack": "ng-web",
+      "module": "identity",
+      "version": "0.1.0",
+      "implementsSpec": {
+        "identity": "0.1.0"
+      },
+      "files": [
+        {
+          "path": "ng-web/src/app/platform/identity/module.manifest.json",
+          "sha256": "0873afe0735d3f41f7cd2224a31b96047f82144ca2a64c093f938f569021775f"
+        },
+        {
+          "path": "ng-web/src/app/platform/identity/module.ts",
+          "sha256": "f0c9b9a560bd56f7fc6dfbe20ac114057152fcbb9db2d059fcb58d5754c19346"
         }
       ]
     },
@@ -237,7 +258,7 @@
         },
         {
           "path": "ng-web/src/app/platform/parameters/module.manifest.json",
-          "sha256": "4be8ceca19b28f38b517907bce8df1da017f8c8f04441b96177171a1f6ff93f3"
+          "sha256": "f0300e19825da310579f1809d30f172eea0818d4a1bdb5f3351fe518de260a0d"
         },
         {
           "path": "ng-web/src/app/platform/parameters/module.ts",
@@ -249,7 +270,7 @@
   "generated": [
     {
       "path": "README.md",
-      "sha256": "adc438f66b6d4788e94697148c3efad702d2f2994250fec1f5bc126f77311134"
+      "sha256": "bbd3a0e2f418fe0772ebceb610e61374bf1ef6d71d1b9a027977245d12e58745"
     },
     {
       "path": "go-srv/cmd/server/modules.go",
@@ -261,7 +282,7 @@
     },
     {
       "path": "ng-web/src/app/platform/modules.ts",
-      "sha256": "7dc6869171ef0ea74906c3fb906d70b65632db6602bad0b88805cfd5a56ce622"
+      "sha256": "ae9e34697da80fe1009d6968a4646e00b06487e858681e7dcf9aa4dfb16a2731"
     }
   ]
 }

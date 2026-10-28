@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "project": { "name": "acme-backend", "goModule": "example.com/acme/backend" },
+  "stacks": ["go-srv"],
+  "modules": ["identity"]
+}

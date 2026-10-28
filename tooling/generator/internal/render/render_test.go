@@ -37,7 +37,7 @@ func TestModulesGoGoldens(t *testing.T) {
 		folders []string
 	}{
 		{"modules.core-parameters.go.golden", []string{"identity", "parameters"}},
-		{"modules.implied-only.go.golden", []string{"identity"}},
+		{"modules.core-only.go.golden", []string{}},
 		{"modules.all.go.golden", []string{"identity", "featureflags", "parameters"}},
 	}
 	for _, c := range cases {
