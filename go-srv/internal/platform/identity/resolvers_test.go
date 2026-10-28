@@ -319,7 +319,7 @@ func TestKeyResolverAnswersTheSame401ForAnUnknownTenantAndASuspendedOneOnlyAfter
 	if !errors.As(suspendedErr, &suspendedAPI) || suspendedAPI.Status != http.StatusForbidden || suspendedAPI.Code != api.CodeTenantSuspended {
 		t.Fatalf("suspended tenant: %v", suspendedErr)
 	}
-	if !errors.As(wrongSecretErr, &wrong) || wrong.Status != rejectedKey().Status || wrong.Code != rejectedKey().Code || wrong.Message != rejectedKey().Message {
+	if !errors.As(wrongSecretErr, &wrong) || wrong.Status != http.StatusUnauthorized || wrong.Code != api.CodeAPIKeyInvalidOrRevoked || wrong.Message != unknown.Message {
 		t.Fatalf("wrong secret of a suspended tenant's key: %v", wrongSecretErr)
 	}
 	if !strings.Contains(f.logs.String(), `"reason":"tenant_unknown"`) ||
