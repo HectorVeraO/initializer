@@ -198,28 +198,45 @@ jobs:
           path: ${{ runner.temp }}/catalog.lock.json
           retention-days: 7
 
+  selections:
+    name: selections
+    runs-on: ubuntu-latest
+    outputs:
+      legs: ${{ steps.legs.outputs.legs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: List the selection files
+        id: legs
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(tooling/generator/testdata/ci/*.json)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no selection files under tooling/generator/testdata/ci" >&2
+            exit 1
+          fi
+          lines=""
+          for file in "${files[@]}"; do
+            line="$(jq -c --arg name "$(basename "${file}" .json)" '
+              (.stacks | index("ng-web") != null) as $web
+              | {selection: $name, web: $web,
+                 public_base_url: (if $web then "http://localhost:10120" else "http://localhost:10100" end)}' "${file}")"
+            lines+="${line}"$'\n'
+          done
+          legs="$(printf '%s' "${lines}" | jq -sc 'sort_by(.selection)')"
+          echo "legs=${legs}" >> "${GITHUB_OUTPUT}"
+
   generated-project:
     name: generated-project (${{ matrix.selection }})
-    needs: generator
+    needs: [generator, selections]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        selection: [core-parameters, all, all-web, core-web]
-        include:
-          - selection: core-parameters
-            public_base_url: http://localhost:10100
-            web: false
-          - selection: all
-            public_base_url: http://localhost:10100
-            web: false
-          - selection: all-web
-            public_base_url: http://localhost:10120
-            web: true
-          - selection: core-web
-            public_base_url: http://localhost:10120
-            web: true
+        include: ${{ fromJSON(needs.selections.outputs.legs) }}
     env:
       CI: "true"
       APP_PUBLIC_BASE_URL: ${{ matrix.public_base_url }}
@@ -268,17 +285,44 @@ jobs:
             echo "the source module path leaked into the generated project" >&2
             exit 1
           fi
+      - name: Delivered files of absent modules and specs are absent
+        run: |
+          set -euo pipefail
+          project="${RUNNER_TEMP}/gen-a"
+          catalog="${RUNNER_TEMP}/catalog.lock.json"
+          installed="$(jq -c '[.modules[] | "\(.stack)/\(.module)"]' "${project}/initializer.lock.json")"
+          specs="$(jq -c '[.specs[].spec]' "${project}/initializer.lock.json")"
+          absent="$(jq -r --argjson installed "${installed}" --argjson specs "${specs}" '
+            (.stacks[] | .stack as $stack | .modules[]
+               | select(("\($stack)/\(.module)") as $key | $installed | index($key) | not)
+               | .files[] | (.target // .path)),
+            (.specs[] | select(.spec as $s | $specs | index($s) | not) | .files[] | (.target // .path))' "${catalog}")"
+          status=0
+          while IFS= read -r path; do
+            if [ -n "${path}" ] && [ -e "${project}/${path}" ]; then
+              echo "file of an absent module or spec delivered: ${path}" >&2
+              status=1
+            fi
+          done <<< "${absent}"
+          exit "${status}"
       - name: Start the generated project stack
         run: |
           set -euo pipefail
           project="${RUNNER_TEMP}/gen-a"
           cp "${project}/.deploy/local/.example.env" "${project}/.deploy/local/.env"
           compose="docker compose -f ${project}/.deploy/local/docker-compose.yml"
+          ${compose} config -q
           ${compose} up -d
+          wait_kratos=false
+          if jq -e 'any(.modules[]; .module == "identity")' "${project}/initializer.lock.json" > /dev/null; then
+            wait_kratos=true
+          fi
           for _ in $(seq 1 60); do
             state="$(${compose} ps --format json postgres | jq -rs 'flatten | .[0].Health // empty')"
-            if [ "${state}" = "healthy" ] && curl -fsS http://127.0.0.1:10133/health/ready > /dev/null; then
-              exit 0
+            if [ "${state}" = "healthy" ]; then
+              if [ "${wait_kratos}" = false ] || curl -fsS http://127.0.0.1:10133/health/ready > /dev/null; then
+                exit 0
+              fi
             fi
             sleep 2
           done
@@ -349,6 +393,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          npm run typecheck
           locked="$(jq -r '.tckTags | join(",")' ../initializer.lock.json)"
           installed="$(jq -rs '[.[].tckTags[]] | unique | join(",")' */spec.manifest.json)"
           if [ "${locked}" != "${installed}" ]; then
@@ -361,17 +406,18 @@ jobs:
         run: |
           set -euo pipefail
           # The two TCK passes write one junit file, so the selected tests are counted from the lock's grep.
-          npx playwright test --list --reporter=list --grep "$(jq -r .tckGrep ../initializer.lock.json)" > "${RUNNER_TEMP}/tck-list.txt"
-          # A spec in the lock must have tests; a spec outside it must have none.
-          for spec in core identity parameters feature-flags; do
+          grep_pattern="$(jq -r .tckGrep ../initializer.lock.json)"
+          invert="$(jq -r '.tckGrepInvert // ""' ../initializer.lock.json)"
+          args=(--grep "${grep_pattern}")
+          if [ -n "${invert}" ]; then
+            args+=(--grep-invert "${invert}")
+          fi
+          npx playwright test --list --reporter=list "${args[@]}" > "${RUNNER_TEMP}/tck-list.txt"
+          # Every spec in the lock has tests; uninstalled specs are absent (see the absence step).
+          for spec in $(jq -r '.specs[].spec' ../initializer.lock.json); do
             count="$(grep -c " ${spec}/tck/" "${RUNNER_TEMP}/tck-list.txt" || true)"
-            locked="$(jq -r --arg spec "${spec}" '[.specs[].spec] | index($spec) != null' ../initializer.lock.json)"
-            echo "${spec}: ${count} tests, in lock: ${locked}"
-            if [ "${locked}" = "true" ]; then
-              test "${count}" -gt 0
-            else
-              test "${count}" -eq 0
-            fi
+            echo "${spec}: ${count} tests"
+            test "${count}" -gt 0
           done
       - name: Collect logs
         if: always()
@@ -403,6 +449,17 @@ jobs:
           if [ -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" ]; then
             docker compose -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" down -v
           fi
+
+  generated-projects:
+    name: generated-projects
+    needs: [selections, generated-project]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every generated-project leg passed
+        run: |
+          test "${{ needs.selections.result }}" = success
+          test "${{ needs.generated-project.result }}" = success
 
   tck:
     name: tck
