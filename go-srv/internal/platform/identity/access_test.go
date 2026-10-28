@@ -14,7 +14,6 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity"
 )
 
@@ -107,236 +106,43 @@ func TestCheckAccessAccountStates(t *testing.T) {
 	for _, status := range []string{"locked", "disabled"} {
 		account := env.account()
 		env.setAccountStatus(account.ID, status)
-		_, err := env.access.CheckAccess(ctx, account.ID, nil)
+		_, err := env.access.CheckAccount(ctx, account.ID)
 		requireDenied(t, err, identity.CodeAccountLockedOrDisabled)
 	}
 	missing := env.scanString("SELECT gen_random_uuid()::text")
 	for _, id := range []string{missing, "not-a-uuid", ""} {
-		_, err := env.access.CheckAccess(ctx, id, nil)
+		_, err := env.access.CheckAccount(ctx, id)
 		requireDenied(t, err, identity.CodeAccountLockedOrDisabled)
 	}
 }
 
-func TestCheckAccessAccountStepWinsOverTenantSteps(t *testing.T) {
-	env := newAccessEnv(t)
-	account := env.account()
-	tenantID := env.tenant("acme", "suspended")
-	env.member(tenantID, account.ID, "admin", "revoked", accessNow)
-	env.setAccountStatus(account.ID, "locked")
-	_, err := env.access.CheckAccess(context.Background(), account.ID, &tenantID)
-	requireDenied(t, err, identity.CodeAccountLockedOrDisabled)
-}
-
-func TestCheckAccessWithoutTenantGrantsAccountOnly(t *testing.T) {
-	env := newAccessEnv(t, "operator@example.com")
-	operator, err := env.access.LinkIdentity(context.Background(), env.scanString("SELECT gen_random_uuid()::text"), "operator@example.com")
-	if err != nil {
-		t.Fatalf("link: %v", err)
-	}
-	grant, err := env.access.CheckAccess(context.Background(), operator.ID, nil)
-	if err != nil {
-		t.Fatalf("check: %v", err)
-	}
-	if grant.Role != "" || grant.TenantSlug != "" || !grant.PlatformOperator {
-		t.Fatalf("grant = %+v", grant)
-	}
-}
-
-func TestCheckAccessNonMemberAndUnknownTenantLookAlike(t *testing.T) {
-	env := newAccessEnv(t)
-	ctx := context.Background()
-	account := env.account()
-	suspended := env.tenant("tenant-a", "suspended")
-	other := env.tenant("tenant-b", "active")
-	unknown := env.scanString("SELECT gen_random_uuid()::text")
-	badID := "not-a-uuid"
-	const wantDeniedMessage = "The account has no access to this tenant."
-	for _, tenantID := range []string{suspended, other, unknown, badID, ""} {
-		_, err := env.access.CheckAccess(ctx, account.ID, &tenantID)
-		apiErr := requireDenied(t, err, api.CodeTenantAccessDenied)
-		if apiErr.Message != wantDeniedMessage {
-			t.Fatalf("tenant %q: message = %q, want %q", tenantID, apiErr.Message, wantDeniedMessage)
-		}
-	}
-}
-
-func TestCheckAccessSuspendedTenantBeatsMembershipState(t *testing.T) {
-	env := newAccessEnv(t)
-	account := env.account()
-	tenantID := env.tenant("acme", "suspended")
-	env.member(tenantID, account.ID, "member", "revoked", accessNow)
-	_, err := env.access.CheckAccess(context.Background(), account.ID, &tenantID)
-	requireDenied(t, err, api.CodeTenantSuspended)
-}
-
-func TestCheckAccessMembershipStates(t *testing.T) {
-	env := newAccessEnv(t)
-	ctx := context.Background()
-	tenantID := env.tenant("acme", "active")
-
-	revoked := env.account()
-	env.member(tenantID, revoked.ID, "member", "revoked", accessNow)
-	_, err := env.access.CheckAccess(ctx, revoked.ID, &tenantID)
-	revokedErr := requireDenied(t, err, api.CodeMembershipRevoked)
-
-	suspended := env.account()
-	env.member(tenantID, suspended.ID, "member", "suspended", accessNow)
-	_, err = env.access.CheckAccess(ctx, suspended.ID, &tenantID)
-	suspendedErr := requireDenied(t, err, api.CodeMembershipRevoked)
-
-	if suspendedErr.Message != "The membership is suspended." {
-		t.Fatalf("suspended message = %q", suspendedErr.Message)
-	}
-	if revokedErr.Message != "The membership was revoked." {
-		t.Fatalf("revoked message = %q", revokedErr.Message)
-	}
-}
-
-func TestCheckAccessGrantCarriesRoleOperatorAndSlug(t *testing.T) {
+func TestCheckAccountReturnsTheOperatorFlag(t *testing.T) {
 	env := newAccessEnv(t, "operator@example.com")
 	ctx := context.Background()
-	tenantID := env.tenant("acme", "active")
 	operator, err := env.access.LinkIdentity(ctx, env.scanString("SELECT gen_random_uuid()::text"), "operator@example.com")
 	if err != nil {
 		t.Fatalf("link: %v", err)
 	}
-	env.member(tenantID, operator.ID, "viewer", "active", accessNow)
+	isOperator, err := env.access.CheckAccount(ctx, operator.ID)
+	if err != nil || !isOperator {
+		t.Fatalf("operator: got %v %v", isOperator, err)
+	}
 	plain := env.account()
-	env.member(tenantID, plain.ID, "admin", "active", accessNow)
-
-	grant, err := env.access.CheckAccess(ctx, operator.ID, &tenantID)
-	if err != nil {
-		t.Fatalf("operator: %v", err)
-	}
-	want := identity.Grant{Role: reqctx.RoleViewer, PlatformOperator: true, TenantSlug: "acme"}
-	if grant != want {
-		t.Fatalf("operator grant = %+v, want %+v", grant, want)
-	}
-	grant, err = env.access.CheckAccess(ctx, plain.ID, &tenantID)
-	if err != nil {
-		t.Fatalf("plain: %v", err)
-	}
-	want = identity.Grant{Role: reqctx.RoleAdmin, PlatformOperator: false, TenantSlug: "acme"}
-	if grant != want {
-		t.Fatalf("plain grant = %+v, want %+v", grant, want)
+	isOperator, err = env.access.CheckAccount(ctx, plain.ID)
+	if err != nil || isOperator {
+		t.Fatalf("plain: got %v %v", isOperator, err)
 	}
 }
 
-func TestCheckAccessIgnoresAnotherAccountsMembership(t *testing.T) {
-	env := newAccessEnv(t)
-	tenantID := env.tenant("acme", "active")
-	owner := env.account()
-	env.member(tenantID, owner.ID, "admin", "active", accessNow)
-	stranger := env.account()
-	_, err := env.access.CheckAccess(context.Background(), stranger.ID, &tenantID)
-	requireDenied(t, err, api.CodeTenantAccessDenied)
-}
-
-func TestSelectTenantPrefersLastActive(t *testing.T) {
-	env := newAccessEnv(t)
-	ctx := context.Background()
-	account := env.account()
-	older := env.tenant("tenant-a", "active")
-	newer := env.tenant("tenant-b", "active")
-	env.member(older, account.ID, "member", "active", accessNow)
-	env.member(newer, account.ID, "admin", "active", accessNow.Add(time.Hour))
-	err := env.access.SetLastActiveTenant(ctx, account.ID, newer)
-	if err != nil {
-		t.Fatalf("set last active: %v", err)
-	}
-	got, grant, err := env.access.SelectTenant(ctx, account.ID)
-	if err != nil {
-		t.Fatalf("select: %v", err)
-	}
-	if got == nil || *got != newer || grant.Role != reqctx.RoleAdmin || grant.TenantSlug != "tenant-b" {
-		t.Fatalf("got %v %+v", got, grant)
-	}
-}
-
-func TestSelectTenantFallsBackToOldestActiveMembership(t *testing.T) {
-	env := newAccessEnv(t)
-	ctx := context.Background()
-	account := env.account()
-	revokedFirst := env.tenant("tenant-a", "active")
-	suspendedTenant := env.tenant("tenant-b", "suspended")
-	oldestUsable := env.tenant("tenant-c", "active")
-	newest := env.tenant("tenant-d", "active")
-	env.member(revokedFirst, account.ID, "member", "revoked", accessNow)
-	env.member(suspendedTenant, account.ID, "member", "active", accessNow.Add(time.Minute))
-	env.member(oldestUsable, account.ID, "viewer", "active", accessNow.Add(2*time.Minute))
-	env.member(newest, account.ID, "admin", "active", accessNow.Add(3*time.Minute))
-	// The last active tenant no longer lets the account in.
-	err := env.access.SetLastActiveTenant(ctx, account.ID, revokedFirst)
-	if err != nil {
-		t.Fatalf("set last active: %v", err)
-	}
-	got, grant, err := env.access.SelectTenant(ctx, account.ID)
-	if err != nil {
-		t.Fatalf("select must not fail with a 403: %v", err)
-	}
-	if got == nil || *got != oldestUsable || grant.Role != reqctx.RoleViewer || grant.TenantSlug != "tenant-c" {
-		t.Fatalf("got %v %+v", got, grant)
-	}
-}
-
-func TestSelectTenantTiesBreakOnMembershipID(t *testing.T) {
+func TestCheckAccountReadFailureIsOperational(t *testing.T) {
 	env := newAccessEnv(t)
 	account := env.account()
-	first := env.tenant("tenant-a", "active")
-	second := env.tenant("tenant-b", "active")
-	env.member(first, account.ID, "member", "active", accessNow)
-	env.member(second, account.ID, "member", "active", accessNow)
-	wantTenant := env.scanString(
-		"SELECT tenant_id::text FROM ten_memberships WHERE account_id = $1::uuid ORDER BY id LIMIT 1", account.ID)
-	got, _, err := env.access.SelectTenant(context.Background(), account.ID)
-	if err != nil || got == nil || *got != wantTenant {
-		t.Fatalf("got %v %v, want %s", got, err, wantTenant)
-	}
-}
-
-func TestSelectTenantNoneKeepsOperatorFlag(t *testing.T) {
-	env := newAccessEnv(t, "operator@example.com")
-	ctx := context.Background()
-	operator, err := env.access.LinkIdentity(ctx, env.scanString("SELECT gen_random_uuid()::text"), "operator@example.com")
-	if err != nil {
-		t.Fatalf("link: %v", err)
-	}
-	got, grant, err := env.access.SelectTenant(ctx, operator.ID)
-	if err != nil || got != nil || !grant.PlatformOperator || grant.Role != "" {
-		t.Fatalf("got %v %+v %v", got, grant, err)
-	}
-}
-
-func TestReadFailureIsOperationalNotAccessDenial(t *testing.T) {
-	env := newAccessEnv(t)
-	account := env.account()
-	tenantID := env.tenant("acme", "active")
-	env.member(tenantID, account.ID, "admin", "active", accessNow)
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-
-	_, checkErr := env.access.CheckAccess(cancelled, account.ID, &tenantID)
-	_, _, selectErr := env.access.SelectTenant(cancelled, account.ID)
-	for name, err := range map[string]error{"CheckAccess": checkErr, "SelectTenant": selectErr} {
-		var apiErr *api.Error
-		if err == nil || errors.As(err, &apiErr) {
-			t.Fatalf("%s: err = %v, want a non-API operational error", name, err)
-		}
-	}
-}
-
-func TestSelectTenantNeverErrorsForInactiveOrUnknownAccounts(t *testing.T) {
-	env := newAccessEnv(t)
-	ctx := context.Background()
-	tenantID := env.tenant("acme", "active")
-	locked := env.account()
-	env.member(tenantID, locked.ID, "admin", "active", accessNow)
-	env.setAccountStatus(locked.ID, "locked")
-	for _, id := range []string{locked.ID, env.scanString("SELECT gen_random_uuid()::text"), "not-a-uuid"} {
-		got, grant, err := env.access.SelectTenant(ctx, id)
-		if err != nil || got != nil || grant != (identity.Grant{}) {
-			t.Fatalf("id %q: got %v %+v %v", id, got, grant, err)
-		}
+	_, err := env.access.CheckAccount(cancelled, account.ID)
+	var apiErr *api.Error
+	if err == nil || errors.As(err, &apiErr) {
+		t.Fatalf("err = %v, want a non-API operational error", err)
 	}
 }
 
@@ -470,48 +276,4 @@ func TestLinkIdentityEmailLengthBoundary(t *testing.T) {
 	if err == nil {
 		t.Fatal("255-character email accepted")
 	}
-}
-
-func TestSetLastActiveTenantPersistsAndRejectsBadIDs(t *testing.T) {
-	env := newAccessEnv(t)
-	ctx := context.Background()
-	account := env.account()
-	tenantID := env.tenant("acme", "active")
-	later := identity.NewAccess(env.pool, clock.Fixed(accessNow.Add(time.Hour)), nil)
-	err := later.SetLastActiveTenant(ctx, account.ID, tenantID)
-	if err != nil {
-		t.Fatalf("set: %v", err)
-	}
-	stored := env.scanString("SELECT last_active_tenant_id::text FROM iam_accounts WHERE id = $1::uuid", account.ID)
-	if stored != tenantID {
-		t.Fatalf("stored %s, want %s", stored, tenantID)
-	}
-	updatedAt := env.scanString("SELECT updated_at::text FROM iam_accounts WHERE id = $1::uuid", account.ID)
-	want := env.scanString("SELECT $1::timestamptz::text", accessNow.Add(time.Hour))
-	if updatedAt != want {
-		t.Fatalf("updated_at = %s, want %s", updatedAt, want)
-	}
-	for _, bad := range [][2]string{{"x", tenantID}, {account.ID, "x"}, {"", ""}} {
-		err = env.access.SetLastActiveTenant(ctx, bad[0], bad[1])
-		if err == nil {
-			t.Errorf("accepted %q", bad)
-		}
-	}
-}
-
-// FuzzCheckAccessIDs: whatever the ids, an unknown account or tenant is a
-// 403 and never a grant or an operational error.
-func FuzzCheckAccessIDs(f *testing.F) {
-	pool := identity.NewTestPool(f)
-	access := identity.NewAccess(pool, clock.Fixed(accessNow), nil)
-	for _, seed := range []string{"", "x", "00000000-0000-0000-0000-000000000000", "' OR 1=1 --", "\x00", "//evil.com"} {
-		f.Add(seed, seed)
-	}
-	f.Fuzz(func(t *testing.T, accountID, tenantID string) {
-		_, err := access.CheckAccess(context.Background(), accountID, &tenantID)
-		var apiErr *api.Error
-		if !errors.As(err, &apiErr) || apiErr.Status != http.StatusForbidden {
-			t.Fatalf("account %q tenant %q: err = %v", accountID, tenantID, err)
-		}
-	})
 }

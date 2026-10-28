@@ -21,16 +21,19 @@ const kratosCookieName = "ory_kratos_session"
 
 // sessionRoutes holds what the session handlers use.
 type sessionRoutes struct {
-	cfg     Config
-	store   *store
-	access  *access
-	codec   *session.Codec
-	cookies session.Cookies
-	public  *kratos.Public
-	flags   featureflag.Evaluator
-	writer  *api.Writer
-	logger  *slog.Logger
-	clock   clock.Clock
+	cfg    Config
+	store  *store
+	access *access
+	// tenants and directory are the core tenant ports, read in Mount.
+	tenants   coreaccess.TenantAccess
+	directory coreaccess.TenantDirectory
+	codec     *session.Codec
+	cookies   session.Cookies
+	public    *kratos.Public
+	flags     featureflag.Evaluator
+	writer    *api.Writer
+	logger    *slog.Logger
+	clock     clock.Clock
 }
 
 // mountSession registers the session routes and the Kratos proxy.
@@ -39,7 +42,8 @@ func (s *service) mountSession(h *core.Host) {
 		panic("identity: session routes need the codec and the Kratos public client")
 	}
 	routes := &sessionRoutes{
-		cfg: s.cfg, store: s.store, access: s.access, codec: s.codec, cookies: s.cookies,
+		cfg: s.cfg, store: s.store, access: s.access, tenants: h.TenantAccess(), directory: h.TenantDirectory(),
+		codec: s.codec, cookies: s.cookies,
 		public: s.public, flags: h.FlagEvaluator(), writer: h.API(), logger: h.Logger(), clock: h.Clock(),
 	}
 	h.Handle("GET /api/v1/auth/session", coreaccess.Public, http.HandlerFunc(routes.getSession))
@@ -94,13 +98,21 @@ func (rt *sessionRoutes) answerExisting(ctx context.Context, w http.ResponseWrit
 // chain start), and never outliving the old exp. It returns the
 // claims unchanged when no tenant is usable.
 func (rt *sessionRoutes) moveOntoTenant(ctx context.Context, w http.ResponseWriter, claims session.Claims) (session.Claims, error) {
-	tenantID, grant, err := rt.access.selectTenant(ctx, claims.AccountID)
+	state, err := rt.access.accountState(ctx, claims.AccountID)
 	if err != nil {
 		return claims, err
 	}
-	if tenantID == nil {
+	if !state.active {
 		return claims, nil
 	}
+	selected, err := rt.tenants.Select(ctx, reqctx.AccountID(claims.AccountID))
+	if err != nil {
+		return claims, err
+	}
+	if selected == nil {
+		return claims, nil
+	}
+	tenantID, grant := claimsGrant(selected, state.platformOperator)
 	now := rt.clock.Now()
 	expiresAt := now.Add(rt.cfg.SessionTTL)
 	if claims.ExpiresAt.Before(expiresAt) {
@@ -158,14 +170,15 @@ func (rt *sessionRoutes) startChain(ctx context.Context, w http.ResponseWriter, 
 	if err != nil {
 		return session.Claims{}, err
 	}
-	_, err = rt.access.checkAccess(ctx, account.ID, nil)
+	_, err = rt.access.checkAccount(ctx, account.ID)
 	if err != nil {
 		return session.Claims{}, err
 	}
-	tenantID, grant, err := rt.access.selectTenant(ctx, account.ID)
+	selected, err := rt.tenants.Select(ctx, reqctx.AccountID(account.ID))
 	if err != nil {
 		return session.Claims{}, err
 	}
+	tenantID, grant := claimsGrant(selected, account.IsPlatformOperator)
 	claims, err := rt.newChain(account, kratosSession.ID, tenantID, grant)
 	if err != nil {
 		return session.Claims{}, err
@@ -175,6 +188,20 @@ func (rt *sessionRoutes) startChain(ctx context.Context, w http.ResponseWriter, 
 		return session.Claims{}, err
 	}
 	return claims, nil
+}
+
+// claimsGrant combines the tenant grant of the access port (nil when no
+// tenant was selected) with the account's operator flag into what the claims
+// need. The tenant id is nil when grant is nil.
+func claimsGrant(grant *coreaccess.TenantGrant, platformOperator bool) (*string, Grant) {
+	combined := Grant{PlatformOperator: platformOperator}
+	if grant == nil {
+		return nil, combined
+	}
+	tenantID := string(grant.Tenant.ID)
+	combined.Role = grant.Role
+	combined.TenantSlug = grant.Tenant.Slug
+	return &tenantID, combined
 }
 
 // newChain builds the claims of a new session chain.
@@ -309,12 +336,15 @@ func (rt *sessionRoutes) buildView(ctx context.Context, claims session.Claims) (
 	}
 	var flagTenant *reqctx.TenantID
 	if claims.TenantID != nil {
-		tenant, err := rt.store.TenantByID(ctx, *claims.TenantID)
+		tenant, found, err := rt.directory.Tenant(ctx, reqctx.TenantID(*claims.TenantID))
 		if err != nil {
 			return sessionView{}, err
 		}
-		view.ActiveTenant = &tenantSummary{ID: tenant.ID, Slug: tenant.Slug, Name: tenant.Name, Status: tenant.Status}
-		id := reqctx.TenantID(tenant.ID)
+		if !found {
+			return sessionView{}, ErrNotFound
+		}
+		view.ActiveTenant = summaryOf(tenant)
+		id := tenant.ID
 		flagTenant = &id
 	}
 	memberships, err := rt.activeMemberships(ctx, claims.AccountID)
@@ -328,34 +358,23 @@ func (rt *sessionRoutes) buildView(ctx context.Context, claims session.Claims) (
 	return view, nil
 }
 
+// summaryOf maps a core tenant reference to the view shape.
+func summaryOf(tenant coreaccess.TenantRef) *tenantSummary {
+	return &tenantSummary{ID: string(tenant.ID), Slug: tenant.Slug, Name: tenant.Name, Status: string(tenant.Status)}
+}
+
 // activeMemberships lists the account's active memberships, any tenant
 // status, ordered by tenant slug.
 func (rt *sessionRoutes) activeMemberships(ctx context.Context, accountID string) ([]membershipView, error) {
-	account, ok := canonicalID(accountID)
-	if !ok {
-		return nil, ErrNotFound
-	}
-	rows, err := rt.store.pool.Query(ctx,
-		`SELECT m.id::text, t.id::text, t.slug, t.name, t.status, m.role, m.status
-FROM ten_memberships m JOIN ten_tenants t ON t.id = m.tenant_id
-WHERE m.account_id = $1::uuid AND m.status = 'active' ORDER BY t.slug, m.id`, account)
+	refs, err := rt.tenants.Memberships(ctx, reqctx.AccountID(accountID))
 	if err != nil {
-		return nil, fmt.Errorf("identity: list memberships: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-	list := []membershipView{}
-	for rows.Next() {
-		var item membershipView
-		err := rows.Scan(&item.ID, &item.Tenant.ID, &item.Tenant.Slug, &item.Tenant.Name,
-			&item.Tenant.Status, &item.Role, &item.Status)
-		if err != nil {
-			return nil, fmt.Errorf("identity: scan membership: %w", err)
-		}
-		list = append(list, item)
-	}
-	err = rows.Err()
-	if err != nil {
-		return nil, fmt.Errorf("identity: list memberships: %w", err)
+	list := make([]membershipView, 0, len(refs))
+	for _, ref := range refs {
+		list = append(list, membershipView{
+			ID: ref.ID, Tenant: *summaryOf(ref.Tenant), Role: string(ref.Role), Status: ref.Status,
+		})
 	}
 	return list, nil
 }

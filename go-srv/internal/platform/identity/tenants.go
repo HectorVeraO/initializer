@@ -13,11 +13,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/db"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 )
 
 // TenantView is the TenantView schema of the identity contract.
@@ -40,22 +40,22 @@ type TenantCreated struct {
 // tenancy holds the tenant, invitation and membership services behind the routes.
 // Every timestamp it writes or compares comes from clock, never SQL now().
 type tenancy struct {
-	pool           *pgxpool.Pool
-	clock          clock.Clock
-	admin          *kratos.Admin
-	publicBaseURL  *url.URL
-	invitationTTL  time.Duration
-	operatorEmails []string
+	pool          *pgxpool.Pool
+	clock         clock.Clock
+	publicBaseURL *url.URL
+	invitationTTL time.Duration
+	// accounts and provisioner are the core account ports, set in Mount
+	// (Provide publishes them, so it cannot read them).
+	accounts    accounts.Directory
+	provisioner accounts.Provisioner
 }
 
-func newTenancy(pool *pgxpool.Pool, clk clock.Clock, admin *kratos.Admin, cfg Config) *tenancy {
+func newTenancy(pool *pgxpool.Pool, clk clock.Clock, cfg Config) *tenancy {
 	return &tenancy{
-		pool:           pool,
-		clock:          clk,
-		admin:          admin,
-		publicBaseURL:  cfg.PublicBaseURL,
-		invitationTTL:  cfg.InvitationTTL,
-		operatorEmails: append([]string(nil), cfg.PlatformOperatorEmails...),
+		pool:          pool,
+		clock:         clk,
+		publicBaseURL: cfg.PublicBaseURL,
+		invitationTTL: cfg.InvitationTTL,
 	}
 }
 
