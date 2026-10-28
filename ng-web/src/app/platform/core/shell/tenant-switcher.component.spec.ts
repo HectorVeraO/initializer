@@ -73,10 +73,6 @@ describe('TenantSwitcher', () => {
     router = TestBed.inject(Router);
   });
 
-  afterEach(() => {
-    document.body.querySelectorAll('.p-select-overlay').forEach((overlay) => overlay.remove());
-  });
-
   async function renderSwitcher(context: AccessContext | null = multiTenantContext()): Promise<ComponentFixture<TenantSwitcher>> {
     visitor.set(context);
     await router.navigateByUrl('/work');
