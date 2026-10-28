@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { Router, provideRouter } from '@angular/router';
+import { NavigationStart, Router, provideRouter } from '@angular/router';
 import { TranslocoTestingModule } from '@jsverse/transloco';
 import { MessageService } from '@openng/optimus-ui/api';
 import { firstValueFrom } from 'rxjs';
@@ -11,6 +11,8 @@ import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-enve
 import { sessionView } from '../../../../testing/fixtures/session-view';
 import { SESSION_URL, fakeLocation, loadSession } from '../../../../testing/fixtures/session-testing';
 import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
+import { TENANT_SELECTION } from '../tenants/tenant-selection.port';
+import type { TenantSelection } from '../tenants/tenant-selection.port';
 import { BROWSER_LOCATION } from './browser-location';
 import { platformSessionInterceptor } from './session.interceptor';
 import { SessionStore } from './session-store.service';
@@ -31,9 +33,13 @@ describe('platformSessionInterceptor', () => {
 
   let messages: { add: ReturnType<typeof vi.fn> };
 
+  // Read when the interceptor first runs, so a spec can choose the binding before its first request.
+  let selection: TenantSelection | null;
+
   beforeEach(async () => {
     stubBroadcastChannel();
     messages = { add: vi.fn() };
+    selection = { noTenantPath: '/no-tenant' };
     TestBed.configureTestingModule({
       imports: [TranslocoTestingModule.forRoot({ langs: { es }, translocoConfig: { availableLangs: ['es'], defaultLang: 'es' }, preloadLangs: true })],
       providers: [
@@ -41,6 +47,7 @@ describe('platformSessionInterceptor', () => {
         provideHttpClientTesting(),
         provideRouter([{ path: '**', component: BlankComponent }]),
         { provide: MessageService, useValue: messages },
+        { provide: TENANT_SELECTION, useFactory: () => selection },
         { provide: BROWSER_LOCATION, useValue: fakeLocation() }
       ]
     });
@@ -394,6 +401,45 @@ describe('platformSessionInterceptor', () => {
       await vi.waitFor(() => expect(router.url).toBe('/no-tenant'));
 
       expect(result.ok === false && result.error.status).toBe(403);
+    });
+
+    it('sends a GET answering ACTIVE_TENANT_REQUIRED to the bound noTenantPath', async () => {
+      selection = { noTenantPath: '/choose-tenant' };
+      await loadSession(sessionView({ activeTenant: null }));
+
+      const outcome = call('GET', '/api/v1/members');
+
+      (await nextCall('GET', '/api/v1/members')).flush(errorEnvelope('ACTIVE_TENANT_REQUIRED'), { status: 403, statusText: 'Forbidden' });
+      await outcome;
+
+      await vi.waitFor(() => expect(router.url).toBe('/choose-tenant'));
+    });
+
+    it('does not navigate when no tenant selection is bound, and the error surfaces', async () => {
+      selection = null;
+      await loadSession(sessionView({ activeTenant: null }));
+
+      const starts: string[] = [];
+
+      const subscription = router.events.subscribe((event) => {
+        if (event instanceof NavigationStart) {
+          starts.push(event.url);
+        }
+      });
+
+      const outcome = call('GET', '/api/v1/members');
+
+      (await nextCall('GET', '/api/v1/members')).flush(errorEnvelope('ACTIVE_TENANT_REQUIRED'), { status: 403, statusText: 'Forbidden' });
+
+      const result = await outcome;
+
+      // A navigation started by the interceptor would begin within one macrotask.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      subscription.unsubscribe();
+
+      expect(result.ok === false && result.error.status).toBe(403);
+      expect(starts).toEqual([]);
+      expect(router.url).toBe('/reports/1');
     });
 
     it('leaves a POST answering ACTIVE_TENANT_REQUIRED where it is', async () => {

@@ -16,7 +16,7 @@ import { FormSectionComponent } from '@/core/ui/form-section/form-section.compon
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 import { API_KEYS_I18N } from '../i18n/api-keys/scope';
-import { SessionStore } from '../session/session-store.service';
+import { ACCESS_PROVIDER } from '../access/access.port';
 import { InlineConfirmComponent } from '../ui/inline-confirm.component';
 import { fieldIssueMessages, unmatchedIssueMessages } from '../ui/issue-message';
 import { OneTimeSecretDialogComponent } from '../ui/one-time-secret-dialog.component';
@@ -66,7 +66,7 @@ export function endOfDayUtc(day: Date): string {
 })
 export class ApiKeysPage {
   private readonly api = inject(ApiKeysApi);
-  private readonly store = inject(SessionStore);
+  private readonly access = inject(ACCESS_PROVIDER);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
 
@@ -92,6 +92,8 @@ export class ApiKeysPage {
 
   /** The plain key of the last `201`. Lives here only; cleared when the dialog closes and never copied elsewhere. */
   protected readonly secret = signal<string | null>(null);
+
+  private readonly activeTenantId = computed(() => this.access.context()?.activeTenant?.id ?? null);
 
   protected readonly isEmpty = computed(() => !this.isLoading() && !this.loadFailed() && this.rows().length === 0);
   protected readonly isTruncated = computed(() => this.totalItems() > this.rows().length);
@@ -119,7 +121,7 @@ export class ApiKeysPage {
   constructor() {
     // Loads on first render and again whenever the active tenant changes.
     effect(() => {
-      this.store.activeTenantId();
+      this.activeTenantId();
       untracked(() => {
         this.hasLoaded = false;
         void this.loadScopes();

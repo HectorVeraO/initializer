@@ -13,13 +13,13 @@ import { SubmitErrors } from '@/core/api/submit-errors';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 import { TENANCY_I18N } from '../i18n/tenancy/scope';
-import { SessionStore } from '../session/session-store.service';
-import type { MembershipRole, MembershipStatus } from '../session/session.types';
+import { ACCESS_PROVIDER } from '../access/access.port';
+import type { MembershipStatus, TenantRole } from '../access/access.types';
 import { InlineConfirmComponent } from '../ui/inline-confirm.component';
 import { MembershipsApi } from './memberships-api.service';
 import type { MemberView, MembershipChange } from './memberships-api.service';
 
-const ROLES: readonly MembershipRole[] = ['admin', 'member', 'viewer'];
+const ROLES: readonly TenantRole[] = ['admin', 'member', 'viewer'];
 
 /** Members of the active tenant. Every role reads the list; only an admin sees the write controls. */
 @Component({
@@ -31,7 +31,7 @@ const ROLES: readonly MembershipRole[] = ['admin', 'member', 'viewer'];
 })
 export class MembershipsPage {
   private readonly api = inject(MembershipsApi);
-  private readonly store = inject(SessionStore);
+  private readonly access = inject(ACCESS_PROVIDER);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
 
@@ -46,19 +46,21 @@ export class MembershipsPage {
   protected readonly loadFailed = signal(false);
 
   /** Role a person just picked per membership id, shown until the save answers. */
-  private readonly pickedRoles = signal<Readonly<Record<string, MembershipRole>>>({});
+  private readonly pickedRoles = signal<Readonly<Record<string, TenantRole>>>({});
 
   /** Message per membership id of the last failed write on that row. */
   protected readonly rowErrors = signal<Readonly<Record<string, string>>>({});
 
-  protected readonly canWrite = computed(() => this.store.role() === 'admin');
+  private readonly activeTenantId = computed(() => this.access.context()?.activeTenant?.id ?? null);
+
+  protected readonly canWrite = computed(() => this.access.context()?.role === 'admin');
   protected readonly isEmpty = computed(() => !this.isLoading() && !this.loadFailed() && this.rows().length === 0);
   protected readonly isTruncated = computed(() => this.totalItems() > this.rows().length);
 
   constructor() {
     // Loads on first render and again whenever the active tenant changes.
     effect(() => {
-      this.store.activeTenantId();
+      this.activeTenantId();
       untracked(() => {
         this.hasLoaded = false;
         this.pickedRoles.set({});
@@ -68,7 +70,7 @@ export class MembershipsPage {
     });
   }
 
-  protected roleOf(row: MemberView): MembershipRole {
+  protected roleOf(row: MemberView): TenantRole {
     const role = this.pickedRoles()[row.id] ?? row.role;
 
     return role;
@@ -79,7 +81,7 @@ export class MembershipsPage {
     void this.load();
   }
 
-  protected async changeRole(row: MemberView, role: MembershipRole): Promise<void> {
+  protected async changeRole(row: MemberView, role: TenantRole): Promise<void> {
     if (role === row.role) {
       return;
     }
@@ -95,7 +97,7 @@ export class MembershipsPage {
   private async save(row: MemberView, change: MembershipChange): Promise<void> {
     this.setRowError(row.id, null);
 
-    const tenantAtStart = this.store.activeTenantId();
+    const tenantAtStart = this.activeTenantId();
 
     try {
       const updated = await firstValueFrom(this.api.update(row.id, change));
@@ -103,7 +105,7 @@ export class MembershipsPage {
       this.clearPicked(row.id);
 
       // The tenant changed while the write was in flight: the reload for the new tenant owns the list.
-      const isStale = this.store.activeTenantId() !== tenantAtStart;
+      const isStale = this.activeTenantId() !== tenantAtStart;
 
       if (isStale) {
         return;
@@ -121,7 +123,7 @@ export class MembershipsPage {
       this.clearPicked(row.id);
 
       // A failure that answers after a tenant switch belongs to the previous tenant: report nothing in the new one.
-      const isStale = this.store.activeTenantId() !== tenantAtStart;
+      const isStale = this.activeTenantId() !== tenantAtStart;
 
       if (isStale) {
         return;

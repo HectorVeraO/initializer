@@ -1,12 +1,16 @@
 import { HttpTestingController } from '@angular/common/http/testing';
+import { inject } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, of, throwError } from 'rxjs';
+import { TENANT_DIRECTORY, TenantsApi } from '@/platform/core';
+import type { TenantDirectory, TenantRef } from '@/platform/core';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, stubScrollIntoView, textOf } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
 import { flagView, tenantOverride, tenantView } from '../../../../testing/fixtures/flag-view';
+import featureFlagsEs from '../i18n/es.json';
 import { FlagDetailPage } from './flag-detail.component';
 
 const LIST_URL = '/api/v1/feature-flags';
@@ -34,16 +38,21 @@ describe('FlagDetailPage', () => {
 
   let params: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
 
+  // Read when the page first asks for the directory: the real tenant API over HTTP unless a spec picks another binding.
+  let directory: 'tenants-api' | TenantDirectory | null;
+
   beforeEach(() => {
     stubBroadcastChannel();
     stubMatchMedia();
     stubScrollIntoView();
     messages = { add: vi.fn() };
+    directory = 'tenants-api';
     params = new BehaviorSubject(convertToParamMap({ key: KEY }));
     configureFeatureTest(
       [],
       [
         { provide: MessageService, useValue: messages },
+        { provide: TENANT_DIRECTORY, useFactory: () => (directory === 'tenants-api' ? inject(TenantsApi) : directory) },
         { provide: ActivatedRoute, useValue: { paramMap: params, snapshot: { paramMap: convertToParamMap({ key: KEY }) } } }
       ]
     );
@@ -204,6 +213,55 @@ describe('FlagDetailPage', () => {
 
     expect(textOf(byTestId(unknown, 'flag-tenant-cell-name'))).toBe(UNKNOWN_TENANT);
     expect(byTestId(unknown, 'flag-tenant-cell-enabled')?.getAttribute('data-value')).toBe('true');
+  });
+
+  describe('through a tenant directory port', () => {
+    async function openWithDirectory(binding: TenantDirectory | null): Promise<ComponentFixture<FlagDetailPage>> {
+      directory = binding;
+
+      const fixture = TestBed.createComponent(FlagDetailPage);
+
+      fixture.detectChanges();
+      (await nextCall('GET', LIST_URL)).flush(pageOf([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, true)] })]));
+      await settle(fixture);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(textOf(fixture.nativeElement)).toContain('próxima actualización');
+      });
+
+      return fixture;
+    }
+
+    it('names the override tenants and fills the picker from the directory the port provides', async () => {
+      const items: TenantRef[] = [
+        { id: TENANT_A, slug: 'tenant-a', name: 'Tenant A', status: 'active' },
+        { id: TENANT_B, slug: 'tenant-b', name: 'Tenant B', status: 'active' }
+      ];
+
+      const fixture = await openWithDirectory({ list: () => of({ items, page: 1, size: 100, totalItems: 2 }) });
+
+      expect(textOf(byTestId(rowOf(fixture, 'tenant-a'), 'flag-tenant-cell-name'))).toBe('Tenant A');
+      expect(byTestId(root(fixture), 'flag-tenants-absent')).toBeNull();
+      expect(byTestId(root(fixture), 'flag-tenant-select')).not.toBeNull();
+    });
+
+    it('warns and shows tenant ids when the directory fails', async () => {
+      const fixture = await openWithDirectory({ list: () => throwError(() => new Error('down')) });
+
+      expect(byTestId(root(fixture), 'flag-tenants-failed')).not.toBeNull();
+      expect(byTestId(root(fixture), 'flag-tenant-select')).not.toBeNull();
+      expect(textOf(byTestId(rowOf(fixture, TENANT_A), 'flag-tenant-cell-name'))).toBe(TENANT_A);
+    });
+
+    it('replaces the override section by a short text when no directory is bound, and asks for no tenants', async () => {
+      const fixture = await openWithDirectory(null);
+
+      expect(textOf(byTestId(root(fixture), 'flag-tenants-absent'))).toBe(featureFlagsEs.detail.tenantsAbsent);
+      expect(byTestId(root(fixture), 'flag-tenant-select')).toBeNull();
+      expect(byTestId(root(fixture), 'flag-tenant-form')).toBeNull();
+      expect(byTestId(root(fixture), 'flag-tenants-failed')).toBeNull();
+      http.expectNone(TENANTS_URL);
+    });
   });
 
   it('shows tenant ids and a warning when the tenant list fails', async () => {

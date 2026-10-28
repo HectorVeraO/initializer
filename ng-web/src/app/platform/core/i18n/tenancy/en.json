@@ -19,9 +19,7 @@
   "noTenant": {
     "title": "You have no tenant",
     "message": "You are not an active member of any tenant. Ask an admin for an invitation.",
-    "account": "Signed in as",
-    "operatorTenants": "Manage tenants",
-    "operatorFlags": "Manage feature flags"
+    "account": "Signed in as"
   },
   "issues": {
     "PASSWORD_REJECTED": "The password was rejected by the password policy. Choose another one."

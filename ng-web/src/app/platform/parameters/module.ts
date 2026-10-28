@@ -1,4 +1,4 @@
-import { requireSession } from '@/platform/core';
+import { requireAccess } from '@/platform/core';
 import type { WebModule } from '@/platform/core';
 import { PLATFORM_PARAMETERS_I18N } from './i18n/scope';
 
@@ -8,7 +8,7 @@ export const parametersModule: WebModule = {
   shellRoutes: [
     {
       path: 'parameters',
-      canMatch: [requireSession({ tenant: 'required-unless-operator' })],
+      canMatch: [requireAccess({ tenant: 'required-unless-operator' })],
       loadChildren: () => import('./parameters.routes').then((m) => m.parametersRoutes)
     }
   ],

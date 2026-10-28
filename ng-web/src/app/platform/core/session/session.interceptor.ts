@@ -7,6 +7,7 @@ import { Observable, catchError, from, switchMap, throwError } from 'rxjs';
 import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { errorCode } from '@/core/api/api-error';
 import { RuntimeConfigService } from '@/core/config/runtime-config.service';
+import { TENANT_SELECTION } from '../tenants/tenant-selection.port';
 import { notifyTenantChanged } from './session-notice';
 import { NO_TENANT_HEADER, SESSION_LIFECYCLE, SessionStore } from './session-store.service';
 
@@ -54,6 +55,8 @@ export const platformSessionInterceptor: HttpInterceptorFn = (req, next) => {
   const messages = inject(MessageService);
 
   const transloco = inject(TranslocoService);
+
+  const selection = inject(TENANT_SELECTION);
 
   const send = (request: HttpRequest<unknown>): Observable<HttpEvent<unknown>> => {
     const isLifecycle = request.context.get(SESSION_LIFECYCLE);
@@ -104,7 +107,10 @@ export const platformSessionInterceptor: HttpInterceptorFn = (req, next) => {
         }
 
         if (error.status === 403 && code === ApiErrorCode.ActiveTenantRequired && request.method === 'GET') {
-          void router.navigate(['/no-tenant']);
+          // Without a tenancy module there is no page to offer: the error surfaces like any other 403.
+          if (selection !== null) {
+            void router.navigate([selection.noTenantPath]);
+          }
         }
 
         return throwError(() => error);

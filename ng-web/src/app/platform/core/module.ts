@@ -1,17 +1,21 @@
 import { configGuard } from '@/core/config/config.guard';
-import { anonymousGuard, requireSession } from './guards/guards';
+import { requireAccess } from './access/require-access';
+import type { AccessRequirement } from './access/access.types';
+import { anonymousGuard } from './guards/guards';
 import type { WebModule } from './composition/web-module';
-import type { SessionRequirement } from './guards/requirement';
 import { PLATFORM_CORE_I18N } from './i18n/scope';
 import { SessionAccess } from './session/session-access';
+import { platformSessionInterceptor } from './session/session.interceptor';
+import { AccountMenu } from './shell/account-menu.component';
+import { TenantSwitcher } from './shell/tenant-switcher.component';
 import { TenancySelection } from './tenants/tenancy-selection';
 import { TenantsApi } from './tenants/tenants-api.service';
 
-const ADMIN_OF_TENANT: SessionRequirement = { tenant: 'required', roles: ['admin'] };
+const ADMIN_OF_TENANT: AccessRequirement = { tenant: 'required', roles: ['admin'] };
 
-const TENANT_REQUIRED: SessionRequirement = { tenant: 'required' };
+const TENANT_REQUIRED: AccessRequirement = { tenant: 'required' };
 
-const PLATFORM_OPERATOR: SessionRequirement = { platformOperator: true };
+const PLATFORM_OPERATOR: AccessRequirement = { platformOperator: true };
 
 /** The core module: session, guards, composition, login, the no-tenant page and the invitation, membership and tenant screens. Other screens are added by the tracks that own them. */
 export const coreModule: WebModule = {
@@ -19,27 +23,27 @@ export const coreModule: WebModule = {
   shellRoutes: [
     {
       path: 'no-tenant',
-      canMatch: [requireSession({})],
+      canMatch: [requireAccess({})],
       loadComponent: () => import('./no-tenant/no-tenant-page.component').then((m) => m.NoTenantPage)
     },
     {
       path: 'memberships',
-      canMatch: [requireSession(TENANT_REQUIRED)],
+      canMatch: [requireAccess(TENANT_REQUIRED)],
       loadComponent: () => import('./memberships/memberships-page.component').then((m) => m.MembershipsPage)
     },
     {
       path: 'invitations',
-      canMatch: [requireSession(ADMIN_OF_TENANT)],
+      canMatch: [requireAccess(ADMIN_OF_TENANT)],
       loadComponent: () => import('./invitations/invitations-page.component').then((m) => m.InvitationsPage)
     },
     {
       path: 'api-keys',
-      canMatch: [requireSession(ADMIN_OF_TENANT)],
+      canMatch: [requireAccess(ADMIN_OF_TENANT)],
       loadComponent: () => import('./api-keys/api-keys-page.component').then((m) => m.ApiKeysPage)
     },
     {
       path: 'operator/tenants',
-      canMatch: [requireSession(PLATFORM_OPERATOR)],
+      canMatch: [requireAccess(PLATFORM_OPERATOR)],
       loadComponent: () => import('./tenants/operator-tenants-page.component').then((m) => m.OperatorTenantsPage)
     }
   ],
@@ -63,5 +67,10 @@ export const coreModule: WebModule = {
     { id: 'operator-tenants', labelKey: 'nav.operatorTenants', icon: 'menu-icon menu-icon-building', path: '/operator/tenants', requires: PLATFORM_OPERATOR }
   ],
   i18n: PLATFORM_CORE_I18N,
+  topbar: [
+    { id: 'tenant-switcher', slot: 'context', component: TenantSwitcher },
+    { id: 'account-menu', slot: 'account', component: AccountMenu }
+  ],
+  interceptors: [platformSessionInterceptor],
   ports: { access: SessionAccess, flags: SessionAccess, tenants: TenantsApi, tenantSelection: TenancySelection }
 };
