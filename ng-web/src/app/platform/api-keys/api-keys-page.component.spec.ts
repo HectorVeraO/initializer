@@ -438,6 +438,21 @@ describe('ApiKeysPage', () => {
     expect(allByTestId(root(fixture), 'api-keys-row')).toHaveLength(1);
   });
 
+  it('narrows the offered scopes to level any after switching to a session without a tenant', async () => {
+    const fixture = await open([], 0, [...SCOPES, ANY_SCOPE]);
+
+    expect(allByTestId(root(fixture), 'api-key-scope')).toHaveLength(3);
+
+    visitor.set(accessContext(TENANTLESS_OPERATOR));
+    (await nextCall('GET', SCOPES_URL)).flush(okEnvelope([...SCOPES, ANY_SCOPE]));
+    (await nextCall('GET', LIST_URL)).flush(pageOf([]));
+    await settle(fixture);
+
+    const boxes = allByTestId(root(fixture), 'api-key-scope');
+
+    expect(boxes.map((box) => box.getAttribute('data-key'))).toEqual(['probe:whoami']);
+  });
+
   it('refetches when the active tenant changes', async () => {
     const fixture = await open([apiKey('ci')]);
 
