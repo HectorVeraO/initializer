@@ -671,6 +671,25 @@ func TestTagOnDeletedOrAddedComponentFileFails(t *testing.T) {
 	}
 }
 
+func TestTagContentMessageNamesTagAndTruncatesFileList(t *testing.T) {
+	dir := baseRepo(t)
+	runGit(t, dir, "tag", "go-srv-parameters-v0.1.0")
+	for _, name := range []string{"a.go", "b.go", "c.go", "d.go"} {
+		writeAt(t, dir, "go-srv/internal/platform/parameters/"+name, "package parameters\n")
+	}
+	commitAll(t, dir, "add files")
+	violations, err := versions.CheckTagContent(context.Background(), dir)
+	if err != nil || len(violations) != 1 {
+		t.Fatalf("got %+v %v", violations, err)
+	}
+	message := violations[0].Message
+	wantList := "go-srv/internal/platform/parameters/a.go, go-srv/internal/platform/parameters/b.go, " +
+		"go-srv/internal/platform/parameters/c.go and 1 more"
+	if !strings.Contains(message, "tag go-srv-parameters-v0.1.0 points at ") || !strings.Contains(message, "("+wantList+")") {
+		t.Fatalf("message %q", message)
+	}
+}
+
 func TestTagOfAnotherVersionOrNoTagIsNotChecked(t *testing.T) {
 	dir := baseRepo(t)
 	runGit(t, dir, "tag", "spec-alpha-v1.0.0")
