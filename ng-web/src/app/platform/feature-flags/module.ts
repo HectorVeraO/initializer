@@ -1,4 +1,4 @@
-import { requireSession } from '@/platform/core';
+import { requireAccess } from '@/platform/core';
 import type { WebModule } from '@/platform/core';
 import { PLATFORM_FEATURE_FLAGS_I18N } from './i18n/scope';
 
@@ -8,7 +8,7 @@ export const featureFlagsModule: WebModule = {
   shellRoutes: [
     {
       path: 'operator/feature-flags',
-      canMatch: [requireSession({ platformOperator: true })],
+      canMatch: [requireAccess({ platformOperator: true })],
       loadChildren: () => import('./feature-flags.routes').then((m) => m.featureFlagsRoutes)
     }
   ],

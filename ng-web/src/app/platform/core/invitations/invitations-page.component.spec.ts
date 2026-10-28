@@ -1,16 +1,15 @@
 import { formatSantiago } from '@/core/format/santiago-date';
 import { HttpTestingController } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import es from '../../../../assets/i18n/es.json';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { sessionView } from '../../../../testing/fixtures/session-view';
-import { fakeLocation, loadSession } from '../../../../testing/fixtures/session-testing';
-import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
-import { BROWSER_LOCATION } from '../session/browser-location';
-import { SessionStore } from '../session/session-store.service';
+import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
+import { nextCall } from '../../../../testing/fixtures/http-testing';
+import type { AccessContext } from '../access/access.types';
 import { InvitationsPage } from './invitations-page.component';
 
 const LIST_URL = '/api/v1/invitations';
@@ -30,8 +29,10 @@ describe('InvitationsPage', () => {
 
   let messages: { add: ReturnType<typeof vi.fn> };
 
+  let visitor: ReturnType<typeof signal<AccessContext | null>>;
+
   beforeEach(() => {
-    stubBroadcastChannel();
+    visitor = signal<AccessContext | null>(null);
     stubMatchMedia();
     messages = { add: vi.fn() };
     configureFeatureTest(
@@ -39,21 +40,17 @@ describe('InvitationsPage', () => {
         { path: 'invitations', component: BlankComponent },
         { path: 'forbidden', component: BlankComponent }
       ],
-      [
-        { provide: MessageService, useValue: messages },
-        { provide: BROWSER_LOCATION, useValue: fakeLocation() }
-      ]
+      [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }]
     );
     http = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
     http.verify();
-    vi.unstubAllGlobals();
   });
 
   async function open(items: Record<string, unknown>[] = [], totalItems = items.length): Promise<ComponentFixture<InvitationsPage>> {
-    await loadSession(sessionView());
+    visitor.set(accessContext());
 
     const fixture = TestBed.createComponent(InvitationsPage);
 
@@ -98,7 +95,7 @@ describe('InvitationsPage', () => {
   });
 
   it('asks for the first page at the contract maximum, pending only, newest first', async () => {
-    await loadSession(sessionView());
+    visitor.set(accessContext());
 
     const fixture = TestBed.createComponent(InvitationsPage);
 
@@ -125,7 +122,7 @@ describe('InvitationsPage', () => {
   });
 
   it('shows a load error with retry that loads again', async () => {
-    await loadSession(sessionView());
+    visitor.set(accessContext());
 
     const fixture = TestBed.createComponent(InvitationsPage);
 
@@ -250,12 +247,9 @@ describe('InvitationsPage', () => {
   it('refetches when the active tenant changes', async () => {
     const fixture = await open([invitation('jane@example.com')]);
 
-    const other = { id: '44444444-4444-4444-8444-444444444444', slug: 'tenant-b', name: 'Tenant B', status: 'active' };
+    const other = { id: '44444444-4444-4444-8444-444444444444', slug: 'tenant-b', name: 'Tenant B', status: 'active' } as const;
 
-    const switching = TestBed.inject(SessionStore).switchTenant(other.id);
-
-    (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(okEnvelope(sessionView({ activeTenant: other })));
-    await switching;
+    visitor.set(accessContext({ activeTenant: other }));
     (await nextCall('GET', LIST_URL)).flush(pageOf([invitation('omar@example.com')]));
     await settle(fixture);
 

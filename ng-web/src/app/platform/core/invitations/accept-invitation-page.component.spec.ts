@@ -1,5 +1,7 @@
 import { Location } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { HttpTestingController } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
@@ -7,10 +9,9 @@ import { BlankComponent, byTestId, configureFeatureTest, settle, textOf, typeInt
 import es from '../../../../assets/i18n/es.json';
 import tenancyEs from '../i18n/tenancy/es.json';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { sessionView } from '../../../../testing/fixtures/session-view';
-import { fakeLocation, loadSession } from '../../../../testing/fixtures/session-testing';
-import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
-import { BROWSER_LOCATION } from '../session/browser-location';
+import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
+import { nextCall } from '../../../../testing/fixtures/http-testing';
+import type { AccessContext, SignInOptions } from '../access/access.types';
 import { AcceptInvitationPage } from './accept-invitation-page.component';
 import { PendingInvitation } from './pending-invitation.service';
 
@@ -29,9 +30,21 @@ describe('AcceptInvitationPage', () => {
 
   let messages: { add: ReturnType<typeof vi.fn> };
 
+  let visitor: ReturnType<typeof signal<AccessContext | null>>;
+
+  let switchTenant: ReturnType<typeof vi.fn<(tenantId: string) => Promise<void>>>;
+
+  let signIn: ReturnType<typeof vi.fn<(options: SignInOptions) => Promise<void>>>;
+
+  // Read when the page first asks to be admitted, so a spec can choose the answer before it opens the page.
+  let admitAnswer: 'by-context' | 'failed';
+
   beforeEach(() => {
-    stubBroadcastChannel();
     messages = { add: vi.fn() };
+    visitor = signal<AccessContext | null>(null);
+    switchTenant = vi.fn(() => Promise.resolve());
+    signIn = vi.fn(() => Promise.resolve());
+    admitAnswer = 'by-context';
     configureFeatureTest(
       [
         { path: 'home', component: BlankComponent },
@@ -39,8 +52,18 @@ describe('AcceptInvitationPage', () => {
         { path: 'invitations/accept', component: BlankComponent }
       ],
       [
-        { provide: MessageService, useValue: messages },
-        { provide: BROWSER_LOCATION, useValue: fakeLocation() }
+        ...provideFakeAccess(visitor, {
+          switchTenant: (tenantId) => switchTenant(tenantId),
+          signIn: (options) => signIn(options),
+          admit: () => {
+            const router = TestBed.inject(Router);
+
+            const isOpen = admitAnswer === 'by-context' && visitor() !== null;
+
+            return Promise.resolve(isOpen ? true : router.createUrlTree([admitAnswer === 'failed' ? '/error-page' : '/login']));
+          }
+        }),
+        { provide: MessageService, useValue: messages }
       ]
     );
     http = TestBed.inject(HttpTestingController);
@@ -49,13 +72,12 @@ describe('AcceptInvitationPage', () => {
   afterEach(() => {
     history.replaceState(null, '', '/');
     http.verify();
-    vi.unstubAllGlobals();
   });
 
-  /** Opens the page at `/invitations/accept` + `hash`, with the session already answered (`null` = anonymous). */
-  async function open(hash: string, view: object | null = sessionView(), search = ''): Promise<ComponentFixture<AcceptInvitationPage>> {
+  /** Opens the page at `/invitations/accept` + `hash`, as the given visitor (`null` = anonymous). */
+  async function open(hash: string, context: AccessContext | null = accessContext(), search = ''): Promise<ComponentFixture<AcceptInvitationPage>> {
     history.replaceState(null, '', `/invitations/accept${search}${hash}`);
-    await loadSession(view);
+    visitor.set(context);
 
     const fixture = TestBed.createComponent(AcceptInvitationPage);
 
@@ -89,7 +111,7 @@ describe('AcceptInvitationPage', () => {
   });
 
   it('ignores a token in the query string', async () => {
-    const fixture = await open('', sessionView(), `?token=${TOKEN}`);
+    const fixture = await open('', accessContext(), `?token=${TOKEN}`);
 
     expect(byTestId(root(fixture), 'accept-invalid')).not.toBeNull();
   });
@@ -103,7 +125,7 @@ describe('AcceptInvitationPage', () => {
   });
 
   it('accepts as the signed-in account, then switches to the invited tenant and goes home', async () => {
-    const fixture = await open(`#token=${TOKEN}`, sessionView({ account: { id: 'a', email: 'jane@example.com', fullName: null, role: null, isPlatformOperator: false } }));
+    const fixture = await open(`#token=${TOKEN}`, accessContext({ account: { id: 'a', email: 'jane@example.com', fullName: null }, activeTenant: null, role: null, memberships: [] }));
 
     expect(textOf(byTestId(root(fixture), 'accept-as-email'))).toBe('jane@example.com');
     (byTestId(root(fixture), 'accept-submit') as HTMLButtonElement).click();
@@ -113,20 +135,18 @@ describe('AcceptInvitationPage', () => {
     expect(post.request.body).toEqual({ token: TOKEN });
     post.flush(okEnvelope({ membership: MEMBERSHIP }));
 
-    const switchCall = await nextCall('POST', '/api/v1/auth/switch-tenant');
-
-    expect(switchCall.request.body).toEqual({ tenantId: TENANT.id });
-    switchCall.flush(okEnvelope(sessionView({ activeTenant: TENANT })));
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/home'));
+    expect(switchTenant).toHaveBeenCalledExactlyOnceWith(TENANT.id);
     expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ severity: 'success', summary: tenancyEs.accept.accepted }));
   });
 
   it('does not report a failed tenant switch as an invalid invitation', async () => {
     const fixture = await open(`#token=${TOKEN}`);
 
+    switchTenant.mockRejectedValueOnce(new HttpErrorResponse({ status: 500, statusText: 'Internal Server Error', error: errorEnvelope('SERVICE_UNAVAILABLE') }));
+
     (byTestId(root(fixture), 'accept-submit') as HTMLButtonElement).click();
     (await nextCall('POST', ACCEPT_URL)).flush(okEnvelope({ membership: MEMBERSHIP }));
-    (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(errorEnvelope('SERVICE_UNAVAILABLE'), { status: 500, statusText: 'Internal Server Error' });
     await vi.waitFor(async () => {
       await settle(fixture);
       expect(byTestId(root(fixture), 'accept-error')).not.toBeNull();
@@ -140,17 +160,18 @@ describe('AcceptInvitationPage', () => {
   it('retries only the tenant switch after a failed switch, without sending the accepted token again', async () => {
     const fixture = await open(`#token=${TOKEN}`);
 
+    switchTenant.mockRejectedValueOnce(new HttpErrorResponse({ status: 500, statusText: 'Internal Server Error', error: errorEnvelope('SERVICE_UNAVAILABLE') }));
+
     (byTestId(root(fixture), 'accept-submit') as HTMLButtonElement).click();
     (await nextCall('POST', ACCEPT_URL)).flush(okEnvelope({ membership: MEMBERSHIP }));
-    (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(errorEnvelope('SERVICE_UNAVAILABLE'), { status: 500, statusText: 'Internal Server Error' });
     await vi.waitFor(async () => {
       await settle(fixture);
       expect(byTestId(root(fixture), 'accept-error')).not.toBeNull();
     });
 
     (byTestId(root(fixture), 'accept-submit') as HTMLButtonElement).click();
-    (await nextCall('POST', '/api/v1/auth/switch-tenant')).flush(okEnvelope(sessionView({ activeTenant: TENANT })));
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/home'));
+    expect(switchTenant).toHaveBeenCalledTimes(2);
     expect(http.match((request) => request.url === ACCEPT_URL)).toHaveLength(0);
   });
 
@@ -204,7 +225,7 @@ describe('AcceptInvitationPage', () => {
     expect(textOf(byTestId(root(fixture), 'accept-already-member'))).toContain(tenancyEs.accept.alreadyMember);
   });
 
-  it('creates the account and sends the person to /login with the email in the router state, never in the URL', async () => {
+  it('creates the account and asks the access port for the sign-in page with the email and the notice', async () => {
     const fixture = await open(`#token=${TOKEN}`, null);
 
     await fillNew(fixture);
@@ -214,11 +235,7 @@ describe('AcceptInvitationPage', () => {
     expect(post.request.body).toEqual({ token: TOKEN, password: 'synthetic-password', fullName: 'Jane Doe' });
     post.flush(okEnvelope({ membership: MEMBERSHIP, account: { id: 'b', email: 'jane@example.com', fullName: 'Jane Doe' } }), { status: 201, statusText: 'Created' });
 
-    const router = TestBed.inject(Router);
-
-    await vi.waitFor(() => expect(router.url).toBe('/login'));
-    expect(router.lastSuccessfulNavigation()?.extras.state).toEqual({ email: 'jane@example.com', noticeKey: 'accountCreated' });
-    expect(router.url).not.toContain('jane');
+    await vi.waitFor(() => expect(signIn).toHaveBeenCalledExactlyOnceWith({ email: 'jane@example.com', notice: 'accountCreated' }));
   });
 
   it('does not send a form with a different confirmation', async () => {
@@ -305,9 +322,7 @@ describe('AcceptInvitationPage', () => {
 
     (byTestId(root(fixture), 'accept-sign-in') as HTMLButtonElement).click();
 
-    const router = TestBed.inject(Router);
-
-    await vi.waitFor(() => expect(router.url).toBe('/login?returnUrl=%2Finvitations%2Faccept'));
+    expect(signIn).toHaveBeenCalledExactlyOnceWith({ returnUrl: '/invitations/accept' });
 
     // After the login the page is created again with no fragment and finds the token.
     const returned = TestBed.createComponent(AcceptInvitationPage);
@@ -315,6 +330,21 @@ describe('AcceptInvitationPage', () => {
     await settle(returned);
     expect(byTestId(root(returned), 'accept-new-submit')).not.toBeNull();
     expect(byTestId(root(returned), 'accept-invalid')).toBeNull();
+  });
+
+  it('shows the service-unavailable text when the visitor state cannot be loaded', async () => {
+    admitAnswer = 'failed';
+
+    const fixture = await open(`#token=${TOKEN}`, null);
+
+    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(es.errors.codes.SERVICE_UNAVAILABLE);
+  });
+
+  it('shows the sign-in choice, not an error, for an anonymous visitor', async () => {
+    const fixture = await open(`#token=${TOKEN}`, null);
+
+    expect(byTestId(root(fixture), 'accept-error')).toBeNull();
+    expect(byTestId(root(fixture), 'accept-sign-in')).not.toBeNull();
   });
 
   it('forgets the pending token once the page took it', async () => {

@@ -1,60 +1,49 @@
-import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
-import { okEnvelope } from '../../../testing/fixtures/api-envelope';
-import { sessionView } from '../../../testing/fixtures/session-view';
-import { SESSION_URL, fakeLocation } from '../../../testing/fixtures/session-testing';
-import { CONFIG_URL, nextCall, stubBroadcastChannel } from '../../../testing/fixtures/http-testing';
-import { BROWSER_LOCATION } from './session/browser-location';
+import { accessContext, provideFakeAccess, provideTenantSelection } from '../../../testing/fixtures/access-testing';
+import type { AccessContext } from './access/access.types';
 import { coreModule } from './module';
 
-const MEMBER = { id: '22222222-2222-4222-8222-222222222222', email: 'member@example.com', fullName: null, role: 'member', isPlatformOperator: false };
-
 describe('coreModule api-keys route', () => {
-  let http: HttpTestingController;
-
   let router: Router;
 
-  beforeEach(() => {
-    stubBroadcastChannel();
+  async function go(context: AccessContext | null): Promise<string> {
     const apiKeysRoute = coreModule.shellRoutes.find((route) => route.path === 'api-keys');
 
     configureFeatureTest(
       [
         { path: 'api-keys', canMatch: apiKeysRoute?.canMatch, component: BlankComponent },
-        { path: 'forbidden', component: BlankComponent }
+        { path: 'forbidden', component: BlankComponent },
+        { path: 'no-tenant', component: BlankComponent },
+        { path: 'login', component: BlankComponent }
       ],
-      [
-        { provide: MessageService, useValue: { add: vi.fn() } },
-        { provide: BROWSER_LOCATION, useValue: fakeLocation() }
-      ]
+      [...provideFakeAccess(context), provideTenantSelection('/no-tenant'), { provide: MessageService, useValue: { add: vi.fn() } }]
     );
-    http = TestBed.inject(HttpTestingController);
     router = TestBed.inject(Router);
-  });
-
-  afterEach(() => {
-    http.verify();
-    vi.unstubAllGlobals();
-  });
-
-  async function go(account: unknown): Promise<string> {
-    const navigation = router.navigateByUrl('/api-keys');
-
-    await vi.waitFor(() => http.expectOne(CONFIG_URL).flush({ apiUrl: '' }));
-    (await nextCall('GET', SESSION_URL)).flush(okEnvelope(sessionView({ account })));
-    await navigation;
+    await router.navigateByUrl('/api-keys');
 
     return router.url;
   }
 
   it('opens for an admin of the active tenant', async () => {
-    expect(await go(sessionView()['account'])).toBe('/api-keys');
+    expect(await go(accessContext())).toBe('/api-keys');
   });
 
   it('sends a member to /forbidden', async () => {
-    expect(await go(MEMBER)).toBe('/forbidden');
+    expect(await go(accessContext({ role: 'member' }))).toBe('/forbidden');
+  });
+
+  it('keeps a tenantless platform operator out: the keys screen still needs a tenant', async () => {
+    expect(await go(accessContext({ activeTenant: null, role: null, isPlatformOperator: true, memberships: [] }))).toBe('/no-tenant');
+  });
+});
+
+describe('coreModule contributions', () => {
+  it('puts the tenant switcher in the context slot and the account menu in the account slot', () => {
+    const slots = (coreModule.topbar ?? []).map((item) => `${item.id}:${item.slot}`);
+
+    expect(slots).toEqual(['tenant-switcher:context', 'account-menu:account']);
   });
 });

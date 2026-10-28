@@ -1,10 +1,12 @@
-import { Provider, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Provider, Signal, computed, inject, isSignal, signal } from '@angular/core';
+import { Router, UrlTree } from '@angular/router';
 import { ACCESS_PROVIDER, FLAG_SOURCE, TENANT_SELECTION } from '@/platform/core';
 import type { AccessContext, AccessProvider, FlagSource, SignInOptions } from '@/platform/core';
 
 /** What a spec may replace on the fake access provider; every member defaults to a resolved spy. */
 export interface FakeAccessOverrides {
+  /** Replaces the default `admit()`, which admits any visitor with a context and redirects an anonymous one to `/login`. */
+  readonly admit?: () => Promise<true | UrlTree>;
   readonly switchTenant?: (tenantId: string) => Promise<void>;
   readonly reload?: () => Promise<void>;
   readonly signOut?: () => Promise<void>;
@@ -31,9 +33,9 @@ export function accessContext(overrides: Partial<AccessContext> = {}): AccessCon
 
 /**
  * Boundary fake of the access and flag ports. A `null` context is an anonymous visitor: not admitted, and `admit()`
- * answers a redirect to `/login`. Any other context is admitted.
+ * answers a redirect to `/login`. Any other context is admitted. Pass a signal to change the visitor during a spec.
  */
-export function provideFakeAccess(context: AccessContext | null, overrides: FakeAccessOverrides = {}): Provider[] {
+export function provideFakeAccess(context: AccessContext | null | Signal<AccessContext | null>, overrides: FakeAccessOverrides = {}): Provider[] {
   const flags = overrides.flags ?? {};
 
   const flagSource: FlagSource = { isEnabled: (flagKey) => flags[flagKey] === true };
@@ -41,12 +43,12 @@ export function provideFakeAccess(context: AccessContext | null, overrides: Fake
   const access = (): AccessProvider => {
     const router = inject(Router);
 
-    const current = signal(context);
+    const current: Signal<AccessContext | null> = isSignal(context) ? (context as Signal<AccessContext | null>) : signal(context).asReadonly();
 
     const provider: AccessProvider = {
       admitted: computed(() => current() !== null),
-      context: current.asReadonly(),
-      admit: () => Promise.resolve(context === null ? router.createUrlTree(['/login']) : true),
+      context: current,
+      admit: overrides.admit ?? (() => Promise.resolve(current() === null ? router.createUrlTree(['/login']) : true)),
       switchTenant: overrides.switchTenant ?? vi.fn(() => Promise.resolve()),
       reload: overrides.reload ?? vi.fn(() => Promise.resolve()),
       signOut: overrides.signOut ?? vi.fn(() => Promise.resolve()),

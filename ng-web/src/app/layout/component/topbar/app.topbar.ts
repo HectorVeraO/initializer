@@ -1,21 +1,27 @@
 import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { NgComponentOutlet } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { SelectModule } from '@openng/optimus-ui/select';
 import { FormsModule } from '@angular/forms';
-import { AccountMenu, TenantSwitcher } from '@/platform/core';
+import { PLATFORM_MODULES, platformTopbar } from '@/platform/core';
 import { LayoutService } from '../../service/layout.service';
 import { TranslocoModule, TranslocoService } from '@jsverse/transloco';
 
 @Component({
   selector: 'p-topbar',
   standalone: true,
-  imports: [RouterModule, TranslocoModule, SelectModule, FormsModule, TenantSwitcher, AccountMenu],
+  imports: [RouterModule, TranslocoModule, SelectModule, FormsModule, NgComponentOutlet],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.topbar.html'
 })
 export class AppTopbar {
   public readonly layoutService = inject(LayoutService);
   private readonly translocoService = inject(TranslocoService);
+
+  private readonly modules = inject(PLATFORM_MODULES);
+
+  protected readonly contextItems = platformTopbar(this.modules, 'context');
+  protected readonly accountItems = platformTopbar(this.modules, 'account');
 
   protected readonly languages = [{ code: 'es' }, { code: 'en' }];
 

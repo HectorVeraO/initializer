@@ -50,7 +50,8 @@
     "pickTenant": "Elige un tenant",
     "enabledToggle": "Activo",
     "save": "Guardar",
-    "tenantsFailed": "No se pudo cargar la lista de tenants; se muestran los ids."
+    "tenantsFailed": "No se pudo cargar la lista de tenants; se muestran los ids.",
+    "tenantsAbsent": "Esta consola no tiene lista de tenants, por lo que los overrides por tenant no están disponibles."
   },
   "errors": {
     "FLAG_NOT_DEFINED_IN_MANIFEST": "Esa flag ya no está definida en el manifiesto. Se actualizó la lista.",

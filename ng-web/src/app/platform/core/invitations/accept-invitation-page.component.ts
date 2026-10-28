@@ -12,13 +12,15 @@ import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { errorMessage } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { TENANCY_I18N } from '../i18n/tenancy/scope';
-import { SessionStore } from '../session/session-store.service';
+import { ACCESS_PROVIDER } from '../access/access.port';
 import { fieldIssueMessages, issueMessage, unmatchedIssueMessages } from '../ui/issue-message';
 import { InvitationsApi } from './invitations-api.service';
 import { ACCEPT_PATH, tokenFromHash } from './invitation-token';
 import { PendingInvitation } from './pending-invitation.service';
 
 const SCOPE_ALIAS = TENANCY_I18N.alias as string;
+
+const ERROR_PAGE_PATH = '/error-page';
 
 const NEW_ACCOUNT_FIELDS: readonly string[] = ['fullName', 'password'];
 
@@ -40,7 +42,7 @@ function passwordsMatch(group: AbstractControl): ValidationErrors | null {
 })
 export class AcceptInvitationPage {
   private readonly api = inject(InvitationsApi);
-  private readonly store = inject(SessionStore);
+  private readonly access = inject(ACCESS_PROVIDER);
   private readonly router = inject(Router);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
@@ -60,8 +62,8 @@ export class AcceptInvitationPage {
   protected readonly showMismatch = signal(false);
 
   protected readonly hasToken = computed(() => this.token() !== null);
-  protected readonly isAuthenticated = computed(() => this.store.state() === 'authenticated');
-  protected readonly accountEmail = computed(() => this.store.account()?.email ?? '');
+  protected readonly isAuthenticated = this.access.admitted;
+  protected readonly accountEmail = computed(() => this.access.context()?.account.email ?? '');
 
   protected readonly form = new FormGroup(
     {
@@ -126,7 +128,7 @@ export class AcceptInvitationPage {
   /** The invitation is already accepted here: a failed switch is reported as itself, never as an invalid invitation. */
   private async switchToInvitedTenant(tenantId: string): Promise<void> {
     try {
-      await this.store.switchTenant(tenantId);
+      await this.access.switchTenant(tenantId);
     } catch (error) {
       this.errorText.set(errorMessage(this.transloco, error));
 
@@ -145,7 +147,7 @@ export class AcceptInvitationPage {
     }
 
     this.pending.set(token);
-    void this.router.navigate(['/login'], { queryParams: { returnUrl: ACCEPT_PATH } });
+    void this.access.signIn({ returnUrl: ACCEPT_PATH });
   }
 
   protected async submitNew(): Promise<void> {
@@ -172,7 +174,7 @@ export class AcceptInvitationPage {
     try {
       const result = await firstValueFrom(this.api.acceptNew({ token, password: this.form.controls.password.value, fullName: this.form.controls.fullName.value.trim() }));
 
-      await this.router.navigate(['/login'], { state: { email: result.account.email, noticeKey: 'accountCreated' } });
+      await this.access.signIn({ email: result.account.email, notice: 'accountCreated' });
     } catch (error) {
       this.showNewError(error);
     } finally {
@@ -181,9 +183,12 @@ export class AcceptInvitationPage {
   }
 
   private async start(): Promise<void> {
-    try {
-      await this.store.ensureLoaded();
-    } catch {
+    // admit() answers a redirect instead of throwing: the error page means the visitor state could not be loaded, any other redirect means anonymous.
+    const admission = await this.access.admit();
+
+    const hasFailed = admission !== true && this.router.serializeUrl(admission).startsWith(ERROR_PAGE_PATH);
+
+    if (hasFailed) {
       this.errorText.set(this.transloco.translate('errors.codes.SERVICE_UNAVAILABLE'));
     }
 

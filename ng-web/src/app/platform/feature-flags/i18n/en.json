@@ -50,7 +50,8 @@
     "pickTenant": "Choose a tenant",
     "enabledToggle": "Enabled",
     "save": "Save",
-    "tenantsFailed": "The tenant list could not be loaded; tenants show as ids."
+    "tenantsFailed": "The tenant list could not be loaded; tenants show as ids.",
+    "tenantsAbsent": "There is no tenant list in this console, so tenant overrides are not available."
   },
   "errors": {
     "FLAG_NOT_DEFINED_IN_MANIFEST": "That flag is no longer defined in the manifest. The list was refreshed.",

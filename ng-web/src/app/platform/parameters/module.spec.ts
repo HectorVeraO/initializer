@@ -1,14 +1,10 @@
-import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
+import type { AccessContext } from '@/platform/core';
 import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
-import { coreModule, platformRoutes, meetsRequirement } from '@/platform/core';
-import type { SessionView } from '@/platform/core';
-import { okEnvelope } from '../../../testing/fixtures/api-envelope';
-import { sessionView } from '../../../testing/fixtures/session-view';
-import { SESSION_URL } from '../../../testing/fixtures/session-testing';
-import { CONFIG_URL, nextCall, stubBroadcastChannel } from '../../../testing/fixtures/http-testing';
+import { NO_FLAGS, coreModule, firstUnmetClause, platformRoutes } from '@/platform/core';
+import { accessContext, provideFakeAccess, provideTenantSelection } from '../../../testing/fixtures/access-testing';
 import { parametersModule } from './module';
 import { ParameterListPage } from './parameter-list/parameter-list.component';
 import { parametersRoutes } from './parameters.routes';
@@ -30,15 +26,15 @@ describe('parametersModule', () => {
 
     expect(entry.path).toBe('/parameters');
 
-    const member = sessionView() as unknown as SessionView;
+    const member = accessContext();
 
-    const operatorWithoutTenant = sessionView({ account: { ...(member.account as object), role: null, isPlatformOperator: true }, activeTenant: null }) as unknown as SessionView;
+    const operatorWithoutTenant = accessContext({ activeTenant: null, role: null, isPlatformOperator: true, memberships: [] });
 
-    const userWithoutTenant = sessionView({ account: { ...(member.account as object), role: null }, activeTenant: null }) as unknown as SessionView;
+    const userWithoutTenant = accessContext({ activeTenant: null, role: null, memberships: [] });
 
-    expect(meetsRequirement(member, entry.requires)).toBe(true);
-    expect(meetsRequirement(operatorWithoutTenant, entry.requires)).toBe(true);
-    expect(meetsRequirement(userWithoutTenant, entry.requires)).toBe(false);
+    expect(firstUnmetClause(member, NO_FLAGS, true, entry.requires)).toBeNull();
+    expect(firstUnmetClause(operatorWithoutTenant, NO_FLAGS, true, entry.requires)).toBeNull();
+    expect(firstUnmetClause(userWithoutTenant, NO_FLAGS, true, entry.requires)).toBe('tenant');
   });
 
   it('loads the list screen on the empty child path', async () => {
@@ -48,13 +44,9 @@ describe('parametersModule', () => {
   });
 
   describe('route guard', () => {
-    let http: HttpTestingController;
-
     let router: Router;
 
-    beforeEach(() => {
-      stubBroadcastChannel();
-
+    function configure(context: AccessContext | null): void {
       const [shellRoute] = parametersModule.shellRoutes;
 
       configureFeatureTest(
@@ -65,41 +57,32 @@ describe('parametersModule', () => {
           { path: 'login', component: BlankComponent },
           { path: '**', component: BlankComponent }
         ],
-        [{ provide: MessageService, useValue: { add: vi.fn() } }]
+        [...provideFakeAccess(context), provideTenantSelection('/no-tenant'), { provide: MessageService, useValue: { add: vi.fn() } }]
       );
-      http = TestBed.inject(HttpTestingController);
       router = TestBed.inject(Router);
-    });
+    }
 
-    afterEach(() => {
-      http.verify();
-      vi.unstubAllGlobals();
-    });
-
-    async function visit(session: object): Promise<string> {
-      const navigation = router.navigateByUrl('/parameters');
-
-      await vi.waitFor(() => http.expectOne(CONFIG_URL).flush({ apiUrl: '' }));
-      (await nextCall('GET', SESSION_URL)).flush(okEnvelope(session));
-      await navigation;
+    async function visit(context: AccessContext | null): Promise<string> {
+      configure(context);
+      await router.navigateByUrl('/parameters');
 
       return router.url;
     }
 
     it('opens for a member with a tenant', async () => {
-      expect(await visit(sessionView())).toBe('/parameters');
+      expect(await visit(accessContext())).toBe('/parameters');
     });
 
     it('opens for a platform operator without a tenant', async () => {
-      const account = { ...(sessionView()['account'] as object), role: null, isPlatformOperator: true };
-
-      expect(await visit(sessionView({ account, activeTenant: null }))).toBe('/parameters');
+      expect(await visit(accessContext({ activeTenant: null, role: null, isPlatformOperator: true, memberships: [] }))).toBe('/parameters');
     });
 
     it('keeps out an account with no tenant that is not a platform operator', async () => {
-      const account = { ...(sessionView()['account'] as object), role: null };
+      expect(await visit(accessContext({ activeTenant: null, role: null, memberships: [] }))).toBe('/no-tenant');
+    });
 
-      expect(await visit(sessionView({ account, activeTenant: null }))).toBe('/no-tenant');
+    it('sends an anonymous visitor to the sign-in redirect', async () => {
+      expect(await visit(null)).toBe('/login');
     });
   });
 });

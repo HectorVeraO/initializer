@@ -7,7 +7,7 @@ import { ErrorPageComponent } from '@/error-page/error-page.component';
 import { DEV_ROUTES } from '@/dev/dev.routes';
 import { HomeComponent } from '@/home/home.component';
 import { ForbiddenComponent } from '@/forbidden/forbidden.component';
-import { authGuard, platformRoutes } from '@/platform/core';
+import { platformRoutes, requireAccess } from '@/platform/core';
 import type { WebModule } from '@/platform/core';
 import { installedModules } from '@/platform/modules';
 
@@ -39,7 +39,7 @@ export function buildAppRoutes(devRoutes: Routes, modules: readonly WebModule[])
         { path: '', pathMatch: 'full', redirectTo: 'home' },
         { path: 'forbidden', component: ForbiddenComponent },
         { path: 'dev', children: devRoutes },
-        { path: '', canMatch: [authGuard], children: [{ path: 'home', component: HomeComponent }, ...platform.shell] }
+        { path: '', canMatch: [requireAccess({})], children: [{ path: 'home', component: HomeComponent }, ...platform.shell] }
       ]
     },
     { path: '**', redirectTo: '/notfound' }

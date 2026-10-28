@@ -1,23 +1,17 @@
-import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
-import { coreModule, platformRoutes, meetsRequirement } from '@/platform/core';
-import type { SessionView } from '@/platform/core';
-import { okEnvelope } from '../../../testing/fixtures/api-envelope';
-import { sessionView } from '../../../testing/fixtures/session-view';
-import { SESSION_URL } from '../../../testing/fixtures/session-testing';
-import { CONFIG_URL, nextCall, stubBroadcastChannel } from '../../../testing/fixtures/http-testing';
+import { NO_FLAGS, coreModule, firstUnmetClause, platformRoutes } from '@/platform/core';
+import type { AccessContext } from '@/platform/core';
+import { accessContext, provideFakeAccess } from '../../../testing/fixtures/access-testing';
 import { featureFlagsRoutes } from './feature-flags.routes';
 import { FlagDetailPage } from './flag-detail/flag-detail.component';
 import { FlagListPage } from './flag-list/flag-list.component';
 import { featureFlagsModule } from './module';
 
-function operatorSession(): Record<string, unknown> {
-  const account = { ...(sessionView()['account'] as object), isPlatformOperator: true };
-
-  return sessionView({ account });
+function operatorContext(): AccessContext {
+  return accessContext({ isPlatformOperator: true });
 }
 
 describe('featureFlagsModule', () => {
@@ -36,8 +30,8 @@ describe('featureFlagsModule', () => {
     const [entry] = featureFlagsModule.nav;
 
     expect(entry.path).toBe('/operator/feature-flags');
-    expect(meetsRequirement(operatorSession() as unknown as SessionView, entry.requires)).toBe(true);
-    expect(meetsRequirement(sessionView() as unknown as SessionView, entry.requires)).toBe(false);
+    expect(firstUnmetClause(operatorContext(), NO_FLAGS, true, entry.requires)).toBeNull();
+    expect(firstUnmetClause(accessContext(), NO_FLAGS, true, entry.requires)).toBe('platformOperator');
   });
 
   it('loads the list on the empty path and the detail on :key', async () => {
@@ -50,13 +44,9 @@ describe('featureFlagsModule', () => {
   });
 
   describe('route guard', () => {
-    let http: HttpTestingController;
-
     let router: Router;
 
-    beforeEach(() => {
-      stubBroadcastChannel();
-
+    async function visit(context: AccessContext | null): Promise<string> {
       const [shellRoute] = featureFlagsModule.shellRoutes;
 
       configureFeatureTest(
@@ -66,33 +56,24 @@ describe('featureFlagsModule', () => {
           { path: 'login', component: BlankComponent },
           { path: '**', component: BlankComponent }
         ],
-        [{ provide: MessageService, useValue: { add: vi.fn() } }]
+        [...provideFakeAccess(context), { provide: MessageService, useValue: { add: vi.fn() } }]
       );
-      http = TestBed.inject(HttpTestingController);
       router = TestBed.inject(Router);
-    });
-
-    afterEach(() => {
-      http.verify();
-      vi.unstubAllGlobals();
-    });
-
-    async function visit(session: object): Promise<string> {
-      const navigation = router.navigateByUrl('/operator/feature-flags');
-
-      await vi.waitFor(() => http.expectOne(CONFIG_URL).flush({ apiUrl: '' }));
-      (await nextCall('GET', SESSION_URL)).flush(okEnvelope(session));
-      await navigation;
+      await router.navigateByUrl('/operator/feature-flags');
 
       return router.url;
     }
 
     it('opens for a platform operator', async () => {
-      expect(await visit(operatorSession())).toBe('/operator/feature-flags');
+      expect(await visit(operatorContext())).toBe('/operator/feature-flags');
     });
 
     it('sends an admin who is not a platform operator to /forbidden', async () => {
-      expect(await visit(sessionView())).toBe('/forbidden');
+      expect(await visit(accessContext())).toBe('/forbidden');
+    });
+
+    it('sends an anonymous visitor to the sign-in redirect', async () => {
+      expect(await visit(null)).toBe('/login');
     });
   });
 });
