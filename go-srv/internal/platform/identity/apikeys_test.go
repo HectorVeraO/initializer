@@ -702,10 +702,12 @@ func TestAPIKeyRoutesFollowTheCallerTable(t *testing.T) {
 		key := e.apiKey(tenant, []string{"api-keys:read"}, nil)
 		global := e.apiKey("", []string{"api-keys:read"}, nil)
 		globalPrefix, _, _ := splitAPIKey(global)
+		tenantPrefix, _, _ := splitAPIKey(key)
 
 		list := e.withKey("/api/v1/api-keys", key)
-		if list.Code != http.StatusOK || strings.Contains(list.Body.String(), globalPrefix) {
-			t.Fatalf("list answered %d: %s", list.Code, list.Body.String())
+		hasOwnRow := strings.Contains(list.Body.String(), tenantPrefix)
+		if list.Code != http.StatusOK || !hasOwnRow || strings.Contains(list.Body.String(), globalPrefix) {
+			t.Fatalf("list answered %d (own row listed: %t): %s", list.Code, hasOwnRow, list.Body.String())
 		}
 		for _, route := range routes[1:] {
 			expectError(t, e.mutateWithKey(route.method, route.path, key), http.StatusUnauthorized, "SESSION_INVALID")
