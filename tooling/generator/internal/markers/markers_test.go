@@ -92,23 +92,24 @@ func TestDropRemovesAbsentBlocks(t *testing.T) {
 
 func TestParseReportsInvalidMarkers(t *testing.T) {
 	cases := []struct {
-		name string
-		path string
-		src  string
-		want string
+		name  string
+		path  string
+		src   string
+		want  string
+		count int
 	}{
-		{"unclosed", "a.yml", "# initializer:module x\na: 1\n", `opening marker for x has no closing marker (line 1)`},
-		{"unopened", "a.yml", "a: 1\n# initializer:end x\n", `closing marker for x has no opening marker (line 2)`},
-		{"nested", "a.yml", "# initializer:module x\n# initializer:module y\n", `markers do not nest: y opens inside x (line 2)`},
-		{"mismatched close", "a.yml", "# initializer:module x\n# initializer:end y\n# initializer:end x\n", `closing marker names y, the open block is x (line 2)`},
-		{"two spaces", "a.yml", "# initializer:module  x\n# initializer:end x\n", `marker must be exactly "# initializer:module <id>" (line 1)`},
-		{"wrong comment token", "a.yml", "// initializer:module x\n# initializer:end x\n", `marker must be exactly "# initializer:module <id>" (line 1)`},
-		{"hash in jsonc", "ng-web/proxy.conf.json", "# initializer:module x\n", `marker must be exactly "// initializer:module <id>" (line 1)`},
-		{"bad markdown close", "a.md", "<!-- initializer:end x-->\n", `marker must be exactly "<!-- initializer:end <id> -->" (line 1)`},
-		{"uppercase id", "a.yml", "# initializer:module X\n", `marker must be exactly "# initializer:module <id>" (line 1)`},
-		{"id over 31 characters", "a.yml", "# initializer:module " + strings.Repeat("a", 32) + "\n", `marker must be exactly "# initializer:module <id>" (line 1)`},
-		{"core", "a.yml", "# initializer:module core\n# initializer:end core\n", `a marker may not name core (line 1)`},
-		{"disallowed kind", "a.json", "# initializer:module x\n", `markers are not allowed in this file kind (line 1)`},
+		{"unclosed", "a.yml", "# initializer:module x\na: 1\n", `opening marker for x has no closing marker (line 1)`, 1},
+		{"unopened", "a.yml", "a: 1\n# initializer:end x\n", `closing marker for x has no opening marker (line 2)`, 1},
+		{"nested", "a.yml", "# initializer:module x\n# initializer:module y\n", `markers do not nest: y opens inside x (line 2)`, 2},
+		{"mismatched close", "a.yml", "# initializer:module x\n# initializer:end y\n# initializer:end x\n", `closing marker names y, the open block is x (line 2)`, 1},
+		{"two spaces", "a.yml", "# initializer:module  x\n# initializer:end x\n", `marker must be exactly "# initializer:module <id>" (line 1)`, 2},
+		{"wrong comment token", "a.yml", "// initializer:module x\n# initializer:end x\n", `marker must be exactly "# initializer:module <id>" (line 1)`, 2},
+		{"hash in jsonc", "ng-web/proxy.conf.json", "# initializer:module x\n", `marker must be exactly "// initializer:module <id>" (line 1)`, 1},
+		{"bad markdown close", "a.md", "<!-- initializer:end x-->\n", `marker must be exactly "<!-- initializer:end <id> -->" (line 1)`, 1},
+		{"uppercase id", "a.yml", "# initializer:module X\n", `marker must be exactly "# initializer:module <id>" (line 1)`, 1},
+		{"id over 31 characters", "a.yml", "# initializer:module " + strings.Repeat("a", 32) + "\n", `marker must be exactly "# initializer:module <id>" (line 1)`, 1},
+		{"core", "a.yml", "# initializer:module core\n# initializer:end core\n", `a marker may not name core (line 1)`, 2},
+		{"disallowed kind", "a.json", "# initializer:module x\n", `markers are not allowed in this file kind (line 1)`, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -127,6 +128,9 @@ func TestParseReportsInvalidMarkers(t *testing.T) {
 			}
 			if !found {
 				t.Errorf("want message %q in %+v", tc.want, issues)
+			}
+			if len(issues) != tc.count {
+				t.Errorf("got %d issues, want %d: %+v", len(issues), tc.count, issues)
 			}
 			if _, err := markers.Drop(tc.path, []byte(tc.src), only()); err == nil {
 				t.Error("Drop must fail on a malformed file")
