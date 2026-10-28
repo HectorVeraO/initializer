@@ -13,7 +13,7 @@ import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 import { FeatureFlagsApi } from '../feature-flags-api.service';
 import type { FlagView } from '../feature-flags.types';
-import { PLATFORM_FEATURE_FLAGS_I18N } from '../module';
+import { PLATFORM_FEATURE_FLAGS_I18N } from '../i18n/scope';
 
 const SCOPE_ALIAS = PLATFORM_FEATURE_FLAGS_I18N.alias as string;
 

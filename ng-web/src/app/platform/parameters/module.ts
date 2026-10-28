@@ -1,13 +1,6 @@
-import type { ProviderScope } from '@jsverse/transloco';
 import { requireSession } from '@/platform/core';
 import type { WebModule } from '@/platform/core';
-
-/** Transloco scope of the parameters module; keys are read as `parameters.<key>`. */
-export const PLATFORM_PARAMETERS_I18N: ProviderScope = {
-  scope: 'parameters',
-  alias: 'parameters',
-  loader: { en: () => import('./i18n/en.json').then((m) => m.default), es: () => import('./i18n/es.json').then((m) => m.default) }
-};
+import { PLATFORM_PARAMETERS_I18N } from './i18n/scope';
 
 /** The parameters module: the parameter list, the tenant override dialog and the definition dialog. */
 export const parametersModule: WebModule = {

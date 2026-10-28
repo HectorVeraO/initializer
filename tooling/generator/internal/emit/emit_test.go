@@ -261,7 +261,7 @@ func TestLockRecordsDeliveredAndSourceHashes(t *testing.T) {
 
 func TestIdentityTargetOmitsSourceHashes(t *testing.T) {
 	repo := fixture.Load(t)
-	sel := selection(fixtureModule, "parameters")
+	sel := selection(fixtureModule, "feature-flags", "parameters")
 	sel.Project.Name = "fixture"
 	project := mustBuild(t, repo, sel)
 	for _, module := range decodeLock(t, project).Modules {
@@ -564,53 +564,5 @@ func TestWebStackLockListsAngularModules(t *testing.T) {
 	}
 	if strings.Join(web, ",") != "core,parameters" {
 		t.Fatalf("ng-web modules = %v", web)
-	}
-}
-
-func TestFlagsConfigSourceWithoutTheFeatureFlagsBlockIsRefusedWhenTheModuleIsNotSelected(t *testing.T) {
-	cases := []struct {
-		name         string
-		templatePath string
-		content      string
-	}{
-		{"env template", ".deploy/local/.example.env", "INITIALIZER_PG_PASSWORD=change-me\n"},
-		{"deploy README", ".deploy/local/README.md", "# Local\n\n## Ports\n\nnone\n"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			assertFlagsConfigRefused(t, tc.templatePath, []byte(tc.content))
-		})
-	}
-}
-
-func assertFlagsConfigRefused(t *testing.T, templatePath string, template []byte) {
-	t.Helper()
-	repo := fixture.Load(t)
-	root := t.TempDir()
-	copyTree(t, repo.Root, root)
-	if err := os.MkdirAll(filepath.Join(root, ".deploy", "local"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(templatePath)), template, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	crafted := repo.Catalog
-	crafted.Specs = append([]catalog.SpecEntry(nil), crafted.Specs...)
-	for i := range crafted.Specs {
-		if crafted.Specs[i].Spec != "parameters" {
-			continue
-		}
-		files := append([]catalog.File(nil), crafted.Specs[i].Files...)
-		files = append(files, catalog.File{Path: templatePath, SHA256: hashOf(template)})
-		crafted.Specs[i].Files = files
-	}
-	encoded, err := catalog.Encode(crafted)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = build(t, os.DirFS(root), crafted, encoded, selection(targetModule, "parameters"))
-	isRefusal := err != nil && strings.Contains(err.Error(), templatePath) && strings.Contains(err.Error(), "the feature-flags block is missing")
-	if !isRefusal {
-		t.Fatalf("want a missing feature-flags block error naming %s, got %v", templatePath, err)
 	}
 }

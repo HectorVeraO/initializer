@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, byTestId, configureFeatureTest, settle, textOf, typeInto } from '@/core/testing/ui-testing';
 import es from '../../../../assets/i18n/es.json';
-import coreEs from '../i18n/es.json';
+import tenancyEs from '../i18n/tenancy/es.json';
 import { errorEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { okEnvelope, sessionView } from '../../../../testing/fixtures/session-view';
 import { fakeLocation, loadSession, nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/session-testing';
@@ -61,7 +61,7 @@ describe('AcceptInvitationPage', () => {
     await settle(fixture);
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(textOf(fixture.nativeElement)).toContain(coreEs.accept.title);
+      expect(textOf(fixture.nativeElement)).toContain(tenancyEs.accept.title);
     });
 
     return fixture;
@@ -96,7 +96,7 @@ describe('AcceptInvitationPage', () => {
   it('shows the invalid message with a link home when there is no token', async () => {
     const fixture = await open('');
 
-    expect(textOf(byTestId(root(fixture), 'accept-invalid'))).toContain(coreEs.accept.invalid);
+    expect(textOf(byTestId(root(fixture), 'accept-invalid'))).toContain(tenancyEs.accept.invalid);
     expect(byTestId(root(fixture), 'accept-submit')).toBeNull();
     expect(byTestId(root(fixture), 'accept-new-submit')).toBeNull();
   });
@@ -117,7 +117,7 @@ describe('AcceptInvitationPage', () => {
     expect(switchCall.request.body).toEqual({ tenantId: TENANT.id });
     switchCall.flush(okEnvelope(sessionView({ activeTenant: TENANT })));
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/home'));
-    expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ severity: 'success' }));
+    expect(messages.add).toHaveBeenCalledWith(expect.objectContaining({ severity: 'success', summary: tenancyEs.accept.accepted }));
   });
 
   it('does not report a failed tenant switch as an invalid invitation', async () => {
@@ -180,7 +180,7 @@ describe('AcceptInvitationPage', () => {
     (await nextCall('POST', ACCEPT_URL)).flush(errorEnvelope('INVITATION_EMAIL_MISMATCH'), { status: 403, statusText: 'Forbidden' });
     await settle(fixture);
 
-    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(coreEs.accept.emailMismatch);
+    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(tenancyEs.accept.emailMismatch);
   });
 
   it.each(['TENANT_SUSPENDED', 'ACCOUNT_LOCKED_OR_DISABLED'])('shows the text of a 403 %s', async (code) => {
@@ -200,7 +200,7 @@ describe('AcceptInvitationPage', () => {
     (await nextCall('POST', ACCEPT_URL)).flush(errorEnvelope('MEMBERSHIP_ALREADY_ACTIVE'), { status: 409, statusText: 'Conflict' });
     await settle(fixture);
 
-    expect(textOf(byTestId(root(fixture), 'accept-already-member'))).toContain(coreEs.accept.alreadyMember);
+    expect(textOf(byTestId(root(fixture), 'accept-already-member'))).toContain(tenancyEs.accept.alreadyMember);
   });
 
   it('creates the account and sends the person to /login with the email in the router state, never in the URL', async () => {
@@ -254,7 +254,7 @@ describe('AcceptInvitationPage', () => {
     );
     await settle(fixture);
 
-    expect(textOf(byTestId(root(fixture), 'accept-new-password-error'))).toBe(coreEs.issues.PASSWORD_REJECTED);
+    expect(textOf(byTestId(root(fixture), 'accept-new-password-error'))).toBe(tenancyEs.issues.PASSWORD_REJECTED);
     expect(textOf(byTestId(root(fixture), 'accept-new-fullname-error'))).toBe(es.validation.rules.FIELD_TOO_LONG);
     expect((byTestId(root(fixture), 'accept-new-fullname') as HTMLInputElement).value).toBe('Jane Doe');
   });
@@ -296,7 +296,7 @@ describe('AcceptInvitationPage', () => {
     (await nextCall('POST', ACCEPT_NEW_URL)).flush(errorEnvelope(code), { status: 409, statusText: 'Conflict' });
     await settle(fixture);
 
-    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(coreEs.accept.accountExists);
+    expect(textOf(byTestId(root(fixture), 'accept-error'))).toBe(tenancyEs.accept.accountExists);
   });
 
   it('carries the token through the sign-in round trip', async () => {

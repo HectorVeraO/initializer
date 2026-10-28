@@ -8,7 +8,8 @@ export { authGuard, anonymousGuard, requireSession, flagGuard, meetsRequirement 
 export type { SessionRequirement } from './guards/guards';
 export { PLATFORM_MODULES, providePlatform, platformRoutes } from './composition/web-module';
 export type { WebModule, NavEntry } from './composition/web-module';
-export { coreModule, PLATFORM_CORE_I18N } from './module';
+export { coreModule } from './module';
+export { PLATFORM_CORE_I18N } from './i18n/scope';
 export { TenantSwitcher } from './shell/tenant-switcher.component';
 export { AccountMenu } from './shell/account-menu.component';
 export { OneTimeSecretDialogComponent } from './ui/one-time-secret-dialog.component';

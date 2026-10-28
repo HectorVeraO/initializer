@@ -85,8 +85,13 @@ func validSession(p reqctx.Principal) *fakeSession {
 func newScopes(t *testing.T) *access.ScopeRegistry {
 	t.Helper()
 	scopes := access.NewScopeRegistry()
-	for _, name := range []string{"tenant:read", "api-keys:read"} {
-		if err := scopes.Register(name, "test scope"); err != nil {
+	levels := map[string]access.ScopeLevel{
+		"tenant:read":   access.ScopeTenant,
+		"api-keys:read": access.ScopeTenant,
+		"platform:read": access.ScopeAny,
+	}
+	for name, level := range levels {
+		if err := scopes.Register(name, "test scope", level); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -382,11 +387,110 @@ func TestStep7cScopes(t *testing.T) {
 }
 
 func TestAPIKeySkipsRoleChecks(t *testing.T) {
-	key := reqctx.Principal{Kind: reqctx.ActorAPIKey, ActorID: "apikey:abc", Scopes: []string{"tenant:read"}}
+	key := reqctx.Principal{Kind: reqctx.ActorAPIKey, ActorID: "apikey:abc", TenantID: tenantPtr(tenantA), Scopes: []string{"tenant:read"}}
 	h := newHarness(t, &fakeSession{}, &fakeKey{present: true, principal: key})
 	rec := h.do(eitherPolicy, http.MethodPost, nil)
 	if rec.Code != http.StatusNoContent || h.seen.ActorID != "apikey:abc" {
 		t.Fatalf("status %d actor %q", rec.Code, h.seen.ActorID)
+	}
+}
+
+func tenantlessKey(scopes ...string) *fakeKey {
+	principal := reqctx.Principal{Kind: reqctx.ActorAPIKey, ActorID: "apikey:abc", Scopes: scopes}
+	return &fakeKey{present: true, principal: principal}
+}
+
+func TestAPIKeyWithoutTenantFailsTheTenantRequirement(t *testing.T) {
+	cases := map[string]struct {
+		policy access.Policy
+		scope  string
+		want   int
+	}{
+		"min role route": {eitherPolicy, "tenant:read", 403},
+		"tenant-level scope without min role on either": {
+			access.Policy{Kind: access.KindSessionOrAPIKey, Scope: "tenant:read"}, "tenant:read", 403},
+		"tenant-level scope on a key route": {keyPolicy, "tenant:read", 403},
+		"any-level scope on a key route": {
+			access.Policy{Kind: access.KindAPIKey, Scope: "platform:read"}, "platform:read", 204},
+		"any-level scope with min role": {
+			access.Policy{Kind: access.KindSessionOrAPIKey, Scope: "platform:read", MinRole: reqctx.RoleViewer}, "platform:read", 403},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, &fakeSession{}, tenantlessKey(c.scope))
+			rec := h.do(c.policy, http.MethodGet, nil)
+			if c.want == 204 {
+				if rec.Code != http.StatusNoContent {
+					t.Fatalf("status = %d, want 204; body %s", rec.Code, rec.Body)
+				}
+				return
+			}
+			h.expect(t, rec, 403, api.CodeActiveTenantRequired)
+		})
+	}
+}
+
+func TestAPIKeyWithTenantPassesTheTenantRequirement(t *testing.T) {
+	for name, policy := range map[string]access.Policy{"min role": eitherPolicy, "tenant scope": keyPolicy} {
+		t.Run(name, func(t *testing.T) {
+			key := reqctx.Principal{Kind: reqctx.ActorAPIKey, ActorID: "apikey:abc", TenantID: tenantPtr(tenantA), Scopes: []string{"tenant:read"}}
+			h := newHarness(t, &fakeSession{}, &fakeKey{present: true, principal: key})
+			if rec := h.do(policy, http.MethodGet, nil); rec.Code != http.StatusNoContent {
+				t.Fatalf("status = %d; body %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+func TestTenantlessOperatorNeverAppliesToKeys(t *testing.T) {
+	policy := access.Policy{
+		Kind: access.KindSessionOrAPIKey, Scope: "tenant:read",
+		MinRole: reqctx.RoleAdmin, TenantlessOperator: true,
+	}
+	h := newHarness(t, &fakeSession{}, tenantlessKey("tenant:read"))
+	h.expect(t, h.do(policy, http.MethodGet, nil), 403, api.CodeActiveTenantRequired)
+}
+
+func TestTenantlessOperatorOnSessions(t *testing.T) {
+	plain := access.Policy{Kind: access.KindSession, MinRole: reqctx.RoleAdmin}
+	relaxed := access.Policy{Kind: access.KindSession, MinRole: reqctx.RoleAdmin, TenantlessOperator: true}
+	tenantless := func(operator bool) reqctx.Principal {
+		return reqctx.Principal{Kind: reqctx.ActorAccount, ActorID: "acct-2", AccountID: "acct-2", IsPlatformOperator: operator}
+	}
+	withTenant := func(role reqctx.Role, operator bool) reqctx.Principal {
+		p := memberPrincipal(role)
+		p.IsPlatformOperator = operator
+		return p
+	}
+	cases := []struct {
+		name      string
+		principal reqctx.Principal
+		plain     api.Code
+		relaxed   api.Code
+	}{
+		{"admin with tenant", withTenant(reqctx.RoleAdmin, false), "", ""},
+		{"member operator with tenant", withTenant(reqctx.RoleMember, true), api.CodeInsufficientRole, api.CodeInsufficientRole},
+		{"operator without tenant", tenantless(true), api.CodeActiveTenantRequired, ""},
+		{"non-operator without tenant", tenantless(false), api.CodeActiveTenantRequired, api.CodeActiveTenantRequired},
+	}
+	for _, c := range cases {
+		for policyName, p := range map[string]access.Policy{"plain": plain, "relaxed": relaxed} {
+			want := c.plain
+			if policyName == "relaxed" {
+				want = c.relaxed
+			}
+			t.Run(c.name+"/"+policyName, func(t *testing.T) {
+				h := newHarness(t, validSession(c.principal), &fakeKey{})
+				rec := h.do(p, http.MethodGet, nil)
+				if want == "" {
+					if rec.Code != http.StatusNoContent {
+						t.Fatalf("status = %d, want 204; body %s", rec.Code, rec.Body)
+					}
+					return
+				}
+				h.expect(t, rec, 403, want)
+			})
+		}
 	}
 }
 
@@ -435,6 +539,13 @@ func TestRequireRejectsInvalidPolicies(t *testing.T) {
 		"operator on either":     {Kind: access.KindSessionOrAPIKey, Scope: "tenant:read", PlatformOperator: true},
 		"operator on public":     {Kind: access.KindNone, PlatformOperator: true},
 		"operator allow-expired": {Kind: access.KindSessionAllowExpired, PlatformOperator: true},
+
+		"tenantless operator without min role":                {Kind: access.KindSession, TenantlessOperator: true},
+		"tenantless operator on api key":                      {Kind: access.KindAPIKey, Scope: "tenant:read", MinRole: reqctx.RoleAdmin, TenantlessOperator: true},
+		"tenantless operator on public":                       {Kind: access.KindNone, TenantlessOperator: true},
+		"tenantless operator on allow-expired":                {Kind: access.KindSessionAllowExpired, TenantlessOperator: true},
+		"tenantless operator with platform only":              {Kind: access.KindSession, PlatformOperator: true, TenantlessOperator: true},
+		"tenantless operator with platform operator and role": {Kind: access.KindSession, MinRole: reqctx.RoleAdmin, PlatformOperator: true, TenantlessOperator: true},
 	}
 	for name, p := range invalid {
 		t.Run(name, func(t *testing.T) {
@@ -478,6 +589,8 @@ func TestMilestonePolicyShapesAreValid(t *testing.T) {
 		{Kind: access.KindSessionOrAPIKey, Scope: "tenant:read", MinRole: reqctx.RoleViewer},
 		{Kind: access.KindSessionOrAPIKey, Scope: "api-keys:read", MinRole: reqctx.RoleAdmin},
 		{Kind: access.KindSession, PlatformOperator: true},
+		{Kind: access.KindSession, MinRole: reqctx.RoleAdmin, TenantlessOperator: true},
+		{Kind: access.KindSessionOrAPIKey, Scope: "api-keys:read", MinRole: reqctx.RoleAdmin, TenantlessOperator: true},
 	}
 	for _, p := range shapes {
 		if err := p.Validate(scopes); err != nil {
@@ -520,5 +633,42 @@ func TestGuardFillsRequestInfoWhenPresent(t *testing.T) {
 	h.guard.Require(sessionPolicy, h.handler()).ServeHTTP(httptest.NewRecorder(), req)
 	if info.ActorID != "acct-1" || info.TenantID != tenantA || info.Route != "GET /api/v1/things" {
 		t.Fatalf("info = %+v", info)
+	}
+}
+
+func TestValidateNamesEveryTenantlessOperatorProblem(t *testing.T) {
+	scopes := newScopes(t)
+	cases := map[string]struct {
+		policy access.Policy
+		want   []string
+	}{
+		"without min role": {
+			access.Policy{Kind: access.KindSession, TenantlessOperator: true},
+			[]string{"access: tenantless operator requires min role"},
+		},
+		"on a key route": {
+			access.Policy{Kind: access.KindAPIKey, Scope: "tenant:read", MinRole: reqctx.RoleAdmin, TenantlessOperator: true},
+			[]string{"access: tenantless operator requires KindSession or KindSessionOrAPIKey"},
+		},
+		"both problems are reported together": {
+			access.Policy{Kind: access.KindNone, TenantlessOperator: true},
+			[]string{
+				"access: tenantless operator requires min role",
+				"access: tenantless operator requires KindSession or KindSessionOrAPIKey",
+			},
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := c.policy.Validate(scopes)
+			if err == nil {
+				t.Fatal("Validate accepted the policy")
+			}
+			for _, want := range c.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+		})
 	}
 }
