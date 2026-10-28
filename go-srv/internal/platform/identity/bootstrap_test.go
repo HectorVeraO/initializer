@@ -52,6 +52,8 @@ type fakeKratos struct {
 	// hideFirstFind makes the first lookup answer an empty list, so a create
 	// of a taken email meets the 409.
 	hideFirstFind bool
+	// nextID, when set, is the id the next create assigns.
+	nextID string
 }
 
 func newFakeKratos(t testing.TB) *fakeKratos {
@@ -91,9 +93,22 @@ func (f *fakeKratos) serve(w http.ResponseWriter, r *http.Request) {
 		f.find(w, r.URL.Query().Get("credentials_identifier"))
 	case isCreate:
 		f.create(w, body.Bytes())
+	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/admin/identities/"):
+		f.remove(w, strings.TrimPrefix(r.URL.Path, "/admin/identities/"))
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
+}
+
+func (f *fakeKratos) remove(w http.ResponseWriter, id string) {
+	for email, existing := range f.identities {
+		if existing == id {
+			delete(f.identities, email)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNotFound)
 }
 
 func (f *fakeKratos) find(w http.ResponseWriter, email string) {
@@ -122,6 +137,10 @@ func (f *fakeKratos) create(w http.ResponseWriter, raw []byte) {
 		return
 	}
 	id := newUUID()
+	if f.nextID != "" {
+		id = f.nextID
+		f.nextID = ""
+	}
 	f.identities[email] = id
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "traits": map[string]string{"email": email}})

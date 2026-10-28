@@ -111,3 +111,23 @@ func (a *Admin) CreatePasswordIdentity(ctx context.Context, email, password stri
 	}
 	return parsed.identity(), nil
 }
+
+// DeleteIdentity removes an identity; one that is already gone counts as
+// deleted.
+func (a *Admin) DeleteIdentity(ctx context.Context, id string) error {
+	req, err := newRequest(ctx, http.MethodDelete, endpoint(a.base, "/admin/identities/"+url.PathEscape(id)), nil)
+	if err != nil {
+		return err
+	}
+	status, _, err := do(a.client, req)
+	if err != nil {
+		return err
+	}
+	switch {
+	case status == http.StatusNoContent || status == http.StatusNotFound:
+		return nil
+	case status >= http.StatusInternalServerError:
+		return fmt.Errorf("%w: delete answered %d", ErrUnavailable, status)
+	}
+	return fmt.Errorf("kratos: delete identity answered %d", status)
+}

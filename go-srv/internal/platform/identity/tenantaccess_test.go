@@ -149,6 +149,38 @@ func TestAccountProvision(t *testing.T) {
 		}
 	})
 
+	t.Run("create conflict after a clear lookup is a conflict", func(t *testing.T) {
+		e := newTenEnv(t)
+		dir := newProvisioner(t, e)
+		e.kratos.addIdentity(janeEmail)
+		e.kratos.hideFirstFind = true
+
+		_, err := dir.Provision(ctx, accounts.NewAccount{Email: janeEmail, Password: randomPassword(t), FullName: "Jane Doe"})
+
+		requireAPIError(t, err, http.StatusConflict, accounts.CodeIdentityAlreadyExists)
+		if n := e.count("SELECT count(*) FROM iam_accounts WHERE email = $1", janeEmail); n != 0 {
+			t.Fatalf("accounts = %d, want 0", n)
+		}
+	})
+
+	t.Run("account insert conflict is a conflict and deletes the new identity", func(t *testing.T) {
+		e := newTenEnv(t)
+		dir := newProvisioner(t, e)
+		taken := e.account("taken@example.com")
+		e.kratos.nextID = taken.KratosIdentityID
+
+		_, err := dir.Provision(ctx, accounts.NewAccount{Email: janeEmail, Password: randomPassword(t), FullName: "Jane Doe"})
+
+		requireAPIError(t, err, http.StatusConflict, accounts.CodeIdentityAlreadyExists)
+		if e.kratos.identities[janeEmail] != "" {
+			t.Fatal("the Kratos identity was left without an account")
+		}
+		retry, err := dir.Provision(ctx, accounts.NewAccount{Email: janeEmail, Password: randomPassword(t), FullName: "Jane Doe"})
+		if err != nil || retry.Email != janeEmail {
+			t.Fatalf("retry = %+v err=%v, want the account created", retry, err)
+		}
+	})
+
 	t.Run("rejected password is a 422 password issue", func(t *testing.T) {
 		e := newTenEnv(t)
 		dir := newProvisioner(t, e)

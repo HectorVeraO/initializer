@@ -104,7 +104,7 @@ func (d *accountDirectory) GrantsOperator(email string) bool {
 }
 
 // Provision creates the Kratos identity, then the account, which is committed
-// when it returns. The password reaches only Kratos.
+// when it returns; an INSERT failure deletes the identity. The password reaches only Kratos.
 func (d *accountDirectory) Provision(ctx context.Context, a accounts.NewAccount) (accounts.Ref, error) {
 	name := strings.TrimSpace(a.FullName)
 	if a.Email == "" || a.Password == "" || name == "" {
@@ -139,11 +139,13 @@ func (d *accountDirectory) Provision(ctx context.Context, a accounts.NewAccount)
 VALUES ($1::uuid, $2, $3, $4, $5, $5) RETURNING `+accountRefColumns,
 		identity.ID, a.Email, name, d.GrantsOperator(a.Email), now)
 	ref, err := scanAccountRef(row)
-	if db.IsUniqueViolation(err) {
-		return accounts.Ref{}, exists
-	}
 	if err != nil {
-		return accounts.Ref{}, fmt.Errorf("identity: provision account: %w", err)
+		// The identity has no account: remove it so a retry can succeed.
+		cleanupErr := d.admin.DeleteIdentity(context.WithoutCancel(ctx), identity.ID)
+		if db.IsUniqueViolation(err) && cleanupErr == nil {
+			return accounts.Ref{}, exists
+		}
+		return accounts.Ref{}, fmt.Errorf("identity: provision account: %w", errors.Join(err, cleanupErr))
 	}
 	return ref, nil
 }
