@@ -1,0 +1,15 @@
+import { TranslocoService } from '@jsverse/transloco';
+import { MessageService } from '@openng/optimus-ui/api';
+import { firstValueFrom } from 'rxjs';
+import { IDENTITY_I18N } from '../i18n/scope';
+
+/** Toast `identity.session.tenantChanged`. Never rejects. */
+export async function notifyTenantChanged(messages: MessageService, transloco: TranslocoService): Promise<void> {
+  try {
+    const text = await firstValueFrom(transloco.selectTranslate('session.tenantChanged', {}, IDENTITY_I18N));
+
+    messages.add({ severity: 'info', summary: text });
+  } catch {
+    // The toast is a courtesy; a missing translation must not break the session flow.
+  }
+}

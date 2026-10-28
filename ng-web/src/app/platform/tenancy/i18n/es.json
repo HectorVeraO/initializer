@@ -1,0 +1,115 @@
+{
+  "nav": {
+    "memberships": "Miembros",
+    "invitations": "Invitaciones",
+    "operatorTenants": "Tenants"
+  },
+  "menu": {
+    "title": "Tenancy"
+  },
+  "shell": {
+    "activeTenant": "Tenant activo",
+    "noTenant": "Sin tenant activo",
+    "tenantSwitched": "El tenant activo cambió."
+  },
+  "roles": {
+    "admin": "Administrador",
+    "member": "Miembro",
+    "viewer": "Lector"
+  },
+  "errors": {
+    "TENANT_ACCESS_DENIED": "No tienes acceso a ese tenant.",
+    "TENANT_SUSPENDED": "Ese tenant está suspendido.",
+    "MEMBERSHIP_REVOKED": "Tu membresía en ese tenant fue revocada.",
+    "switchFailed": "No se pudo cambiar el tenant activo. Intenta de nuevo.",
+    "rowGone": "Ese elemento ya no existe o cambió. Se actualizó la lista."
+  },
+  "noTenant": {
+    "title": "No tienes un tenant",
+    "message": "No eres miembro activo de ningún tenant. Pide una invitación a un administrador.",
+    "account": "Sesión iniciada como",
+    "signOut": "Cerrar sesión"
+  },
+  "issues": {
+    "PASSWORD_REJECTED": "La contraseña no cumple la política de contraseñas. Elige otra."
+  },
+  "invitations": {
+    "title": "Invitaciones",
+    "inviteTitle": "Invitar a un miembro",
+    "email": "Correo electrónico",
+    "role": "Rol",
+    "submit": "Invitar miembro",
+    "section": "las invitaciones",
+    "empty": "No hay invitaciones pendientes.",
+    "status": "Estado",
+    "expires": "Vence",
+    "revoke": "Revocar",
+    "linkTitle": "Enlace de invitación",
+    "truncated": "Mostrando los primeros {{shown}} de {{total}}",
+    "statuses": {
+      "pending": "Pendiente",
+      "accepted": "Aceptada",
+      "revoked": "Revocada",
+      "expired": "Vencida"
+    }
+  },
+  "accept": {
+    "title": "Aceptar invitación",
+    "loading": "Cargando",
+    "invalid": "Este enlace de invitación no es válido, venció, fue revocado o ya se usó.",
+    "goHome": "Ir al inicio",
+    "alreadyMember": "Ya eres miembro de este tenant.",
+    "asEmail": "Aceptar la invitación como",
+    "submit": "Aceptar invitación",
+    "haveAccount": "Ya tengo una cuenta",
+    "newAccount": "Crea tu cuenta",
+    "fullName": "Nombre completo",
+    "password": "Contraseña",
+    "passwordConfirm": "Confirma la contraseña",
+    "passwordMismatch": "Las contraseñas no coinciden.",
+    "createAccount": "Crear cuenta y aceptar",
+    "accountExists": "Ya existe una cuenta con este correo. Inicia sesión para aceptar la invitación.",
+    "emailMismatch": "Esta invitación es para otro correo. Cierra sesión y abre el enlace de nuevo con la cuenta invitada.",
+    "accepted": "Invitación aceptada."
+  },
+  "memberships": {
+    "title": "Miembros",
+    "section": "los miembros",
+    "empty": "Este tenant no tiene miembros.",
+    "email": "Correo electrónico",
+    "name": "Nombre",
+    "role": "Rol",
+    "status": "Estado",
+    "suspend": "Suspender",
+    "reactivate": "Reactivar",
+    "revoke": "Revocar",
+    "lastAdmin": "Un tenant necesita al menos un administrador activo.",
+    "truncated": "Mostrando los primeros {{shown}} de {{total}}",
+    "statuses": {
+      "active": "Activo",
+      "suspended": "Suspendido",
+      "revoked": "Revocado"
+    }
+  },
+  "tenants": {
+    "title": "Tenants",
+    "createTitle": "Crear tenant",
+    "slug": "Slug",
+    "name": "Nombre",
+    "adminEmail": "Correo del primer administrador",
+    "submit": "Crear tenant",
+    "section": "los tenants",
+    "empty": "No hay tenants.",
+    "status": "Estado",
+    "created": "Creado",
+    "suspend": "Suspender",
+    "activate": "Activar",
+    "adminLinkTitle": "Enlace de invitación del primer administrador",
+    "suspensionNote": "Las API keys de un tenant suspendido dejan de funcionar de inmediato; sus usuarios, en su próxima renovación de sesión o cambio de tenant.",
+    "truncated": "Mostrando los primeros {{shown}} de {{total}}",
+    "statuses": {
+      "active": "Activo",
+      "suspended": "Suspendido"
+    }
+  }
+}

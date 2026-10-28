@@ -3,20 +3,16 @@ import { Injectable, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { Route } from '@angular/router';
 import { TranslocoService } from '@jsverse/transloco';
-import { MessageService } from '@openng/optimus-ui/api';
 import { firstValueFrom, of } from 'rxjs';
 import { ACCESS_PROVIDER, OPEN_ACCESS } from '../access/access.port';
 import type { AccessProvider } from '../access/access.port';
 import { FLAG_SOURCE, NO_FLAGS } from '../flags/flag-source.port';
 import type { FlagSource } from '../flags/flag-source.port';
-import { SessionAccess } from '../session/session-access';
-import { TenancySelection } from '../tenants/tenancy-selection';
 import { TENANT_DIRECTORY } from '../tenants/tenant-directory.port';
 import type { TenantDirectory } from '../tenants/tenant-directory.port';
 import { TENANT_SELECTION } from '../tenants/tenant-selection.port';
 import type { TenantSelection } from '../tenants/tenant-selection.port';
-import { TenantsApi } from '../tenants/tenants-api.service';
-import { PLATFORM_MODULES, PortBindings, TopbarItem, WebModule, navLabel, platformInterceptors, platformRoutes, platformTopbar, providePlatform } from './web-module';
+import { PLATFORM_MODULES, NavEntry, PortBindings, TopbarItem, WebModule, navLabel, platformInterceptors, platformRoutes, platformTopbar, providePlatform } from './web-module';
 import { coreModule } from '../module';
 import { BlankComponent, configureFeatureTest } from '@/core/testing/ui-testing';
 
@@ -72,11 +68,11 @@ describe('Module composition', () => {
   const parameters = moduleWith('parameters', [{ path: 'parameters', component: BlankComponent }]);
 
   describe('platformRoutes', () => {
-    it('holds the core routes only for the core-only list', () => {
+    it('holds no route for the core-only list', () => {
       const routes = platformRoutes([coreModule]);
 
-      expect(routes.shell.map((route) => route.path)).toEqual(['no-tenant', 'memberships', 'invitations', 'api-keys', 'operator/tenants']);
-      expect(routes.public.map((route) => route.path)).toEqual(['login', 'invitations/accept']);
+      expect(routes.shell).toEqual([]);
+      expect(routes.public).toEqual([]);
     });
 
     it('keeps the core routes and puts the others after them, in list order', () => {
@@ -118,10 +114,12 @@ describe('Module composition', () => {
 
   describe('port bindings', () => {
     it('throws PLATFORM_DUPLICATE_PORT for each of the four ports, naming both modules', () => {
-      expect(() => providePlatform([coreModule, withPorts('other', { access: OtherAccess })])).toThrow('PLATFORM_DUPLICATE_PORT:access:core,other');
-      expect(() => providePlatform([coreModule, withPorts('other', { flags: OtherAccess })])).toThrow('PLATFORM_DUPLICATE_PORT:flags:core,other');
-      expect(() => providePlatform([coreModule, withPorts('other', { tenants: Directory })])).toThrow('PLATFORM_DUPLICATE_PORT:tenants:core,other');
-      expect(() => providePlatform([coreModule, withPorts('other', { tenantSelection: Selection })])).toThrow('PLATFORM_DUPLICATE_PORT:tenantSelection:core,other');
+      const holder = withPorts('core', { access: AccessAndFlags, flags: AccessAndFlags, tenants: Directory, tenantSelection: Selection });
+
+      expect(() => providePlatform([holder, withPorts('other', { access: OtherAccess })])).toThrow('PLATFORM_DUPLICATE_PORT:access:core,other');
+      expect(() => providePlatform([holder, withPorts('other', { flags: OtherAccess })])).toThrow('PLATFORM_DUPLICATE_PORT:flags:core,other');
+      expect(() => providePlatform([holder, withPorts('other', { tenants: Directory })])).toThrow('PLATFORM_DUPLICATE_PORT:tenants:core,other');
+      expect(() => providePlatform([holder, withPorts('other', { tenantSelection: Selection })])).toThrow('PLATFORM_DUPLICATE_PORT:tenantSelection:core,other');
     });
 
     it('applies the port check to platformRoutes too', () => {
@@ -146,15 +144,13 @@ describe('Module composition', () => {
       expect(() => providePlatform([moduleWith('core'), badNav])).toThrow('PLATFORM_INVALID_REQUIREMENT:bad/x');
     });
 
-    it('binds the four ports of coreModule to the core classes', () => {
-      configureFeatureTest([], [{ provide: MessageService, useValue: { add: vi.fn() } }]);
+    it('binds no port for the core module alone', () => {
       TestBed.configureTestingModule({ providers: [providePlatform([coreModule])] });
 
-      expect(TestBed.inject(ACCESS_PROVIDER)).toBeInstanceOf(SessionAccess);
-      expect(TestBed.inject(FLAG_SOURCE)).toBe(TestBed.inject(ACCESS_PROVIDER));
-      expect(TestBed.inject(TENANT_DIRECTORY)).toBeInstanceOf(TenantsApi);
-      expect(TestBed.inject(TENANT_SELECTION)).toBeInstanceOf(TenancySelection);
-      expect(TestBed.inject(TENANT_SELECTION)?.noTenantPath).toBe('/no-tenant');
+      expect(TestBed.inject(ACCESS_PROVIDER)).toBe(TestBed.inject(OPEN_ACCESS));
+      expect(TestBed.inject(FLAG_SOURCE)).toBe(NO_FLAGS);
+      expect(TestBed.inject(TENANT_DIRECTORY)).toBeNull();
+      expect(TestBed.inject(TENANT_SELECTION)).toBeNull();
     });
 
     it('falls back to OPEN_ACCESS, NO_FLAGS, null and null when no module binds a port', () => {
@@ -257,10 +253,11 @@ describe('Module composition', () => {
     it('reads the label through the scope of the module of the entry', async () => {
       configureFeatureTest();
 
-      const entry = coreModule.nav.find((candidate) => candidate.id === 'memberships');
+      const entry: NavEntry = { id: 'reports', labelKey: 'nav.reports', icon: 'i', path: '/reports', requires: {} };
 
-      expect(entry).toBeDefined();
-      expect(await firstValueFrom(navLabel(TestBed.inject(TranslocoService), coreModule, entry!))).toBe('Miembros');
+      const reports = moduleWith('reports', [], [], { nav: [entry], i18n: { scope: 'reports-spec', alias: 'reports-spec', loader: { es: () => Promise.resolve({ nav: { reports: 'Informes' } }) } } });
+
+      expect(await firstValueFrom(navLabel(TestBed.inject(TranslocoService), reports, entry))).toBe('Informes');
     });
   });
 });

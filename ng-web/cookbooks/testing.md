@@ -33,4 +33,4 @@ Test philosophy: `.claude/references/test-rules.md`. Test observable behavior (r
 
 - All: `npm test -- --watch=false`. One file: `npm test -- --watch=false --include <path>`.
 - Baseline capture (Healthy Baseline Rule, root `AGENTS.md`): when a test fails after your change, run the suite on a `git stash -u` baseline and on your change, and diff both outputs under `.me/<slug>/logs/` (recipe: `.claude/references/test-rules.md` rule 7). If proven pre-existing, STOP and ASK.
-- Shared fixtures go in `src/testing/fixtures` (create it with the first shared fixture), never in production folders.
+- Shared fixtures go in `src/testing/fixtures` (create it with the first shared fixture), never in production folders. A fixture only one module's specs use lives in that module's `testing/` folder: it ships with the specs, and core-owned code cannot import a module.

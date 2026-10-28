@@ -31,11 +31,19 @@ const moduleFolders = readdirSync(path.join(cwd, 'src/app/platform'), { withFile
 const importerModule = 'probe-importer';
 
 const rejected = [
-  ['the shell imports a core file deeply by alias', 'src/app/layout/repro.ts', moduleImport('@/platform/core/login', 'login'), 'The skeleton imports platform modules only'],
+  ['the shell imports a core file deeply by alias', 'src/app/layout/repro.ts', moduleImport('@/platform/core/access/access.port', 'ACCESS_PROVIDER'), 'The skeleton imports platform modules only'],
   ['a module imports the composition root by relative path', `src/app/platform/${importerModule}/repro.ts`, moduleImport('../modules', 'installedModules'), 'A module never imports a sibling module folder'],
-  ['another module imports core by relative path', `src/app/platform/${importerModule}/repro.ts`, moduleImport('../core/login', 'login'), 'A module never imports a sibling module folder'],
-  ['the core module imports the composition root by relative path', 'src/app/platform/core/login/repro.ts', moduleImport('../../modules', 'installedModules'), 'The core module never imports another']
+  ['another module imports core by relative path', `src/app/platform/${importerModule}/repro.ts`, moduleImport('../core/probe', 'probe'), 'A module never imports a sibling module folder'],
+  ['the core module imports the composition root by relative path', 'src/app/platform/core/probe/repro.ts', moduleImport('../../modules', 'installedModules'), 'The core module never imports another'],
+  ['a skeleton test fixture imports a module folder', 'src/testing/fixtures/repro.ts', moduleImport('@/platform/probe-module/session', 'sessionView'), 'Core-owned code imports a module only'],
+  ['the topbar imports a module folder by alias', 'src/app/layout/component/topbar/repro.ts', moduleImport('@/platform/probe-module/module', 'moduleUnderTest'), 'The skeleton imports platform modules only'],
+  ['tenancy imports identity by alias', 'src/app/platform/tenancy/repro.ts', moduleImport('@/platform/identity/session/session-store.service', 'SessionStore'), 'A module never imports another platform module']
 ];
+
+// The relative-path rule is built from the folders found in the tree, so this case exists only where both folders do.
+if (moduleFolders.includes('tenancy')) {
+  rejected.push(['api-keys imports tenancy by relative path', 'src/app/platform/api-keys/items/repro.ts', moduleImport('../../tenancy/tenants/tenants-api.service', 'TenantsApi'), 'A module never imports a sibling module folder']);
+}
 
 for (const name of moduleFolders) {
   const specifier = `@/platform/${name}/module`;
@@ -44,9 +52,9 @@ for (const name of moduleFolders) {
     [`the home page (core-owned) imports ${name} by alias`, 'src/app/home/repro.ts', moduleImport(specifier, 'moduleUnderTest'), 'Core-owned code imports a module only'],
     [`generic core code imports ${name} by alias`, 'src/app/core/repro.ts', moduleImport(specifier, 'moduleUnderTest'), 'Core-owned code imports a module only'],
     [`the bootstrap file imports ${name} by alias`, 'src/main.repro.ts', moduleImport(specifier, 'moduleUnderTest'), 'Core-owned code imports a module only'],
-    [`the core module imports ${name} by alias`, 'src/app/platform/core/login/repro.ts', moduleImport(specifier, 'moduleUnderTest'), 'The core module never imports another'],
-    [`the core module imports ${name} by relative path`, 'src/app/platform/core/login/repro.ts', moduleImport(`../../${name}/module`, 'moduleUnderTest'), 'The core module never imports another'],
-    [`the core module imports ${name} by a deep relative path`, 'src/app/platform/core/login/repro.ts', moduleImport(`../../../platform/${name}/module`, 'moduleUnderTest'), 'The core module never imports another'],
+    [`the core module imports ${name} by alias`, 'src/app/platform/core/probe/repro.ts', moduleImport(specifier, 'moduleUnderTest'), 'The core module never imports another'],
+    [`the core module imports ${name} by relative path`, 'src/app/platform/core/probe/repro.ts', moduleImport(`../../${name}/module`, 'moduleUnderTest'), 'The core module never imports another'],
+    [`the core module imports ${name} by a deep relative path`, 'src/app/platform/core/probe/repro.ts', moduleImport(`../../../platform/${name}/module`, 'moduleUnderTest'), 'The core module never imports another'],
     [`the shell imports ${name} by relative path`, 'src/app/layout/component/repro.ts', moduleImport(`../../platform/${name}/module`, 'moduleUnderTest'), 'The skeleton imports platform modules only'],
     [`another module imports ${name} by relative path`, `src/app/platform/${importerModule}/repro.ts`, moduleImport(`../${name}/module`, 'moduleUnderTest'), 'A module never imports a sibling module folder'],
     [`another module imports ${name} by a deep relative path`, `src/app/platform/${importerModule}/repro.ts`, moduleImport(`../../platform/${name}/module`, 'moduleUnderTest'), 'A module never imports a sibling module folder']
@@ -58,7 +66,13 @@ const allowed = [
   ['the shell imports the composition root by alias', 'src/app/layout/repro.ts', moduleImport('@/platform/modules', 'installedModules')],
   ['the shell imports the core barrel by alias', 'src/app/layout/repro.ts', moduleImport('@/platform/core', 'coreModule')],
   ['the home page imports the composition root by alias', 'src/app/home/repro.ts', moduleImport('@/platform/modules', 'installedModules')],
-  ['the bootstrap file imports the core barrel', 'src/main.repro.ts', moduleImport('@/platform/core', 'coreModule')]
+  ['the bootstrap file imports the core barrel', 'src/main.repro.ts', moduleImport('@/platform/core', 'coreModule')],
+  [
+    'a module imports the access, tenant directory and tenant selection ports from the core barrel',
+    `src/app/platform/${importerModule}/repro.ts`,
+    "import { ACCESS_PROVIDER, TENANT_DIRECTORY, TENANT_SELECTION } from '@/platform/core';\nexport const x = [ACCESS_PROVIDER, TENANT_DIRECTORY, TENANT_SELECTION];\n"
+  ],
+  ['a module spec imports the access fixture by relative path', `src/app/platform/${importerModule}/shell/repro.spec.ts`, moduleImport('../../../../testing/fixtures/access-testing', 'accessContext')]
 ];
 
 for (const [name, file, code, expected] of rejected) {
@@ -92,7 +106,7 @@ test('rejects: a module folder that exists only for this run', () => {
     import { ESLint } from 'eslint';
     const eslint = new ESLint({ cwd: process.argv[1] });
     const code = "import { m } from '../../${probeFolder}/module'; export const x = m;";
-    const [result] = await eslint.lintText(code, { filePath: process.argv[1] + '/src/app/platform/core/login/repro.ts' });
+    const [result] = await eslint.lintText(code, { filePath: process.argv[1] + '/src/app/platform/core/probe/repro.ts' });
     console.log(JSON.stringify(result.messages.filter((message) => message.ruleId === 'no-restricted-imports').map((message) => message.message)));
   `;
 

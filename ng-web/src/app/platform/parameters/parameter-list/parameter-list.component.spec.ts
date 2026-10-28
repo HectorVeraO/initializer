@@ -7,7 +7,7 @@ import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, te
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
 import { nextCall } from '../../../../testing/fixtures/http-testing';
-import { parameterView } from '../../../../testing/fixtures/parameter-view';
+import { parameterView } from '../testing/parameter-view';
 import { ParameterListPage } from './parameter-list.component';
 
 const LIST_URL = '/api/v1/parameters';

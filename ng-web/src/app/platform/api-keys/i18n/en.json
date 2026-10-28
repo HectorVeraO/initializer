@@ -1,0 +1,40 @@
+{
+  "nav": {
+    "apiKeys": "API keys"
+  },
+  "menu": {
+    "title": "API keys"
+  },
+  "errors": {
+    "rowGone": "That item no longer exists or changed. The list was refreshed."
+  },
+  "title": "API keys",
+  "createTitle": "Create API key",
+  "name": "Name",
+  "expiresAt": "Expires on (optional)",
+  "scopes": "Scopes",
+  "noScopes": "No scopes are available to grant.",
+  "scopesLoadFailed": "The scopes could not be loaded.",
+  "scopesRetry": "Retry",
+  "submit": "Create API key",
+  "section": "API keys",
+  "empty": "There are no API keys.",
+  "prefix": "Prefix",
+  "expires": "Expires",
+  "status": "Status",
+  "revoke": "Revoke",
+  "secretTitle": "New API key",
+  "truncated": "Showing the first {{shown}} of {{total}}",
+  "statuses": {
+    "active": "Active",
+    "expired": "Expired",
+    "revoked": "Revoked"
+  },
+  "owner": {
+    "tenant": "Keys of tenant {{tenant}}",
+    "global": "Global keys (no tenant)"
+  },
+  "issues": {
+    "SCOPE_LEVEL_MISMATCH": "A tenant-level scope cannot be granted to a key without a tenant."
+  }
+}

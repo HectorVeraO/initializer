@@ -6,7 +6,7 @@
   "implied": false,
   "implementsSpec": { "feature-flags": "0.1.0" },
   "requiresCore": "^0.1.0",
-  "requiresModules": [],
+  "requiresModules": [{ "module": "identity", "range": "^0.1.0" }],
   "files": ["ng-web/src/app/platform/feature-flags/"],
   "exclude": []
 }

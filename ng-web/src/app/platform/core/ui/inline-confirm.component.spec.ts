@@ -6,7 +6,7 @@ import { InlineConfirmComponent } from './inline-confirm.component';
 @Component({
   selector: 'app-host',
   imports: [InlineConfirmComponent],
-  template: `<app-inline-confirm labelKey="core.nav.invitations" testId="thing-revoke" [disabled]="isDisabled()" (confirmed)="count.set(count() + 1)" />`
+  template: `<app-inline-confirm labelKey="core.secret.copy" testId="thing-revoke" [disabled]="isDisabled()" (confirmed)="count.set(count() + 1)" />`
 })
 class HostComponent {
   readonly count = signal(0);
@@ -24,7 +24,7 @@ describe('InlineConfirmComponent', () => {
     await settle(fixture);
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(textOf(fixture.nativeElement)).toContain('Invitaciones');
+      expect(textOf(fixture.nativeElement)).toContain('Copiar');
     });
 
     return fixture;

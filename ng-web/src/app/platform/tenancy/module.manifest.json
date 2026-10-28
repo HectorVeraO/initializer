@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "stack": "ng-web",
+  "module": "tenancy",
+  "version": "0.1.0",
+  "implied": false,
+  "implementsSpec": { "tenancy": "0.1.0" },
+  "requiresCore": "^0.1.0",
+  "requiresModules": [{ "module": "identity", "range": "^0.1.0" }],
+  "files": ["ng-web/src/app/platform/tenancy/"],
+  "exclude": []
+}
