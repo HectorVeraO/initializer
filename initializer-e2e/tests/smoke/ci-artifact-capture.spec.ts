@@ -11,8 +11,8 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const TEMPLATE = path.join(REPO_ROOT, 'initializer-e2e', '.example.env');
 const WORKFLOW = path.join(REPO_ROOT, '.github', 'workflows', 'ci.yml');
 
-/** The workflow line that writes initializer-e2e/.env from the template. */
-function findEnvCopyCommand(): string {
+/** The workflow lines that write initializer-e2e/.env from the template. */
+function findEnvCopyCommands(): string[] {
   const workflow = fs.readFileSync(WORKFLOW, 'utf8');
   const lines = workflow
     .split('\n')
@@ -22,8 +22,8 @@ function findEnvCopyCommand(): string {
         line.includes('initializer-e2e/.example.env') &&
         line.includes('initializer-e2e/.env'),
     );
-  expect(lines, 'one CI step writes initializer-e2e/.env').toHaveLength(1);
-  return lines[0];
+  expect(lines, 'a CI step writes initializer-e2e/.env').not.toHaveLength(0);
+  return lines;
 }
 
 /** Runs the CI command in a scratch tree and returns the .env it writes. */
@@ -51,24 +51,26 @@ function runCiEnvCopy(command: string): Record<string, string> {
 
 test.describe('CI artifact capture', () => {
   test('@smoke @issue-98 the .env the e2e job writes keeps the CI failure-only defaults', () => {
-    const ciDotenv = runCiEnvCopy(findEnvCopyCommand());
     const saved = Object.fromEntries(
       ARTIFACT_KEYS.map((key) => [key, process.env[key]]),
     );
     try {
-      for (const key of ARTIFACT_KEYS) {
-        // The CI job sets none of these itself, so only the written .env counts.
-        delete process.env[key];
-        const value = ciDotenv[key];
-        if (value !== undefined) {
-          process.env[key] = value;
+      for (const command of findEnvCopyCommands()) {
+        const ciDotenv = runCiEnvCopy(command);
+        for (const key of ARTIFACT_KEYS) {
+          // The CI job sets none of these itself, so only the written .env counts.
+          delete process.env[key];
+          const value = ciDotenv[key];
+          if (value !== undefined) {
+            process.env[key] = value;
+          }
         }
-      }
-      const { artifacts } = loadEnv();
+        const { artifacts } = loadEnv();
 
-      expect(artifacts.video).toBe('retain-on-failure');
-      expect(artifacts.screenshot).toBe('only-on-failure');
-      expect(artifacts.trace).toBe('on-first-retry');
+        expect(artifacts.video).toBe('retain-on-failure');
+        expect(artifacts.screenshot).toBe('only-on-failure');
+        expect(artifacts.trace).toBe('on-first-retry');
+      }
     } finally {
       for (const key of ARTIFACT_KEYS) {
         const value = saved[key];
