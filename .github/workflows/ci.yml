@@ -132,6 +132,7 @@ jobs:
           go -C tooling/gates run ./cmd/gates migrations --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
           go -C tooling/gates run ./cmd/gates contracts --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
           go -C tooling/gates run ./cmd/gates versions --root "${GITHUB_WORKSPACE}" --base-rev "${base}"
+          go -C tooling/gates run ./cmd/gates tags --root "${GITHUB_WORKSPACE}" > /dev/null
 
   generator:
     name: generator

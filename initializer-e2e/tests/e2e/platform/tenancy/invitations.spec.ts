@@ -3,6 +3,7 @@ import { assertPlatformEnv } from '../../../../src/env';
 import {
   emailFor,
   passwordFor,
+  tenantSlug,
   uniqueId,
 } from '../../../../src/helpers/platform/ids';
 import { AcceptInvitationPage } from '../../../../src/pages/platform/tenancy/AcceptInvitationPage';
@@ -95,6 +96,28 @@ test.describe('Tenancy: invitations', () => {
       await page.reload();
       await expect(membershipsPage.role(`jane.${id}`)).toHaveText('Miembro');
       await expect(membershipsPage.status(`jane.${id}`)).toHaveText('Activo');
+    },
+  );
+
+  test(
+    'keeps the invitation token out of the page URL once the link opens',
+    { tag: ['@e2e', '@tenancy'] },
+    async ({ page, acceptInvitationPage, operator }, testInfo) => {
+      const id = uniqueId(testInfo);
+      const created = await operator.createTenant({
+        slug: tenantSlug(id),
+        name: `E2E ${id}`,
+        adminEmail: emailFor('admin', id),
+      });
+
+      await page.goto(`/invitations/accept#token=${created.invitationToken}`);
+      await expect(acceptInvitationPage.fullName).toBeVisible();
+
+      expect(page.url()).not.toContain(created.invitationToken);
+      expect(acceptInvitationPage.location()).toEqual({
+        pathname: '/invitations/accept',
+        hash: '',
+      });
     },
   );
 });

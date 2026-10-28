@@ -23,6 +23,7 @@ const (
 	RuleVersionDecreased     = "VERSION_DECREASED"
 	RuleComponentPathOverlap = "COMPONENT_PATH_OVERLAP"
 	RuleVersionNotPrerelease = "VERSION_NOT_PRERELEASE"
+	RuleTagContentMismatch   = "TAG_CONTENT_MISMATCH"
 
 	refVersions   = "L23"
 	refPrerelease = "L76"
@@ -504,4 +505,91 @@ func MissingTags(ctx context.Context, root string) ([]string, error) {
 	}
 	sort.Strings(missing)
 	return missing, nil
+}
+
+// CheckTagContent reports every component whose current-version tag
+// "<component>-v<version>" exists at a commit that does not hold the
+// component's current content: the tag names other code, and tags.yml would
+// never move it. The files compared are the ones gates versions assigns to the
+// component at HEAD (manifest files minus exclude, composition roots out).
+func CheckTagContent(ctx context.Context, root string) ([]report.Violation, error) {
+	err := ctx.Err()
+	if err != nil {
+		return nil, err
+	}
+	components, _, err := Discover(root)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := repo.ListTags(root)
+	if err != nil {
+		return nil, err
+	}
+	head, err := repo.ResolveRev(root, "HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("resolve HEAD: %w", err)
+	}
+	headBlobs, err := repo.ListBlobs(root, head)
+	if err != nil {
+		return nil, err
+	}
+	var violations []report.Violation
+	for _, c := range components {
+		_, parseErr := parseVersion(c.Version)
+		if parseErr != nil {
+			continue
+		}
+		tag := c.Name + "-v" + c.Version
+		if !slices.Contains(existing, tag) {
+			continue
+		}
+		tagCommit, err := repo.ResolveRev(root, "refs/tags/"+tag)
+		if err != nil {
+			return nil, fmt.Errorf("resolve tag %s: %w", tag, err)
+		}
+		tagBlobs, err := repo.ListBlobs(root, tagCommit)
+		if err != nil {
+			return nil, err
+		}
+		differing := differingFiles(components, c.Name, headBlobs, tagBlobs)
+		if len(differing) == 0 {
+			continue
+		}
+		violations = append(violations, violationRef(refPrerelease, RuleTagContentMismatch, c.ManifestPath,
+			"tag %s points at %s, whose %s content differs from HEAD (%s); delete the tag or move it to the commit that holds the current content",
+			tag, tagCommit[:min(12, len(tagCommit))], c.Name, summarize(differing)))
+	}
+	sortViolations(violations)
+	return violations, nil
+}
+
+// differingFiles lists, sorted, the files owned by name at HEAD or at the tag
+// that are absent from one side or have different content.
+func differingFiles(components []Component, name string, headBlobs, tagBlobs map[string]string) []string {
+	var differing []string
+	owned := func(file string) bool {
+		return slices.Contains(ownersOf(components, file), name)
+	}
+	for file, id := range headBlobs {
+		if owned(file) && tagBlobs[file] != id {
+			differing = append(differing, file)
+		}
+	}
+	for file := range tagBlobs {
+		_, inHead := headBlobs[file]
+		if !inHead && owned(file) {
+			differing = append(differing, file)
+		}
+	}
+	sort.Strings(differing)
+	return differing
+}
+
+// summarize names the first differing files and counts the rest.
+func summarize(files []string) string {
+	const shown = 3
+	if len(files) <= shown {
+		return strings.Join(files, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(files[:shown], ", "), len(files)-shown)
 }

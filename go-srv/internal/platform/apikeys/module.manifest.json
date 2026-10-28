@@ -8,6 +8,6 @@
   "requiresCore": "^0.1.0",
   "requiresModules": [{ "module": "identity", "range": "^0.1.0" }],
   "tablePrefixes": ["apk"],
-  "files": ["go-srv/internal/platform/apikeys/"],
+  "files": ["go-srv/internal/platform/apikeys/", "specs/tck-support/actors/api-keys.ts"],
   "exclude": []
 }

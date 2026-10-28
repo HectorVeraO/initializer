@@ -93,3 +93,25 @@ func TestTagsOutsideRepositoryExitsTwo(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 }
+
+func TestTagsFailsOnTagThatNamesOtherContent(t *testing.T) {
+	for _, preRelease := range []string{preReleaseOff, preReleaseOn} {
+		dir := versionsRepo(t, "0.2.0")
+		writeAt(t, dir, "versioning.json", preRelease)
+		gitRun(t, dir, "tag", "spec-alpha-v0.2.0", "main")
+		r := invoke([]string{"tags", "--root", dir}, fixedNow, nil)
+		if r.code != 1 || r.stdout != "" || !strings.Contains(r.stderr, "TAG_CONTENT_MISMATCH") || !strings.Contains(r.stderr, "spec-alpha-v0.2.0") {
+			t.Fatalf("got %+v", r)
+		}
+	}
+}
+
+func TestTagsPassesOnTagAtCurrentContent(t *testing.T) {
+	dir := versionsRepo(t, "0.2.0")
+	gitRun(t, dir, "tag", "spec-alpha-v0.2.0")
+	gitRun(t, dir, "tag", "spec-beta-v0.1.0")
+	r := invoke([]string{"tags", "--root", dir}, fixedNow, nil)
+	if r.code != 0 || r.stdout != "" || r.stderr != "" {
+		t.Fatalf("got %+v", r)
+	}
+}

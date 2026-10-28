@@ -80,17 +80,20 @@ export class AcceptInvitationPage {
   constructor() {
     const document = inject(DOCUMENT);
 
+    // Decided before the clean-up: replaceState empties document.location.hash in a real browser.
+    const hadHash = document.location.hash !== '';
+
     const fromHash = tokenFromHash(document.location.hash);
 
     // The fragment leaves the address bar and the history entry as soon as it is read.
-    if (document.location.hash !== '') {
+    if (hadHash) {
       this.location.replaceState(ACCEPT_PATH, '', this.location.getState());
     }
 
     this.token.set(fromHash ?? this.pending.take());
 
     // The router's own URL keeps the fragment until it navigates; later navigations copy router.url.
-    if (document.location.hash !== '') {
+    if (hadHash) {
       void this.router.navigateByUrl(ACCEPT_PATH, { replaceUrl: true });
     }
 
