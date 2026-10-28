@@ -120,12 +120,13 @@ func (g *Guard) authorizeKey(p Policy, keyNeedsTenant bool, r *http.Request) (re
 	if err != nil {
 		return zero, keyError(err)
 	}
-	if !holdsScope(principal.Scopes, p.Scope) {
-		return zero, wireError(http.StatusForbidden, api.CodeInsufficientScope, "API key lacks the required scope")
-	}
-	// TenantlessOperator never relaxes this: a key is never a platform operator.
+	// The tenant requirement answers before the scope check. TenantlessOperator
+	// never relaxes it: a key is never a platform operator.
 	if keyNeedsTenant && principal.TenantID == nil {
 		return zero, wireError(http.StatusForbidden, api.CodeActiveTenantRequired, "An active tenant is required")
+	}
+	if !holdsScope(principal.Scopes, p.Scope) {
+		return zero, wireError(http.StatusForbidden, api.CodeInsufficientScope, "API key lacks the required scope")
 	}
 	return principal, nil
 }

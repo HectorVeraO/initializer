@@ -37,7 +37,7 @@
         </div>
       }
       @if (isScopesEmpty()) {
-        <p class="m-0" data-testid="api-key-scopes-empty">{{ 'apiKeys.noScopes' | transloco }}</p>
+        <p class="m-0" data-testid="api-key-scopes-empty">{{ (isGlobalOwner() ? 'apiKeys.noScopesWithoutTenant' : 'apiKeys.noScopes') | transloco }}</p>
       }
       @for (scope of availableScopes(); track scope.name) {
         <label class="flex items-center gap-2" [for]="'api-key-scope-' + scope.name">
