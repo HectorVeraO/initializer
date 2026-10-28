@@ -1,15 +1,19 @@
+import { HttpClient } from '@angular/common/http';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { inject } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
-import { BehaviorSubject, of, throwError } from 'rxjs';
-import { TENANT_DIRECTORY, TenantsApi } from '@/platform/core';
+import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
+import { RuntimeConfigService } from '@/core/config/runtime-config.service';
+import { unwrapData } from '@/core/envelope';
+import type { ApiEnvelope, ApiPage } from '@/core/envelope';
+import { TENANT_DIRECTORY } from '@/platform/core';
 import type { TenantDirectory, TenantRef } from '@/platform/core';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, stubScrollIntoView, textOf } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
-import { flagView, tenantOverride, tenantView } from '../../../../testing/fixtures/flag-view';
+import { flagView, tenantOverride, tenantView } from '../testing/flag-view';
 import featureFlagsEs from '../i18n/es.json';
 import { FlagDetailPage } from './flag-detail.component';
 
@@ -27,6 +31,19 @@ const UNKNOWN_TENANT = '66666666-6666-4666-8666-666666666666';
 
 const TENANTS = [tenantView(TENANT_A, 'tenant-a', 'Tenant A'), tenantView(TENANT_B, 'tenant-b', 'Tenant B')];
 
+/** A directory over the tenant list route, as a module that provides tenants would bind it. */
+@Injectable({ providedIn: 'root' })
+class HttpTenantDirectory implements TenantDirectory {
+  private readonly http = inject(HttpClient);
+  private readonly runtimeConfig = inject(RuntimeConfigService);
+
+  list(): Observable<ApiPage<TenantRef>> {
+    const page = this.http.get<ApiEnvelope<ApiPage<TenantRef>>>(this.runtimeConfig.apiPath(TENANTS_URL), { params: { page: 1, size: 100, sort: '-createdAt' } }).pipe(unwrapData<ApiPage<TenantRef>>());
+
+    return page;
+  }
+}
+
 function pageOf(items: Record<string, unknown>[], totalItems = items.length): object {
   return okEnvelope({ items, page: 1, size: 100, totalItems });
 }
@@ -38,7 +55,7 @@ describe('FlagDetailPage', () => {
 
   let params: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
 
-  // Read when the page first asks for the directory: the real tenant API over HTTP unless a spec picks another binding.
+  // Read when the page first asks for the directory: a tenant directory that reads GET /api/v1/tenants unless a spec picks another binding.
   let directory: 'tenants-api' | TenantDirectory | null;
 
   beforeEach(() => {
@@ -52,7 +69,7 @@ describe('FlagDetailPage', () => {
       [],
       [
         { provide: MessageService, useValue: messages },
-        { provide: TENANT_DIRECTORY, useFactory: () => (directory === 'tenants-api' ? inject(TenantsApi) : directory) },
+        { provide: TENANT_DIRECTORY, useFactory: () => (directory === 'tenants-api' ? inject(HttpTenantDirectory) : directory) },
         { provide: ActivatedRoute, useValue: { paramMap: params, snapshot: { paramMap: convertToParamMap({ key: KEY }) } } }
       ]
     );

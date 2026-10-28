@@ -1,0 +1,1 @@
+export { tenancyModule } from './module';

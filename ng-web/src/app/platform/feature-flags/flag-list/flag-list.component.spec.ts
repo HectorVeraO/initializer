@@ -4,7 +4,7 @@ import { MessageService } from '@openng/optimus-ui/api';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, stubScrollIntoView, textOf } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
-import { flagView, tenantOverride } from '../../../../testing/fixtures/flag-view';
+import { flagView, tenantOverride } from '../testing/flag-view';
 import { FlagListPage } from './flag-list.component';
 
 const LIST_URL = '/api/v1/feature-flags';

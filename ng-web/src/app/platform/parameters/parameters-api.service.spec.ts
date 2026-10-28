@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import type { Observable } from 'rxjs';
 import { configureFeatureTest } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../testing/fixtures/api-envelope';
-import { parameterView } from '../../../testing/fixtures/parameter-view';
+import { parameterView } from './testing/parameter-view';
 import { ParametersApi } from './parameters-api.service';
 
 describe('ParametersApi', () => {

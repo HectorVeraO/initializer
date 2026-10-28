@@ -3,7 +3,7 @@ import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { parameterView } from '../../../../testing/fixtures/parameter-view';
+import { parameterView } from '../testing/parameter-view';
 import type { ParameterView } from '../parameters.types';
 import { ParameterOverrideDialog } from './parameter-override-dialog.component';
 

@@ -1,10 +1,4 @@
 {
-  "nav": {
-    "invitations": "Invitations",
-    "memberships": "Members",
-    "operatorTenants": "Tenants",
-    "apiKeys": "API keys"
-  },
   "secret": {
     "once": "This value is shown once. Store it now.",
     "copy": "Copy",

@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import type { Observable } from 'rxjs';
 import { configureFeatureTest } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../testing/fixtures/api-envelope';
-import { flagView } from '../../../testing/fixtures/flag-view';
+import { flagView } from './testing/flag-view';
 import { FeatureFlagsApi } from './feature-flags-api.service';
 
 const TENANT_ID = '44444444-4444-4444-8444-444444444444';
