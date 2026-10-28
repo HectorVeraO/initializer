@@ -621,3 +621,75 @@ func TestImpliedAndCoreRequirementMessages(t *testing.T) {
 		})
 	}
 }
+
+func TestCooperationFolderNeedsADeclaredTag(t *testing.T) {
+	const scenario = "specs/parameters/tck/with-tenancy/precedence.spec.ts"
+	cases := []struct {
+		name      string
+		declare   bool
+		wantCodes []string
+	}{
+		// The tenancy spec exists only in this test and no module implements it,
+		// so SPEC_UNIMPLEMENTED is the one expected issue when the tag is declared.
+		{"declared in cooperatesWith", true, []string{"SPEC_UNIMPLEMENTED"}},
+		{"not declared in cooperatesWith", false, []string{"SPEC_UNIMPLEMENTED", "TCK_COOPERATION_UNDECLARED"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := cleanRepo(t)
+			put(repo, "specs/tenancy/spec.manifest.json", `{ "schema": 1, "spec": "tenancy", "version": "0.1.0", "tckTags": ["@tenancy"], "tckEnv": {} }`+"\n")
+			put(repo, "specs/tenancy/openapi.yaml", "openapi: 3.1.0\n")
+			put(repo, scenario, "export {};\n")
+			if tc.declare {
+				edit(t, repo, "specs/parameters/spec.manifest.json", `"tckEnv": {}`, `"tckEnv": {}, "cooperatesWith": ["@tenancy"]`)
+			}
+			built, issues := buildRepo(t, repo)
+			assertCodes(t, issues, tc.wantCodes...)
+			if !tc.declare {
+				for _, found := range issues {
+					if found.Code == CodeTCKCooperationUndeclared && found.Path != scenario {
+						t.Errorf("path = %q, want %q", found.Path, scenario)
+					}
+				}
+				return
+			}
+			for _, entry := range built.Specs {
+				if entry.Spec != "parameters" {
+					continue
+				}
+				found := false
+				for _, file := range entry.Files {
+					found = found || file.Path == scenario
+				}
+				if !found {
+					t.Errorf("the catalog lost %s", scenario)
+				}
+			}
+		})
+	}
+}
+
+func TestCooperationTag(t *testing.T) {
+	cases := []struct {
+		path string
+		tag  string
+		ok   bool
+	}{
+		{"specs/parameters/tck/with-tenancy/precedence.spec.ts", "@tenancy", true},
+		{"specs/api-keys/tck/with-tenancy/nested/deeper.spec.ts", "@tenancy", true},
+		{"specs/parameters/tck/with-feature-flags/a.spec.ts", "@feature-flags", true},
+		{"specs/parameters/tck/with-tenancy", "", false},
+		{"specs/parameters/tck/with-tenancy/", "", false},
+		{"specs/parameters/tck/precedence.spec.ts", "", false},
+		{"specs/parameters/tck/with-Tenancy/a.spec.ts", "", false},
+		{"specs/parameters/with-tenancy/a.spec.ts", "", false},
+		{"specs/tck-support/actors/tenants.ts", "", false},
+		{"go-srv/specs/parameters/tck/with-tenancy/a.spec.ts", "", false},
+	}
+	for _, tc := range cases {
+		tag, ok := CooperationTag(tc.path)
+		if tag != tc.tag || ok != tc.ok {
+			t.Errorf("CooperationTag(%q) = %q, %v; want %q, %v", tc.path, tag, ok, tc.tag, tc.ok)
+		}
+	}
+}

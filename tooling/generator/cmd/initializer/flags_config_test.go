@@ -334,7 +334,8 @@ func TestCISelectionsAreTheCoveringSet(t *testing.T) {
 	}
 }
 
-// Identity owns the Kratos deployment files and the TCK actors, core none.
+// Identity owns the Kratos deployment files and the shared TCK actors, core none;
+// tenancy and api-keys own the actor helper of their own routes.
 func TestIdentityOwnsTheKratosAndActorFiles(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	built := decodeRealCatalog(t, catalogPath)
@@ -360,9 +361,18 @@ func TestIdentityOwnsTheKratosAndActorFiles(t *testing.T) {
 	if len(paths) == 0 {
 		t.Fatal("no tracked file under the Kratos and actors folders")
 	}
+	// An actor helper belongs to the module whose routes it calls.
+	helperOwner := map[string]string{
+		"specs/tck-support/actors/tenants.ts":  "tenancy",
+		"specs/tck-support/actors/api-keys.ts": "api-keys",
+	}
 	for _, p := range paths {
-		if !owned["identity"][p] {
-			t.Errorf("%s is not owned by go-srv identity", p)
+		want := "identity"
+		if module, found := helperOwner[p]; found {
+			want = module
+		}
+		if !owned[want][p] {
+			t.Errorf("%s is not owned by go-srv %s", p, want)
 		}
 		if owned["core"][p] {
 			t.Errorf("%s is owned by go-srv core", p)

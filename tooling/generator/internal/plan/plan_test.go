@@ -680,3 +680,64 @@ func TestSelectionOrderDoesNotChangeTheModuleOrder(t *testing.T) {
 		t.Fatalf("plans differ:\n%+v\n%+v", first, second)
 	}
 }
+
+// paths lists the paths of files.
+func paths(files []catalog.File) []string {
+	out := make([]string, len(files))
+	for i, file := range files {
+		out[i] = file.Path
+	}
+	return out
+}
+
+func specFiles(t *testing.T, p plan.Plan, spec string) []string {
+	t.Helper()
+	for _, entry := range p.Specs {
+		if entry.Spec == spec {
+			return paths(entry.Files)
+		}
+	}
+	t.Fatalf("spec %s is not in the plan", spec)
+	return nil
+}
+
+func TestCooperationFilesShipOnlyWithTheirTag(t *testing.T) {
+	const (
+		always   = "specs/parameters/tck/validation.spec.ts"
+		gated    = "specs/parameters/tck/with-tenancy/precedence.spec.ts"
+		otherTag = "specs/parameters/tck/with-feature-flags/other.spec.ts"
+	)
+	cases := []struct {
+		name    string
+		modules []string
+		want    []string
+	}{
+		{"tag not installed", []string{"parameters"}, []string{always}},
+		{"tag installed", []string{"parameters", "tenancy"}, []string{always, gated}},
+		{"another cooperating tag installed", []string{"parameters", "feature-flags"}, []string{always, otherTag}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cat := withCooperation(t, map[string][]string{"parameters": {"@feature-flags", "@tenancy"}})
+			paramsIndex := -1
+			for i := range cat.Specs {
+				if cat.Specs[i].Spec != "parameters" {
+					continue
+				}
+				cat.Specs[i].Files = []catalog.File{{Path: always}, {Path: gated}, {Path: otherTag}}
+				paramsIndex = i
+			}
+			if paramsIndex < 0 {
+				t.Fatalf("parameters spec is not in the catalog")
+			}
+			before := append([]catalog.File(nil), cat.Specs[paramsIndex].Files...)
+			p := mustResolve(t, cat, selection(tc.modules...))
+			if got := specFiles(t, p, "parameters"); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("parameters files = %v, want %v", got, tc.want)
+			}
+			if !reflect.DeepEqual(cat.Specs[paramsIndex].Files, before) {
+				t.Fatalf("Resolve changed the catalog it was given")
+			}
+		})
+	}
+}
