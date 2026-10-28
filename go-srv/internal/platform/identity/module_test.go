@@ -338,7 +338,9 @@ func TestMountedRoutesAreTheSessionRoutesAndTheKratosProxyAndNoSiblings(t *testi
 		{http.MethodPost, "/api/v1/auth/switch-tenant", http.StatusUnauthorized, "SESSION_INVALID"},
 	}
 	for _, route := range mounted {
-		expectError(t, serve(route.method, route.path), route.status, route.code)
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			expectError(t, serve(route.method, route.path), route.status, route.code)
+		})
 	}
 	if rec := serve(http.MethodGet, "/kratos/self-service/login/browser"); rec.Code != http.StatusOK {
 		t.Errorf("GET /kratos/ answered %d, want the proxied 200", rec.Code)
@@ -356,7 +358,9 @@ func TestMountedRoutesAreTheSessionRoutesAndTheKratosProxyAndNoSiblings(t *testi
 		{http.MethodGet, "/api/v1/feature-flags"},
 	}
 	for _, route := range unmounted {
-		expectError(t, serve(route.method, route.path), http.StatusNotFound, "ROUTE_NOT_FOUND")
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
+			expectError(t, serve(route.method, route.path), http.StatusNotFound, "ROUTE_NOT_FOUND")
+		})
 	}
 }
 
