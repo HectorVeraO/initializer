@@ -505,11 +505,11 @@ func TestWebCompositionRootPerSelection(t *testing.T) {
 			"export const installedModules: readonly WebModule[] = [coreModule, identityModule, parametersModule];\n"},
 		{"all modules", []string{"feature-flags", "parameters"}, header +
 			"import { coreModule } from './core/module';\n" +
-			"import { featureFlagsModule } from './feature-flags/module';\n" +
 			"import { identityModule } from './identity/module';\n" +
+			"import { featureFlagsModule } from './feature-flags/module';\n" +
 			"import { parametersModule } from './parameters/module';\n\n" +
 			"/** The console modules of this project, in catalog order. */\n" +
-			"export const installedModules: readonly WebModule[] = [coreModule, featureFlagsModule, identityModule, parametersModule];\n"},
+			"export const installedModules: readonly WebModule[] = [coreModule, identityModule, featureFlagsModule, parametersModule];\n"},
 	}
 	repo := fixture.Load(t)
 	for _, tc := range cases {

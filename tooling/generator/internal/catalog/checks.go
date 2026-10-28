@@ -73,6 +73,7 @@ func (b *builder) checkModuleSet() {
 	b.checkFrontend(byStack)
 	b.checkImplied(byStack)
 	b.checkCoreAndRequirements(byStack)
+	b.checkRequirementParity(byStack)
 	b.checkImplementations()
 	b.checkCycles(byStack)
 }
@@ -164,6 +165,64 @@ func (b *builder) checkCoreAndRequirements(byStack map[string]map[string]*module
 			}
 		}
 	}
+}
+
+// checkRequirementParity reports a module whose requiresModules ids differ
+// between stacks. The plan closes the selection over every selected stack's
+// edges, so an edge only one stack declares would change the backend modules
+// depending on whether the other stack is selected. Ranges may differ.
+func (b *builder) checkRequirementParity(byStack map[string]map[string]*moduleDoc) {
+	first := map[string]*moduleDoc{}
+	for _, stack := range stackTable {
+		ids := byStack[stack.name]
+		names := make([]string, 0, len(ids))
+		for id := range ids {
+			names = append(names, id)
+		}
+		sort.Strings(names)
+		for _, id := range names {
+			doc := ids[id]
+			head, seen := first[id]
+			if !seen {
+				first[id] = doc
+				continue
+			}
+			missing, extra := requirementDiff(head.module.RequiresModules, doc.module.RequiresModules)
+			if len(missing) == 0 && len(extra) == 0 {
+				continue
+			}
+			b.add(CodeRequiresStackMismatch, doc.path, "/requiresModules",
+				fmt.Sprintf("requiresModules must name the same modules as %s; missing [%s], extra [%s]",
+					head.path, strings.Join(missing, " "), strings.Join(extra, " ")))
+		}
+	}
+}
+
+// requirementDiff returns the module ids in want and not in got (missing), and
+// the ones in got and not in want (extra), each sorted.
+func requirementDiff(want, got []manifest.ModuleRequirement) ([]string, []string) {
+	wantSet := map[string]bool{}
+	for _, requirement := range want {
+		wantSet[requirement.Module] = true
+	}
+	gotSet := map[string]bool{}
+	for _, requirement := range got {
+		gotSet[requirement.Module] = true
+	}
+	var missing, extra []string
+	for id := range wantSet {
+		if !gotSet[id] {
+			missing = append(missing, id)
+		}
+	}
+	for id := range gotSet {
+		if !wantSet[id] {
+			extra = append(extra, id)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(extra)
+	return missing, extra
 }
 
 // checkImplementations compares every implementsSpec entry with the spec set.
