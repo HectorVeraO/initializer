@@ -112,10 +112,13 @@ func TestDecodeSelectionValidFixture(t *testing.T) {
 
 func TestDecodeSelectionReportsEveryProblem(t *testing.T) {
 	_, issues := manifest.DecodeSelection(selectionPath, readFixture(t, "selection.invalid.json"))
-	for _, path := range []string{"#/project/name", "#/project/goModule", "#/stacks", "#/modules/0"} {
+	for _, path := range []string{"#/project/goModule", "#/stacks", "#/modules/0"} {
 		if !hasIssue(issues, manifest.CodeSelectionInvalid, selectionPath+path) {
 			t.Errorf("missing SELECTION_INVALID at %s: %v", path, issues)
 		}
+	}
+	if !hasIssue(issues, manifest.CodeNameInvalid, selectionPath+"#/project/name") {
+		t.Errorf("missing NAME_INVALID at #/project/name: %v", issues)
 	}
 }
 
@@ -124,36 +127,37 @@ func TestDecodeSelectionRules(t *testing.T) {
 		name   string
 		change func(map[string]any)
 		path   string
+		code   string
 	}{
-		{"name too short", func(m map[string]any) { m["project"].(map[string]any)["name"] = "a" }, "#/project/name"},
-		{"name 64 chars", func(m map[string]any) { m["project"].(map[string]any)["name"] = "a" + strings.Repeat("b", 63) }, "#/project/name"},
-		{"name uppercase", func(m map[string]any) { m["project"].(map[string]any)["name"] = "Acme" }, "#/project/name"},
-		{"name starts with digit", func(m map[string]any) { m["project"].(map[string]any)["name"] = "1ab" }, "#/project/name"},
-		{"goModule missing with go-srv", func(m map[string]any) { delete(m["project"].(map[string]any), "goModule") }, "#/project/goModule"},
-		{"goModule uppercase first segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "Example.com/acme" }, "#/project/goModule"},
-		{"goModule dotdot segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/../x" }, "#/project/goModule"},
-		{"goModule dot segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/./x" }, "#/project/goModule"},
-		{"goModule empty segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com//x" }, "#/project/goModule"},
-		{"goModule leading slash", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "/example.com/x" }, "#/project/goModule"},
-		{"goModule trailing slash", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/x/" }, "#/project/goModule"},
-		{"goModule first segment no dot", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example/x" }, "#/project/goModule"},
-		{"goModule bad character", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/a b" }, "#/project/goModule"},
-		{"two backend stacks", func(m map[string]any) { m["stacks"] = []any{"go-srv", "go-srv"} }, "#/stacks"},
-		{"no backend stack", func(m map[string]any) { m["stacks"] = []any{"ng-web"} }, "#/stacks"},
-		{"two frontend stacks", func(m map[string]any) { m["stacks"] = []any{"go-srv", "ng-web", "ng-web"} }, "#/stacks"},
-		{"unknown stack", func(m map[string]any) { m["stacks"] = []any{"go-srv", "rust-srv"} }, "#/stacks/1"},
-		{"bad module id", func(m map[string]any) { m["modules"] = []any{"Bad"} }, "#/modules/0"},
-		{"unknown key", func(m map[string]any) { m["extra"] = 1 }, "#/extra"},
-		{"unknown project key", func(m map[string]any) { m["project"].(map[string]any)["extra"] = 1 }, "#/project/extra"},
-		{"missing modules", func(m map[string]any) { delete(m, "modules") }, "#/modules"},
-		{"schema 2", func(m map[string]any) { m["schema"] = 2 }, "#/schema"},
+		{"name too short", func(m map[string]any) { m["project"].(map[string]any)["name"] = "a" }, "#/project/name", manifest.CodeNameInvalid},
+		{"name 64 chars", func(m map[string]any) { m["project"].(map[string]any)["name"] = "a" + strings.Repeat("b", 63) }, "#/project/name", manifest.CodeNameInvalid},
+		{"name uppercase", func(m map[string]any) { m["project"].(map[string]any)["name"] = "Acme" }, "#/project/name", manifest.CodeNameInvalid},
+		{"name starts with digit", func(m map[string]any) { m["project"].(map[string]any)["name"] = "1ab" }, "#/project/name", manifest.CodeNameInvalid},
+		{"goModule missing with go-srv", func(m map[string]any) { delete(m["project"].(map[string]any), "goModule") }, "#/project/goModule", manifest.CodeSelectionInvalid},
+		{"goModule uppercase first segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "Example.com/acme" }, "#/project/goModule", manifest.CodeSelectionInvalid},
+		{"goModule dotdot segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/../x" }, "#/project/goModule", manifest.CodeSelectionInvalid},
+		{"goModule dot segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/./x" }, "#/project/goModule", manifest.CodeSelectionInvalid},
+		{"goModule empty segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com//x" }, "#/project/goModule", manifest.CodeSelectionInvalid},
+		{"goModule leading slash", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "/example.com/x" }, "#/project/goModule", manifest.CodeSelectionInvalid},
+		{"goModule trailing slash", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/x/" }, "#/project/goModule", manifest.CodeSelectionInvalid},
+		{"goModule first segment no dot", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example/x" }, "#/project/goModule", manifest.CodeSelectionInvalid},
+		{"goModule bad character", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/a b" }, "#/project/goModule", manifest.CodeSelectionInvalid},
+		{"two backend stacks", func(m map[string]any) { m["stacks"] = []any{"go-srv", "go-srv"} }, "#/stacks", manifest.CodeSelectionInvalid},
+		{"no backend stack", func(m map[string]any) { m["stacks"] = []any{"ng-web"} }, "#/stacks", manifest.CodeSelectionInvalid},
+		{"two frontend stacks", func(m map[string]any) { m["stacks"] = []any{"go-srv", "ng-web", "ng-web"} }, "#/stacks", manifest.CodeSelectionInvalid},
+		{"unknown stack", func(m map[string]any) { m["stacks"] = []any{"go-srv", "rust-srv"} }, "#/stacks/1", manifest.CodeSelectionInvalid},
+		{"bad module id", func(m map[string]any) { m["modules"] = []any{"Bad"} }, "#/modules/0", manifest.CodeSelectionInvalid},
+		{"unknown key", func(m map[string]any) { m["extra"] = 1 }, "#/extra", manifest.CodeSelectionInvalid},
+		{"unknown project key", func(m map[string]any) { m["project"].(map[string]any)["extra"] = 1 }, "#/project/extra", manifest.CodeSelectionInvalid},
+		{"missing modules", func(m map[string]any) { delete(m, "modules") }, "#/modules", manifest.CodeSelectionInvalid},
+		{"schema 3", func(m map[string]any) { m["schema"] = 3 }, "#/schema", manifest.CodeSelectionInvalid},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			data := mutateFixture(t, "selection.valid.json", tc.change)
 			_, issues := manifest.DecodeSelection(selectionPath, data)
-			if !hasIssue(issues, manifest.CodeSelectionInvalid, selectionPath+tc.path) {
-				t.Fatalf("want SELECTION_INVALID at %s, got %v", tc.path, issues)
+			if !hasIssue(issues, tc.code, selectionPath+tc.path) {
+				t.Fatalf("want %s at %s, got %v", tc.code, tc.path, issues)
 			}
 		})
 	}
@@ -204,9 +208,12 @@ func TestSelectionFromFlags(t *testing.T) {
 
 	bad := manifest.SelectionFlags{Name: "A", Stacks: []string{"go-srv"}, Modules: []string{"Bad"}}
 	_, issues = manifest.SelectionFromFlags(bad)
-	for _, path := range []string{"flags#/project/name", "flags#/project/goModule", "flags#/modules/0"} {
+	for _, path := range []string{"flags#/project/goModule", "flags#/modules/0"} {
 		if !hasIssue(issues, manifest.CodeSelectionInvalid, path) {
 			t.Errorf("missing issue at %s: %v", path, issues)
 		}
+	}
+	if !hasIssue(issues, manifest.CodeNameInvalid, "flags#/project/name") {
+		t.Errorf("missing NAME_INVALID at flags#/project/name: %v", issues)
 	}
 }

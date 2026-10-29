@@ -302,3 +302,11 @@ func FuzzDecode(f *testing.F) {
 		}
 	})
 }
+
+func TestDecodeSchema1RefusesSelectionComponents(t *testing.T) {
+	raw := strings.Replace(schema1Lock(""), `"modules":["core"]}`, `"modules":["core"],"components":[{"stack":"go-srv","name":"acme-srv"}]}`, 1)
+	_, err := lockfile.Decode([]byte(raw))
+	if err == nil || !strings.Contains(err.Error(), "selection.components") {
+		t.Fatalf("want a selection.components refusal, got %v", err)
+	}
+}

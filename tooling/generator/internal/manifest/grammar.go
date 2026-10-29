@@ -20,7 +20,6 @@ var (
 	idPattern          = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 	tablePrefixPattern = regexp.MustCompile(`^[a-z]{2,4}$`)
 	envKeyPattern      = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
-	projectNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 	goSegmentPattern   = regexp.MustCompile(`^[A-Za-z0-9._~-]+$`)
 )
 

@@ -209,8 +209,19 @@ func TestSelectionIssuesExitOneWithSortedArray(t *testing.T) {
 			t.Fatalf("issues not sorted by path: %v", issues)
 		}
 	}
+	wantCodes := map[string]string{
+		"#/modules/0":        "SELECTION_INVALID",
+		"#/project/goModule": "SELECTION_INVALID",
+		"#/project/name":     "NAME_INVALID",
+		"#/stacks":           "SELECTION_INVALID",
+	}
+	if len(issues) != len(wantCodes) {
+		t.Fatalf("want %d issues, got %v", len(wantCodes), issues)
+	}
 	for _, found := range issues {
-		if found["code"] != "SELECTION_INVALID" || found["message"] == "" {
+		_, suffix, _ := strings.Cut(found["path"], "#")
+		wantCode, known := wantCodes["#"+suffix]
+		if !known || found["code"] != wantCode || found["message"] == "" {
 			t.Fatalf("malformed issue: %v", found)
 		}
 	}

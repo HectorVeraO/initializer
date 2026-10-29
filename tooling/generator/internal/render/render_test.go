@@ -97,6 +97,7 @@ func TestReadmeGoldens(t *testing.T) {
 	coreParams := render.ReadmeInput{
 		Name:             "acme-backend",
 		GeneratorVersion: "0.1.0",
+		Components:       []render.Component{{Stack: "go-srv", Name: "go-srv"}},
 		Modules: []render.ReadmeModule{
 			{Stack: "go-srv", Module: "core", Version: "0.1.0"},
 			{Stack: "go-srv", Module: "identity", Version: "0.1.0"},
@@ -133,15 +134,47 @@ func TestReadmeGoldens(t *testing.T) {
 
 func TestReadmeRefusesUnsafeFields(t *testing.T) {
 	base := render.ReadmeInput{Name: "acme-backend", GeneratorVersion: "0.1.0"}
-	bad := []render.ReadmeInput{base, base, base, base, base}
+	bad := []render.ReadmeInput{base, base, base, base, base, base}
 	bad[0].Name = "x\n# injected"
 	bad[1].TCKEnv = []render.EnvPair{{Key: "K", Value: "a`b"}}
 	bad[2].Modules = []render.ReadmeModule{{Stack: "go-srv", Module: "a\r", Version: "0.1.0"}}
 	bad[3].TCKTags = []string{"@core\n# injected"}
 	bad[4].TCKEnv = []render.EnvPair{{Key: "K`", Value: "v"}}
+	bad[5].Components = []render.Component{{Stack: "go-srv", Name: "acme\n# injected"}}
 	for i, in := range bad {
 		if out, err := render.Readme(in); err == nil {
 			t.Fatalf("case %d: want an error, got:\n%s", i, out)
 		}
+	}
+}
+
+func TestReadmeNamesTheFolderOfTheGoComponent(t *testing.T) {
+	in := render.ReadmeInput{
+		Name:             "acme-backend",
+		GeneratorVersion: "0.1.0",
+		Components:       []render.Component{{Stack: "go-srv", Name: "acme-srv"}, {Stack: "ng-web", Name: "acme-web"}},
+		TCKTags:          []string{"@core"},
+		TCKEnv:           []render.EnvPair{{Key: "APP_FLAGS_FILE", Value: "specs/feature-flags/tck/fixtures/flags.yaml"}},
+	}
+	got, err := render.Readme(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	for _, want := range []string{"(from `acme-srv/`, so relative paths resolve against `acme-srv/`)", "`APP_FLAGS_FILE=../specs/feature-flags/tck/fixtures/flags.yaml`"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("README lacks %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestReadmeOmitsTheStartSentenceWithoutAGoComponent(t *testing.T) {
+	in := render.ReadmeInput{Name: "acme-web", GeneratorVersion: "0.1.0", Components: []render.Component{{Stack: "ng-web", Name: "acme-web"}}}
+	got, err := render.Readme(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "Start the stack") {
+		t.Errorf("the go-srv sentence must be omitted:\n%s", got)
 	}
 }

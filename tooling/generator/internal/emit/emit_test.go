@@ -701,3 +701,90 @@ func TestStackBlockIsKeptOnlyWhenTheStackIsSelected(t *testing.T) {
 		})
 	}
 }
+
+// namedSelection selects both stacks with the given component entries.
+func namedSelection(components ...manifest.Component) manifest.Selection {
+	sel := webSelection("parameters")
+	sel.Schema = 2
+	sel.Components = components
+	return sel
+}
+
+func TestComponentFoldersHoldTheStackFilesAndTheCompositionRoots(t *testing.T) {
+	repo := fixture.Load(t)
+	project := mustBuild(t, repo, namedSelection(
+		manifest.Component{Stack: "go-srv", Name: "acme-srv"},
+		manifest.Component{Stack: "ng-web", Name: "acme-web"}))
+	paths := projectPaths(project)
+	for _, want := range []string{
+		"acme-srv/go.mod", "acme-srv/cmd/server/modules.go", "acme-srv/internal/platform/parameters/parameters.go",
+		"acme-web/src/app/platform/modules.ts", "acme-web/package.json", "specs/core/openapi.yaml",
+	} {
+		if !paths[want] {
+			t.Errorf("%s was not delivered", want)
+		}
+	}
+	for path := range paths {
+		if strings.HasPrefix(path, "go-srv/") || strings.HasPrefix(path, "ng-web/") {
+			t.Errorf("%s stayed under a stack id", path)
+		}
+	}
+	if !strings.HasPrefix(projectFile(t, project, "acme-srv/go.mod"), "module "+targetModule+"\n") {
+		t.Errorf("go.mod line not rewritten: %q", projectFile(t, project, "acme-srv/go.mod"))
+	}
+	if !strings.Contains(projectFile(t, project, "acme-srv/cmd/server/modules.go"), targetModule+"/internal/platform/parameters") {
+		t.Error("the Go composition root does not import the target module path")
+	}
+}
+
+func TestComponentLockRecordsProjectPathsAndSourcePaths(t *testing.T) {
+	repo := fixture.Load(t)
+	project := mustBuild(t, repo, namedSelection(manifest.Component{Stack: "go-srv", Name: "acme-srv"}))
+	lock := decodeLock(t, project)
+	var gomod *lockfile.File
+	for _, module := range lock.Modules {
+		for i, file := range module.Files {
+			if file.Path == "acme-srv/go.mod" {
+				gomod = &module.Files[i]
+			}
+		}
+	}
+	if gomod == nil || gomod.SourcePath != "go-srv/go.mod" || gomod.SourceSHA256 == "" {
+		t.Fatalf("go.mod lock entry = %+v", gomod)
+	}
+	wantGenerated := false
+	for _, file := range lock.Generated {
+		wantGenerated = wantGenerated || file.Path == "acme-srv/cmd/server/modules.go"
+	}
+	if !wantGenerated {
+		t.Errorf("the rendered composition root is not listed at the component folder: %+v", lock.Generated)
+	}
+	if lock.Names["component.go-srv"] != "acme-srv" || lock.Names["component.ng-web"] != "ng-web" {
+		t.Errorf("lock names = %v", lock.Names)
+	}
+}
+
+func TestCatalogFileOnARenamedCompositionRootIsRefused(t *testing.T) {
+	repo := fixture.Load(t)
+	crafted := repo.Catalog
+	crafted.Specs = append([]catalog.SpecEntry(nil), crafted.Specs...)
+	for i := range crafted.Specs {
+		if crafted.Specs[i].Spec == "parameters" {
+			crafted.Specs[i].Files = []catalog.File{{
+				Path: "specs/parameters/openapi.yaml", SHA256: hashOfFile(t, repo.Root, "specs/parameters/openapi.yaml"),
+				Target: "go-srv/cmd/server/modules.go",
+			}}
+		}
+	}
+	sel := namedSelection(manifest.Component{Stack: "go-srv", Name: "acme-srv"})
+	_, err := build(t, os.DirFS(repo.Root), crafted, repo.CatalogBytes, sel)
+	if err == nil || !strings.Contains(err.Error(), "acme-srv/cmd/server/modules.go") {
+		t.Fatalf("want a rendered-path collision naming the renamed composition root, got %v", err)
+	}
+}
+
+func TestComponentProjectsAreByteIdenticalAcrossBuilds(t *testing.T) {
+	repo := fixture.Load(t)
+	sel := namedSelection(manifest.Component{Stack: "go-srv", Name: "acme-srv"}, manifest.Component{Stack: "ng-web", Name: "acme-web"})
+	compareTrees(t, readTree(t, mustWrite(t, mustBuild(t, repo, sel))), readTree(t, mustWrite(t, mustBuild(t, repo, sel))))
+}

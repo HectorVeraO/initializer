@@ -242,6 +242,9 @@ func Decode(data []byte) (Lock, error) {
 		if old.Selection.Schema != 1 {
 			return Lock{}, errors.New("selection.schema must be the number 1")
 		}
+		if len(old.Selection.Components) > 0 {
+			return Lock{}, errors.New("selection.components needs lock schema 2")
+		}
 		lock = upgradeV1(old)
 	case SchemaVersion:
 		if err := decodeStrict(data, &lock); err != nil {

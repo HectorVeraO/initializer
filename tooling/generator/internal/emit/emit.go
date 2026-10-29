@@ -29,12 +29,6 @@ const composeFile = ".deploy/local/docker-compose.yml"
 // readmeName is the rendered project README.
 const readmeName = "README.md"
 
-// goCompositionRoot is the rendered composition root of the go-srv stack.
-const goCompositionRoot = "go-srv/cmd/server/modules.go"
-
-// webCompositionRoot is the rendered composition root of the ng-web stack.
-const webCompositionRoot = "ng-web/src/app/platform/modules.ts"
-
 // BuildOptions are the inputs of one project build.
 type BuildOptions struct {
 	// Root is the repository checkout the catalog describes.
@@ -60,13 +54,28 @@ type Project struct {
 	Files []File
 }
 
-// reserved reports whether p is a file the generator renders; no copy may land on it.
-func reserved(p string) bool {
+// reserved reports whether p is a file the generator renders; no copy may land
+// on it. The composition roots sit in the component folders of the plan.
+func (b *builder) reserved(p string) bool {
 	switch p {
-	case readmeName, lockfile.SelectionName, lockfile.Name, goCompositionRoot, webCompositionRoot:
+	case readmeName, lockfile.SelectionName, lockfile.Name:
 		return true
 	}
+	for _, stack := range b.opts.Plan.Stacks {
+		if root, ok := b.compositionRoot(stack.Stack); ok && root == p {
+			return true
+		}
+	}
 	return false
+}
+
+// compositionRoot returns the project path of the composition root of stack.
+func (b *builder) compositionRoot(stack string) (string, bool) {
+	info, known := manifest.LookupStack(stack)
+	if !known {
+		return "", false
+	}
+	return b.opts.Plan.ProjectPath(info.Root + info.CompositionRoot), true
 }
 
 type builder struct {
@@ -180,14 +189,15 @@ func (b *builder) add(p string, data []byte) error {
 // copyFile reads one catalog file from the checkout, checks it against the
 // catalog, applies its transform and records it at its delivered path.
 func (b *builder) copyFile(file catalog.File, owner string) (lockfile.File, error) {
-	dest := file.Path
+	delivered := file.Path
 	if file.Target != "" {
-		dest = file.Target
+		delivered = file.Target
 	}
 	if !fs.ValidPath(file.Path) || !lockfile.ValidPath(file.Path) {
 		return lockfile.File{}, fmt.Errorf("catalog path %q is not a repo-relative path", file.Path)
 	}
-	if reserved(dest) {
+	dest := b.opts.Plan.ProjectPath(delivered)
+	if b.reserved(dest) {
 		return lockfile.File{}, fmt.Errorf("catalog file %q lands on the rendered path %q", file.Path, dest)
 	}
 	data, err := fs.ReadFile(b.opts.Root, file.Path)
@@ -198,18 +208,18 @@ func (b *builder) copyFile(file catalog.File, owner string) (lockfile.File, erro
 	if sourceSum != file.SHA256 {
 		return lockfile.File{}, fmt.Errorf("source %s changed since the catalog was built", file.Path)
 	}
-	delivered, err := b.transform(file.Path, data, owner)
+	transformed, err := b.transform(file.Path, data, owner)
 	if err != nil {
 		return lockfile.File{}, err
 	}
-	entry := lockfile.File{Path: dest, SHA256: hashHex(delivered)}
+	entry := lockfile.File{Path: dest, SHA256: hashHex(transformed)}
 	if entry.SHA256 != sourceSum {
 		entry.SourceSHA256 = sourceSum
 	}
 	if dest != file.Path {
 		entry.SourcePath = file.Path
 	}
-	if err := b.add(dest, delivered); err != nil {
+	if err := b.add(dest, transformed); err != nil {
 		return lockfile.File{}, err
 	}
 	return entry, nil
@@ -310,9 +320,14 @@ func (b *builder) render() ([]lockfile.File, error) {
 	for _, key := range keys {
 		env = append(env, render.EnvPair{Key: key, Value: p.TCKEnv[key]})
 	}
+	var components []render.Component
+	for _, component := range p.Components {
+		components = append(components, render.Component{Stack: component.Stack, Name: component.Name})
+	}
 	readme, err := render.Readme(render.ReadmeInput{
 		Name:             b.project,
 		GeneratorVersion: generator.Version,
+		Components:       components,
 		Modules:          rows,
 		TCKTags:          p.TCKTags,
 		TCKEnv:           env,
@@ -362,11 +377,14 @@ func (b *builder) renderGoRoot(stack plan.StackPlan, record func(string, []byte)
 	if err != nil {
 		return err
 	}
-	rewritten, _, err := gorewrite.RewriteImports(goCompositionRoot, raw, b.source, b.target)
+	info, _ := manifest.LookupStack(stack.Stack)
+	sourceForm := info.Root + info.CompositionRoot
+	rewritten, _, err := gorewrite.RewriteImports(sourceForm, raw, b.source, b.target)
 	if err != nil {
-		return fmt.Errorf("%s: %w", goCompositionRoot, err)
+		return fmt.Errorf("%s: %w", sourceForm, err)
 	}
-	return record(goCompositionRoot, rewritten)
+	root, _ := b.compositionRoot(stack.Stack)
+	return record(root, rewritten)
 }
 
 // renderWebRoot renders the ng-web composition root; no path is rewritten.
@@ -379,7 +397,8 @@ func (b *builder) renderWebRoot(stack plan.StackPlan, record func(string, []byte
 	if err != nil {
 		return err
 	}
-	return record(webCompositionRoot, raw)
+	root, _ := b.compositionRoot(stack.Stack)
+	return record(root, raw)
 }
 
 // assemble orders the files, appends the lock and scans every file for a

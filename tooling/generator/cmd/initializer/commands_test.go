@@ -43,6 +43,8 @@ Flags:
         Modules to install; replaces the file's list; required modules are added (default: none)
   --all-modules
         Install every module of the backend stack (default: false)
+  --component STACK=NAME
+        Name the folder of STACK's component (repeatable) (default: the stack id)
   --root DIR
         Source checkout (required)
   --catalog FILE
@@ -414,7 +416,7 @@ func TestGenerateRefusesAFolderNameThatIsNotAProjectName(t *testing.T) {
 	}
 	issues := issueArray(t, stdout)
 	want := `name "My App" comes from the folder "My App" and is not a project name`
-	if len(issues) != 1 || issues[0]["code"] != "SELECTION_INVALID" || issues[0]["path"] != "args#/dir" || issues[0]["message"] != want {
+	if len(issues) != 1 || issues[0]["code"] != "NAME_INVALID" || issues[0]["path"] != "args#/dir" || issues[0]["message"] != want {
 		t.Fatalf("issues = %v", issues)
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {

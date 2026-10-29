@@ -7,6 +7,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/emit"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
 )
 
@@ -34,6 +35,10 @@ func hintFor(found issue.Issue, moduleIDs []string) string {
 		return "choose another folder: initializer generate <dir>"
 	case plan.CodeGeneratorMismatch, plan.CodeFileMismatch:
 		return rebuildCatalogHint
+	case manifest.CodeNameInvalid:
+		return "example: acme-api"
+	case plan.CodeNameReserved:
+		return "choose another name"
 	case plan.CodeModuleUnknown:
 		closest := suggest(lastQuoted(found.Message), moduleIDs)
 		if closest == "" {

@@ -188,6 +188,18 @@ type issueView struct {
 	moduleIDs []string
 	// selectionFile is the input file the selection came from; "" when flags built it.
 	selectionFile string
+	// components are the --component values as typed, in flag order, so an
+	// issue at flags#/components/<i> renders as the flag as typed.
+	components []string
+}
+
+// typedComponents returns the --component values as typed.
+func typedComponents(entries []componentEntry) []string {
+	typed := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		typed = append(typed, entry.raw)
+	}
+	return typed
 }
 
 // reportIssues writes the value problems of a run, sorted and hinted, and
@@ -226,6 +238,7 @@ var flagPointers = map[string]string{
 	"/project/goModule": "--go-module",
 	"/stacks":           "--stacks",
 	"/modules":          "--modules",
+	"/components":       "--component",
 }
 
 // flagForPointer returns the flag whose value sits at pointer.
@@ -249,6 +262,9 @@ func whereOf(found issue.Issue, view issueView) string {
 	case !hasPointer:
 		return found.Path
 	case source == "flags" || (source == "selection" && view.selectionFile == ""):
+		if typed, ok := typedComponentAt(pointer, view.components); ok {
+			return "--component " + typed
+		}
 		if name, ok := flagForPointer(pointer); ok {
 			return name
 		}
@@ -266,6 +282,21 @@ func whereOf(found issue.Issue, view issueView) string {
 		place += ":" + strconv.Itoa(found.Line)
 	}
 	return place + " " + pointer
+}
+
+// typedComponentAt returns the --component value an issue pointer names, for a
+// pointer /components/<i> or /components/<i>/<field>.
+func typedComponentAt(pointer string, typed []string) (string, bool) {
+	rest, isComponent := strings.CutPrefix(pointer, "/components/")
+	if !isComponent {
+		return "", false
+	}
+	indexText, _, _ := strings.Cut(rest, "/")
+	index, err := strconv.Atoi(indexText)
+	if err != nil || index < 0 || index >= len(typed) {
+		return "", false
+	}
+	return typed[index], true
 }
 
 // reportFailure writes an exit-3 failure and returns the internal exit code.
@@ -308,11 +339,19 @@ type catalogRef struct {
 	File   string `json:"file,omitempty"`
 }
 
+// componentInstalled is one component of the generated project: the stack and
+// the folder that holds its files.
+type componentInstalled struct {
+	Stack string `json:"stack"`
+	Name  string `json:"name"`
+}
+
 // generateResult is what a successful generate prints.
 type generateResult struct {
 	project, path string
 	files         int
 	catalog       catalogRef
+	components    []componentInstalled
 	modules       []moduleInstalled
 	added         []moduleAdded
 }
@@ -321,18 +360,19 @@ type generateResult struct {
 func writeGenerate(ctx *Context, result generateResult) int {
 	if ctx.isJSON() {
 		doc := struct {
-			Schema   int               `json:"schema"`
-			OK       bool              `json:"ok"`
-			Project  string            `json:"project"`
-			Path     string            `json:"path"`
-			Files    int               `json:"files"`
-			Catalog  catalogRef        `json:"catalog"`
-			Modules  []moduleInstalled `json:"modules"`
-			Added    []moduleAdded     `json:"added"`
-			Notes    []string          `json:"notes"`
-			Warnings []Warning         `json:"warnings"`
+			Schema     int                  `json:"schema"`
+			OK         bool                 `json:"ok"`
+			Project    string               `json:"project"`
+			Path       string               `json:"path"`
+			Files      int                  `json:"files"`
+			Catalog    catalogRef           `json:"catalog"`
+			Components []componentInstalled `json:"components"`
+			Modules    []moduleInstalled    `json:"modules"`
+			Added      []moduleAdded        `json:"added"`
+			Notes      []string             `json:"notes"`
+			Warnings   []Warning            `json:"warnings"`
 		}{documentSchema, true, result.project, filepath.ToSlash(result.path), result.files, result.catalog,
-			list(result.modules), list(result.added), list(ctx.Notes), ctx.warnings()}
+			list(result.components), list(result.modules), list(result.added), list(ctx.Notes), ctx.warnings()}
 		return emitDocument(ctx, ctx.Stdout, doc, exitOK)
 	}
 	var text strings.Builder
