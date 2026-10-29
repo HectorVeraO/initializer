@@ -127,14 +127,25 @@ func TestDecodeInputAcceptsASchema1FileWithoutGoModule(t *testing.T) {
 }
 
 func TestDecodeInputNeverAcceptsNull(t *testing.T) {
-	for _, document := range []string{
-		`{"schema":null}`,
-		`{"schema":2,"project":null}`,
-		`{"schema":2,"stacks":[null]}`,
-		`{"schema":2,"components":[null]}`,
-	} {
-		if _, issues := decode(t, "acme.json", document); len(issues) == 0 {
-			t.Errorf("%s was accepted", document)
+	cases := []struct {
+		document string
+		path     string
+		message  string
+	}{
+		{`{"schema":null}`, "acme.json#/schema", "must be 1 or 2"},
+		{`{"schema":2,"project":null}`, "acme.json#/project", "must be an object"},
+		{`{"schema":2,"stacks":[null]}`, "acme.json#/stacks/0", "must be a string"},
+		{`{"schema":2,"components":[null]}`, "acme.json#/components/0", "must be an object"},
+	}
+	for _, tc := range cases {
+		_, issues := decode(t, "acme.json", tc.document)
+		found := issueAt(issues, tc.path, tc.message)
+		if found == nil {
+			t.Errorf("%s: want %q at %s, got %v", tc.document, tc.message, tc.path, issues)
+			continue
+		}
+		if found.Code != "SELECTION_INVALID" {
+			t.Errorf("%s: code = %s", tc.document, found.Code)
 		}
 	}
 }
