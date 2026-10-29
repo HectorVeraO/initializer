@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
@@ -43,12 +44,12 @@ type Example struct{ Comment, Line string }
 // commandTable returns the command table. A function, not a variable: the
 // help command reads the table it belongs to.
 func commandTable() []*Command {
-	return []*Command{generateCommand(), verifyCommand(), catalogBuildCommand(), helpCommand()}
+	return []*Command{generateCommand(), verifyCommand(), moduleLsCommand(), stackLsCommand(), catalogBuildCommand(), versionCommand(), helpCommand()}
 }
 
 type generateOptions struct {
 	root, catalog, out, file, selection, name, goModule, stacks, modules string
-	allModules                                                           bool
+	allModules, dryRun                                                   bool
 	components                                                           []componentEntry
 	// given counts how many times the scan saw each flag, by long name.
 	given map[string]int
@@ -89,9 +90,8 @@ func generateCommand() *Command {
 			set.components(&o.components, flagSpec{Name: "component", Placeholder: "STACK=NAME",
 				Usage:   "Name the folder of STACK's component (repeatable)",
 				Default: "<name>-<suffix>"})
-			set.str(&o.root, flagSpec{Name: "root", Placeholder: "DIR", Usage: "Source checkout", Default: "required"})
-			set.str(&o.catalog, flagSpec{Name: "catalog", Placeholder: "FILE",
-				Usage: "Catalog file built by 'initializer catalog build'", Default: "required"})
+			set.boolean(&o.dryRun, flagSpec{Name: "dry-run", Usage: "Print what would be generated and write nothing", Default: "false"})
+			registerSourceFlags(set, &o.root, &o.catalog)
 			set.str(&o.out, flagSpec{Name: "out", Placeholder: "DIR", Hidden: true,
 				Deprecated: "pass the folder as an argument: initializer generate <dir>"})
 			set.str(&o.selection, flagSpec{Name: "selection", Placeholder: "PATH", Hidden: true,
@@ -103,11 +103,13 @@ func generateCommand() *Command {
 		Issues: generateIssues,
 		Examples: []Example{
 			{"a backend with identity, in ./acme",
-				"initializer generate acme --root . --catalog catalog.lock.json --go-module example.com/acme --stacks go-srv --modules identity"},
+				"initializer generate acme --modules identity"},
 			{"backend and web console with every module",
-				"initializer generate acme --root . --catalog catalog.lock.json --go-module example.com/acme --stacks go-srv,ng-web --all-modules"},
+				"initializer generate acme --stacks go-srv,ng-web --all-modules"},
 			{"from a file, overriding one value",
 				"initializer generate -f acme.yaml --name acme-shop"},
+			{"see the resolved values without writing anything",
+				"initializer generate acme --modules tenancy --dry-run"},
 		},
 		Run: runGenerate,
 	}
@@ -152,7 +154,6 @@ func sniffFormat(data []byte) manifest.Format {
 func checkGenerate(set *flagSet, opts any, positionals []string) []Problem {
 	o := opts.(*generateOptions)
 	var problems []Problem
-	problems = append(problems, requiredFlags(set, "root", "catalog")...)
 	problems = append(problems, duplicateComponentProblems(o.components)...)
 	if set.given["out"] > 0 && len(positionals) > 0 {
 		problems = append(problems, Problem{Arg: "--out", Message: "pass the folder once"})
@@ -227,17 +228,19 @@ func catalogBuildCommand() *Command {
 		MaxArgs: 0,
 		Flags: func(set *flagSet) any {
 			o := &catalogBuildOptions{}
-			set.str(&o.root, flagSpec{Name: "root", Placeholder: "DIR", Usage: "Source checkout", Default: "required"})
+			set.str(&o.root, flagSpec{Name: "root", Placeholder: "DIR", Usage: "Source checkout", Default: rootDefault})
 			set.str(&o.files, flagSpec{Name: "files", Placeholder: "PATH",
-				Usage: "File with the tracked paths, NUL-separated (git ls-files -z)", Default: "required"})
+				Usage:   "File with the tracked paths, NUL-separated (git ls-files -z)",
+				Default: "git ls-files -z in the checkout"})
 			set.str(&o.out, flagSpec{Name: "out", Placeholder: "PATH", Usage: "Catalog file to write", Default: "required"})
 			return o
 		},
 		Check: func(set *flagSet, _ any, _ []string) []Problem {
-			return requiredFlags(set, "root", "files", "out")
+			return requiredFlags(set, "out")
 		},
 		Examples: []Example{
-			{"build the catalog of this checkout", "initializer catalog build --root . --files files.bin --out catalog.lock.json"},
+			{"build the catalog of the clone you are in", "initializer catalog build --out catalog.lock.json"},
+			{"build it from a given file list", "initializer catalog build --root . --files files.bin --out catalog.lock.json"},
 		},
 		Run: runCatalogBuild,
 	}
@@ -272,6 +275,10 @@ func commandWords() []string {
 	}
 	return words
 }
+
+// verbAliases maps a word people type for a verb to the verb the table has:
+// ls has no alias, but "list" suggests it.
+var verbAliases = map[string]string{"list": "ls"}
 
 // resolution is the table entry a list of words names, or why it names none.
 type resolution struct {
@@ -310,7 +317,11 @@ func resolve(words []string) resolution {
 		verbs = append(verbs, cmd.Path[1])
 	}
 	problem := &Problem{Message: `unknown command "` + strings.Join(words[:2], " ") + `"`}
-	if nearest := suggest(words[1], verbs); nearest != "" {
+	nearest := suggest(words[1], verbs)
+	if alias, isAlias := verbAliases[words[1]]; nearest == "" && isAlias && slices.Contains(verbs, alias) {
+		nearest = alias
+	}
+	if nearest != "" {
 		problem.Suggestion = words[0] + " " + nearest
 	}
 	return resolution{problem: problem}

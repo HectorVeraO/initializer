@@ -1,13 +1,10 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -16,8 +13,10 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/emit"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/lockfile"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/source"
 )
 
 // selectionSource is the source of the issue paths the plan reports for the
@@ -171,13 +170,24 @@ func runGenerate(ctx *Context, opts any, positionals []string) int {
 		slog.Int("module_count", len(selection.Modules)),
 		slog.Bool("all_modules", selection.AllModules))
 	return generateProject(ctx, generateInput{
-		root: o.root, catalogPath: o.catalog, dir: dir, run: run,
+		root: o.root, catalogPath: o.catalog, dir: dir, run: run, dryRun: o.dryRun,
 	})
 }
 
 type generateInput struct {
 	root, catalogPath, dir string
 	run                    inputRun
+	// dryRun resolves and checks everything and writes nothing.
+	dryRun bool
+}
+
+// lockSource returns the lock's source member for a revision, nil when the
+// revision is unknown.
+func lockSource(revision source.Revision) *lockfile.Source {
+	if !revision.Known {
+		return nil
+	}
+	return &lockfile.Source{Commit: revision.Commit, Modified: revision.Modified}
 }
 
 // backendStackIDs returns the sorted ids of the catalog's backend stacks.
@@ -242,25 +252,21 @@ func folderNameIssues(issues []issue.Issue, name, dir string) []issue.Issue {
 // defaults, plan, source and output checks, the in-memory build and the write.
 func generateProject(ctx *Context, in generateInput) int {
 	logger := ctx.Logger
-	info, err := os.Stat(in.root)
-	if err != nil || !info.IsDir() {
-		return fail(ctx, "input_unreadable", codeInputUnreadable, errors.New("root is not a readable directory"))
-	}
-	catalogBytes, err := readLimited(in.catalogPath, maxFileListBytes)
-	hasInputIssues := len(in.run.issues) > 0
-	if err != nil && hasInputIssues {
-		// The input problems are reportable without a catalog.
-		return reportIssues(ctx, in.run.issues, in.run.view)
-	}
+	found, buildIssues, err := ctx.resolveSources(in.root, in.catalogPath)
 	if err != nil {
-		return fail(ctx, "input_unreadable", codeCatalogUnreadable, err)
+		var failure *source.Error
+		isFailure := errors.As(err, &failure)
+		if isFailure && failure.Exit == source.ExitInternal && len(in.run.issues) > 0 {
+			// The input problems are reportable without a catalog.
+			return reportIssues(ctx, in.run.issues, in.run.view)
+		}
+		return reportSourceError(ctx, err, in.run.issues, in.run.view)
 	}
-	built, decodeIssues := catalog.Decode(catalogBytes)
-	if len(decodeIssues) > 0 {
-		cause := errors.New(decodeIssues[0].Message)
-		logger.Error("catalog_undecodable", slog.Int("issue_count", len(decodeIssues)), slog.String("error", cause.Error()))
-		return reportFailure(ctx, codeCatalogUnreadable, cause.Error())
+	ref, sourceNotes := announceSources(ctx, found)
+	if len(buildIssues) > 0 {
+		return reportIssues(ctx, append(append([]issue.Issue(nil), in.run.issues...), buildIssues...), in.run.view)
 	}
+	built := found.Catalog
 
 	workDir := ctx.WorkDir
 	if workDir == "" {
@@ -268,11 +274,11 @@ func generateProject(ctx *Context, in generateInput) int {
 	}
 	resolvedInput, defaultNotes, outDir, defaultIssues := manifest.ResolveDefaults(in.run.merged, in.dir, workDir, backendStackIDs(built))
 	issues := append(append([]issue.Issue(nil), in.run.issues...), defaultIssues...)
-	notes := append(append([]string(nil), in.run.notes...), defaultNotes...)
+	notes := append(append(append([]string(nil), in.run.notes...), defaultNotes...), sourceNotes...)
 	selection := resolvedInput.Selection
 	issues = append(issues, multiComponentIssues(resolvedInput)...)
 
-	root := os.DirFS(in.root)
+	root := found.Root.FS
 	var resolved plan.Plan
 	if !hasCode(issues, manifest.CodeSelectionInvalid, plan.CodeComponentMultiUnsupported) {
 		var planIssues []issue.Issue
@@ -319,16 +325,23 @@ func generateProject(ctx *Context, in generateInput) int {
 		added = append(added, moduleAdded{Module: pull.Module, RequiredBy: pull.RequiredBy, Stack: pull.Stack})
 	}
 
-	sum := sha256.Sum256(catalogBytes)
-	digest := hex.EncodeToString(sum[:])
+	digest := found.CatalogSHA256
+	recorded := manifest.RecordedSelection(in.run.merged, resolved.Selection.Modules)
 	project, err := emit.Build(emit.BuildOptions{
 		Root:          root,
 		Plan:          resolved,
 		CatalogSHA256: digest,
-		Recorded:      manifest.RecordedSelection(in.run.merged, resolved.Selection.Modules),
+		Source:        lockSource(found.Revision),
+		Recorded:      recorded,
 	})
 	if err != nil {
 		return fail(ctx, "project_build_failed", codeInternalError, err)
+	}
+	if in.dryRun {
+		return writeDryRun(ctx, dryRun{
+			path: displayDir, project: project, plan: resolved, resolvedInput: resolvedInput, recorded: recorded,
+			source: ref, catalog: catalogOf(found), added: added,
+		})
 	}
 	if err := emit.Write(outDir, project); err != nil {
 		return fail(ctx, "project_write_failed", codeOutputUnwritable, err)
@@ -347,7 +360,8 @@ func generateProject(ctx *Context, in generateInput) int {
 		project:    resolved.Selection.Project.Name,
 		path:       displayDir,
 		files:      len(project.Files),
-		catalog:    catalogRef{SHA256: digest, File: filepath.ToSlash(in.catalogPath)},
+		source:     ref,
+		catalog:    catalogOf(found),
 		components: components,
 		modules:    installed,
 		added:      added,

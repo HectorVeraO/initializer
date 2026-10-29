@@ -46,7 +46,7 @@ func TestGenerateTextResultNamesPulledModulesAndTheNextStep(t *testing.T) {
 	if stdout != want {
 		t.Fatalf("stdout\n%q\nwant\n%q", stdout, want)
 	}
-	if stderr != "note: project name \"acme\" comes from the folder; pass --name to set it\n" {
+	if withoutSources(stderr) != "note: project name \"acme\" comes from the folder; pass --name to set it\n" {
 		t.Fatalf("stderr = %q", stderr)
 	}
 }
@@ -113,9 +113,9 @@ func TestIssuesRenderWithTheFlagAndAHintThenOneSummary(t *testing.T) {
 	want := "error: ./acme: output directory is not empty [OUTPUT_NOT_EMPTY]\n" +
 		"  hint: choose another folder: initializer generate <dir>\n" +
 		"error: --modules: module is not in the catalog: \"tenacy\" [MODULE_UNKNOWN]\n" +
-		"  hint: did you mean \"tenancy\"?\n" +
+		"  hint: run 'initializer module ls'; did you mean \"tenancy\"?\n" +
 		"2 problems; nothing was written.\n"
-	if stderr != want {
+	if withoutSources(stderr) != want {
 		t.Fatalf("stderr\n%s\nwant\n%s", stderr, want)
 	}
 }
@@ -191,7 +191,6 @@ func TestExitThreeDocumentsCarryTheirCode(t *testing.T) {
 		code string
 	}{
 		"file list":     {[]string{"catalog", "build", "--root", root, "--files", filepath.Join(t.TempDir(), "none"), "--out", "o"}, "INPUT_UNREADABLE"},
-		"root":          {[]string{"catalog", "build", "--root", filepath.Join(t.TempDir(), "none"), "--files", writeFileList(t), "--out", "o"}, "INPUT_UNREADABLE"},
 		"catalog":       {[]string{"generate", "o", "--root", e.root, "--catalog", filepath.Join(t.TempDir(), "none"), "-f", writeSelection(t, validSelection)}, "CATALOG_UNREADABLE"},
 		"verify":        {[]string{"verify", t.TempDir()}, "VERIFY_UNREADABLE"},
 		"project write": {[]string{"generate", filepath.Join(blocker, "proj"), "--root", e.root, "--catalog", e.catalog, "-f", writeSelection(t, validSelection)}, "OUTPUT_UNWRITABLE"},
@@ -213,7 +212,8 @@ func TestExitThreeDocumentsCarryTheirCode(t *testing.T) {
 				t.Fatalf("doc = %+v", doc)
 			}
 			_, _, text := execute(t, tc.args...)
-			if !strings.HasPrefix(text, "error: ") || !strings.HasSuffix(text, "["+tc.code+"]\n") {
+			text = withoutSources(text)
+			if !strings.HasPrefix(text, "error: ") || !strings.Contains(text, "["+tc.code+"]\n") {
 				t.Fatalf("text = %q", text)
 			}
 		})
@@ -275,7 +275,7 @@ func TestLogEventsAppearOnlyWithLogJSON(t *testing.T) {
 func TestCatalogBuildTextResult(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "catalog.lock.json")
 	code, stdout, stderr := execute(t, "catalog", "build", "--root", filepath.Join(cleanFixture, "repo"), "--files", writeFileList(t), "--out", out)
-	if code != exitOK || stderr != "" {
+	if code != exitOK || withoutSources(stderr) != "" {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
 	written, err := os.ReadFile(out)

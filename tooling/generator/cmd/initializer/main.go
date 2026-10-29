@@ -2,9 +2,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,8 +10,8 @@ import (
 	"strings"
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
-	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/source"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/verify"
 )
 
@@ -39,6 +36,12 @@ type Context struct {
 	// WorkDir is the working directory DIR is relative to; "" means the
 	// process's.
 	WorkDir string
+	// Host is the process state the sources are found from; a nil member is
+	// taken from the process.
+	Host source.Host
+	// Build is the running binary's identity; the zero value is a devel build
+	// with no commit.
+	Build generator.Build
 	// Args is the original command line.
 	Args []string
 	// Format is "text" or "json".
@@ -61,6 +64,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		Stderr:  stderr,
 		Stdin:   os.Stdin,
 		WorkDir: workDir(),
+		Host:    source.DefaultHost(),
+		Build:   generator.CurrentBuild(),
 		Format:  formatText,
 		Logger:  discardLogger(),
 	}
@@ -93,6 +98,7 @@ func runWith(ctx *Context, args []string) int {
 	if ctx.Format == "" {
 		ctx.Format = formatText
 	}
+	ctx.Build = stamped(ctx.Build)
 	if len(args) == 0 {
 		writeOverview(ctx.Stderr)
 		return exitUsage
@@ -100,6 +106,9 @@ func runWith(ctx *Context, args []string) int {
 	if args[0] == "-h" || args[0] == "--help" {
 		writeOverview(ctx.Stdout)
 		return exitOK
+	}
+	if args[0] == "--version" {
+		return emitText(ctx, versionLine(ctx.Build)+"\n")
 	}
 	found := resolve(args)
 	switch {
@@ -211,52 +220,6 @@ func runHelp(ctx *Context, _ any, words []string) int {
 		return reportProblems(ctx, []Problem{{Arg: words[found.consumed], Message: "unexpected argument"}})
 	}
 	writeCommandHelp(ctx.Stdout, found.cmd)
-	return exitOK
-}
-
-func runCatalogBuild(ctx *Context, opts any, _ []string) int {
-	o := opts.(*catalogBuildOptions)
-
-	info, err := os.Stat(o.root)
-	if err != nil || !info.IsDir() {
-		return fail(ctx, "input_unreadable", codeInputUnreadable, errors.New("root is not a readable directory"))
-	}
-	fileList, err := readLimited(o.files, maxFileListBytes)
-	if err != nil {
-		return fail(ctx, "input_unreadable", codeInputUnreadable, err)
-	}
-	files, err := catalog.ParseFileList(fileList)
-	if err != nil {
-		return fail(ctx, "input_unreadable", codeInputUnreadable, err)
-	}
-
-	built, issues, err := catalog.Build(catalog.BuildOptions{
-		Root:      os.DirFS(o.root),
-		Files:     files,
-		Generator: generator.Version,
-	})
-	if err != nil {
-		return fail(ctx, "catalog_build_failed", codeInternalError, err)
-	}
-	if len(issues) > 0 {
-		return reportIssues(ctx, issues, issueView{})
-	}
-	encoded, err := catalog.Encode(built)
-	if err != nil {
-		return fail(ctx, "catalog_build_failed", codeInternalError, err)
-	}
-	if err := writeOutput(o.out, encoded); err != nil {
-		return fail(ctx, "output_unwritable", codeOutputUnwritable, err)
-	}
-	sum := sha256.Sum256(encoded)
-	digest := hex.EncodeToString(sum[:])
-	if code := writeCatalogBuilt(ctx, o.out, digest); code != exitOK {
-		return code
-	}
-	ctx.Logger.Info("catalog_built",
-		slog.Int("spec_count", len(built.Specs)),
-		slog.Int("stack_count", len(built.Stacks)),
-		slog.String("sha256", digest))
 	return exitOK
 }
 

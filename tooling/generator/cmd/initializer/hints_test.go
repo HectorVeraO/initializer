@@ -37,12 +37,12 @@ func TestAddHintsKeepsAProducerHintAndFillsTheRest(t *testing.T) {
 	}
 }
 
-func TestModuleUnknownHintNamesTheCloseMatchOnly(t *testing.T) {
+func TestModuleUnknownHintPointsAtModuleLsAndNamesTheCloseMatch(t *testing.T) {
 	ids := []string{"core", "identity", "tenancy"}
 	cases := map[string]string{
-		"tenacy":    `did you mean "tenancy"?`,
-		"identiti":  `did you mean "identity"?`,
-		"zzzzzzzzz": "",
+		"tenacy":    `run 'initializer module ls'; did you mean "tenancy"?`,
+		"identiti":  `run 'initializer module ls'; did you mean "identity"?`,
+		"zzzzzzzzz": `run 'initializer module ls'`,
 	}
 	for unknown, want := range cases {
 		found := issue.Issue{Code: "MODULE_UNKNOWN", Path: "flags#/modules/0", Message: `module is not in the catalog: "` + unknown + `"`}
@@ -51,7 +51,7 @@ func TestModuleUnknownHintNamesTheCloseMatchOnly(t *testing.T) {
 		}
 	}
 	found := issue.Issue{Code: "MODULE_UNKNOWN", Message: "no quoted id here"}
-	if got := addHints([]issue.Issue{found}, ids)[0].Hint; got != "" {
+	if got := addHints([]issue.Issue{found}, ids)[0].Hint; got != `run 'initializer module ls'` {
 		t.Errorf("hint %q without an id", got)
 	}
 }
@@ -137,4 +137,22 @@ func FuzzLastQuotedNeverPanics(f *testing.F) {
 			t.Fatalf("unquoted %q is longer than %q", got, text)
 		}
 	})
+}
+
+func TestEveryNewSourceCodeHasAHintRow(t *testing.T) {
+	cases := map[string]string{
+		"SOURCE_ROOT_NOT_FOUND": "run inside a clone, pass --root <clone>, or set INITIALIZER_ROOT",
+		"SOURCE_ROOT_INVALID":   "pass --root <clone>, or set INITIALIZER_ROOT to a clone",
+		"SOURCE_NOT_GIT":        "clone the repo, or pass --catalog with a catalog built elsewhere",
+		"GIT_NOT_FOUND":         "install git, or pass --catalog",
+		"CATALOG_UNREADABLE":    "rebuild it: initializer catalog build --out <file>",
+		"SOURCE_UNREADABLE":     "run 'git status' in the checkout to see why git fails",
+		"GENERATOR_STALE":       "run 'mise run cli'",
+		"STACK_UNKNOWN":         "run 'initializer stack ls'",
+	}
+	for code, want := range cases {
+		if got := addHints([]issue.Issue{{Code: code}}, nil)[0].Hint; got != want {
+			t.Errorf("%s: hint %q, want %q", code, got, want)
+		}
+	}
 }
