@@ -45,6 +45,8 @@ type Plan struct {
 	Selection manifest.Selection
 	// Stacks are the selected stacks, sorted by stack name.
 	Stacks []StackPlan
+	// Components holds one component per selected stack, sorted by Stack.
+	Components []Component
 	// Specs are the specs to copy, sorted by spec.
 	Specs []catalog.SpecEntry
 	// TCKTags is the sorted union of the copied specs' tags.
@@ -59,6 +61,30 @@ type Plan struct {
 	TCKEnv      map[string]string
 	GoModule    string
 	ComposeName string
+}
+
+// Component is one delivered stack and the name of its project folder,
+// compose service and %{component.<stack>} slot.
+type Component struct {
+	Stack string
+	Name  string
+}
+
+// Component returns the single component of a stack, and false when the stack
+// is not selected or has several components.
+func (p Plan) Component(stack string) (Component, bool) {
+	var found Component
+	count := 0
+	for _, component := range p.Components {
+		if component.Stack == stack {
+			found = component
+			count++
+		}
+	}
+	if count != 1 {
+		return Component{}, false
+	}
+	return found, true
 }
 
 // StackPlan is the modules of one selected stack in catalog order, core first.
@@ -498,6 +524,10 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 	for _, stack := range stacks {
 		stackNames = append(stackNames, stack.Stack)
 	}
+	components := make([]Component, 0, len(stacks))
+	for _, stack := range stacks {
+		components = append(components, Component{Stack: stack.Stack, Name: stack.Stack})
+	}
 	return Plan{
 		Selection: manifest.Selection{
 			Schema:  r.sel.Schema,
@@ -506,6 +536,7 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 			Modules: recorded,
 		},
 		Stacks:        stacks,
+		Components:    components,
 		Specs:         specs,
 		TCKTags:       tags,
 		TCKGrep:       Grep(tags),

@@ -741,3 +741,25 @@ func TestCooperationFilesShipOnlyWithTheirTag(t *testing.T) {
 		})
 	}
 }
+
+func TestComponentsAreOnePerSelectedStackNamedAfterIt(t *testing.T) {
+	cat := load(t, "fullstack.json")
+	both := selection()
+	both.Stacks = []string{"ng-web", "go-srv"}
+	p := mustResolve(t, cat, both)
+	want := []plan.Component{{Stack: "go-srv", Name: "go-srv"}, {Stack: "ng-web", Name: "ng-web"}}
+	if !reflect.DeepEqual(p.Components, want) {
+		t.Fatalf("components = %+v", p.Components)
+	}
+	if component, ok := p.Component("ng-web"); !ok || component.Name != "ng-web" {
+		t.Errorf("Component(ng-web) = %+v %v", component, ok)
+	}
+	backendOnly := mustResolve(t, cat, selection())
+	if _, ok := backendOnly.Component("ng-web"); ok {
+		t.Error("an unselected stack has no component")
+	}
+	several := plan.Plan{Components: []plan.Component{{Stack: "ng-web", Name: "a-web"}, {Stack: "ng-web", Name: "b-web"}}}
+	if _, ok := several.Component("ng-web"); ok {
+		t.Error("a stack with several components has no single component")
+	}
+}

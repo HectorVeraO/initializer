@@ -134,3 +134,80 @@ func TestMissingOrBrokenLockIsAnError(t *testing.T) {
 		}
 	}
 }
+
+func sha(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
+}
+
+// copyTree copies the directory src into dst.
+func copyTree(t *testing.T, src, dst string) {
+	t.Helper()
+	err := filepath.WalkDir(src, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return os.MkdirAll(filepath.Join(dst, rel), 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dst, rel), data, 0o644)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSchema1FixtureVerifiesCleanAndFindsStrays(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "project")
+	copyTree(t, filepath.Join("..", "..", "testdata", "lock-v1"), dir)
+	differences, err := verify.Project(dir)
+	if err != nil || len(differences) != 0 {
+		t.Fatalf("differences %v, error %v", codes(differences), err)
+	}
+	write(t, dir, "go-srv/internal/platform/core/stray.go", "package core\n")
+	differences, err = verify.Project(dir)
+	if err != nil || strings.Join(codes(differences), ",") != "UNTRACKED go-srv/internal/platform/core/stray.go" {
+		t.Fatalf("differences %v, error %v", codes(differences), err)
+	}
+}
+
+func TestModuleFoldersComeFromTheLockComponents(t *testing.T) {
+	dir := t.TempDir()
+	coreGo := "package identity\n"
+	write(t, dir, "acme-srv/internal/platform/identity/identity.go", coreGo)
+	lock := lockfile.Lock{
+		Schema:        lockfile.SchemaVersion,
+		Generator:     "0.1.0",
+		CatalogSHA256: sha("catalog"),
+		Selection:     manifest.Selection{Schema: 1, Project: manifest.Project{Name: "acme", GoModule: "example.com/acme"}, Stacks: []string{"go-srv"}, Modules: []string{"identity"}},
+		Components:    []lockfile.Component{{Stack: "go-srv", Name: "acme-srv"}},
+		Names:         map[string]string{"project": "acme", "component.go-srv": "acme-srv"},
+		Modules: []lockfile.Module{{Stack: "go-srv", Module: "identity", Version: "0.1.0",
+			Files: []lockfile.File{{Path: "acme-srv/internal/platform/identity/identity.go", SHA256: sha(coreGo)}}}},
+	}
+	encoded, err := lockfile.Encode(lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, lockfile.Name, string(encoded))
+	differences, err := verify.Project(dir)
+	if err != nil || len(differences) != 0 {
+		t.Fatalf("differences %v, error %v", codes(differences), err)
+	}
+	write(t, dir, "acme-srv/internal/platform/identity/stray.go", "package identity\n")
+	// The old, stack-named folder is not a delivered folder of this lock.
+	write(t, dir, "go-srv/internal/platform/identity/other.go", "package identity\n")
+	differences, err = verify.Project(dir)
+	want := "UNTRACKED acme-srv/internal/platform/identity/stray.go"
+	if err != nil || strings.Join(codes(differences), ",") != want {
+		t.Fatalf("differences %v, error %v", codes(differences), err)
+	}
+}

@@ -43,6 +43,8 @@ type BuildOptions struct {
 	Plan plan.Plan
 	// CatalogSHA256 is the SHA-256 of the catalog.lock.json bytes used.
 	CatalogSHA256 string
+	// Source is the commit of the source tree; nil omits it from the lock.
+	Source *lockfile.Source
 }
 
 // File is one file of the generated project.
@@ -110,11 +112,17 @@ func (b *builder) run() (Project, error) {
 		Schema:        lockfile.SchemaVersion,
 		Generator:     generator.Version,
 		CatalogSHA256: b.opts.CatalogSHA256,
+		Source:        b.opts.Source,
 		Selection:     p.Selection,
+		Names:         map[string]string{"project": b.project},
 		TCKTags:       p.TCKTags,
 		TCKGrep:       p.TCKGrep,
 		TCKGrepInvert: p.TCKGrepInvert,
 		TCKEnv:        p.TCKEnv,
+	}
+	for _, component := range p.Components {
+		lock.Components = append(lock.Components, lockfile.Component{Stack: component.Stack, Name: component.Name})
+		lock.Names["component."+component.Stack] = component.Name
 	}
 	for _, spec := range p.Specs {
 		entry := lockfile.Spec{Spec: spec.Spec, Version: spec.Version}

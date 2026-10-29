@@ -128,7 +128,9 @@ func (d *decoder) checkProject(selection Selection, projectOK, stacksOK bool) {
 	}
 	selectsGo := false
 	for _, stack := range selection.Stacks {
-		selectsGo = selectsGo || stack == StackGoSrv
+		info, known := LookupStack(stack)
+		needsGoModule := known && info.GoModule
+		selectsGo = selectsGo || needsGoModule
 	}
 	goModule := selection.Project.GoModule
 	switch {

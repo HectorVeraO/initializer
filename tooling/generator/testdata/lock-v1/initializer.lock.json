@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "generator": "0.1.0",
+  "catalogSha256": "652f55016243bf1b9f1bbea46d5749ef892dbe394e46de9d66ab1aacf0b4af57",
+  "selection": {
+    "schema": 1,
+    "project": {
+      "name": "acme",
+      "goModule": "example.com/acme"
+    },
+    "stacks": [
+      "go-srv",
+      "ng-web"
+    ],
+    "modules": [
+      "core",
+      "feature-flags"
+    ]
+  },
+  "tckTags": [],
+  "tckGrep": "",
+  "tckEnv": {},
+  "specs": [],
+  "modules": [
+    {
+      "stack": "go-srv",
+      "module": "core",
+      "version": "0.1.0",
+      "implementsSpec": {},
+      "files": [
+        {
+          "path": "go-srv/go.mod",
+          "sha256": "044233200bb93a37f08c97effe7382d0b5dd8515bd49f22c72ac1496e5ce117b"
+        },
+        {
+          "path": "go-srv/internal/platform/core/core.go",
+          "sha256": "668b5c25d17e472b835aad0212b955e4f92b3dd626fa976acc56c851966c1b5d"
+        }
+      ]
+    },
+    {
+      "stack": "go-srv",
+      "module": "feature-flags",
+      "version": "0.1.0",
+      "implementsSpec": {},
+      "files": [
+        {
+          "path": "go-srv/internal/platform/featureflags/flags.go",
+          "sha256": "0b8873af7680db6a77f2f3cc26ee1efcd044c7a6d6ceae72e1017003866c3a5b"
+        }
+      ]
+    },
+    {
+      "stack": "ng-web",
+      "module": "core",
+      "version": "0.1.0",
+      "implementsSpec": {},
+      "files": [
+        {
+          "path": "ng-web/src/app/platform/core/core.ts",
+          "sha256": "b1afbc34e670976fa43c07b93ceaec5c65278cd23c7a39b77c34aea63ef45951"
+        }
+      ]
+    }
+  ],
+  "generated": [
+    {
+      "path": "README.md",
+      "sha256": "a44ba81a061a68b7dd1eccbb8d9367ee99d163da24a98b64d99165efacc7f73c"
+    }
+  ]
+}
