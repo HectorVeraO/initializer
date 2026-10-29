@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
@@ -103,13 +104,33 @@ func TestSuggestAcceptsAnAdjacentSwap(t *testing.T) {
 	}
 }
 
+func TestLastQuotedReturnsTheLastQuotedString(t *testing.T) {
+	cases := map[string]string{
+		`module is not in the catalog: "tenacy"`: "tenacy",
+		`"first" and "second"`:                   "second",
+		`no quotes here`:                         "",
+		`"`:                                      "",
+		`""`:                                     "",
+	}
+	for text, want := range cases {
+		if got := lastQuoted(text); got != want {
+			t.Errorf("lastQuoted(%q) = %q, want %q", text, got, want)
+		}
+	}
+}
+
 func FuzzLastQuotedNeverPanics(f *testing.F) {
 	f.Add(`module is not in the catalog: "tenacy"`)
 	f.Add(`"`)
 	f.Add(`""`)
 	f.Add(`"\`)
 	f.Fuzz(func(t *testing.T, text string) {
-		if got := lastQuoted(text); len(got) > len(text) {
+		got := lastQuoted(text)
+		hasQuotePair := strings.Count(text, `"`) >= 2
+		if got != "" && !hasQuotePair {
+			t.Fatalf("lastQuoted(%q) = %q without a quoted string", text, got)
+		}
+		if len(got) > len(text) {
 			t.Fatalf("unquoted %q is longer than %q", got, text)
 		}
 	})

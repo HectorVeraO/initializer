@@ -190,6 +190,7 @@ func TestExitThreeDocumentsCarryTheirCode(t *testing.T) {
 		"root":          {[]string{"catalog", "build", "--root", filepath.Join(t.TempDir(), "none"), "--files", writeFileList(t), "--out", "o"}, "INPUT_UNREADABLE"},
 		"catalog":       {[]string{"generate", "o", "--root", e.root, "--catalog", filepath.Join(t.TempDir(), "none"), "-f", writeSelection(t, validSelection)}, "CATALOG_UNREADABLE"},
 		"verify":        {[]string{"verify", t.TempDir()}, "VERIFY_UNREADABLE"},
+		"project write": {[]string{"generate", filepath.Join(blocker, "proj"), "--root", e.root, "--catalog", e.catalog, "-f", writeSelection(t, validSelection)}, "OUTPUT_UNWRITABLE"},
 		"catalog write": {[]string{"catalog", "build", "--root", root, "--files", writeFileList(t), "--out", filepath.Join(blocker, "c.json")}, "OUTPUT_UNWRITABLE"},
 	}
 	for name, tc := range cases {
