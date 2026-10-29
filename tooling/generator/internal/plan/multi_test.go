@@ -133,9 +133,22 @@ func TestEachBackendEqualsTheSingleProjectPlanOfItsList(t *testing.T) {
 	}
 }
 
+func frontendModule(t *testing.T, cat *catalog.Catalog, id string) *catalog.ModuleEntry {
+	t.Helper()
+	for s := range cat.Stacks {
+		for m := range cat.Stacks[s].Modules {
+			if cat.Stacks[s].Role == "frontend" && cat.Stacks[s].Modules[m].Module == id {
+				return &cat.Stacks[s].Modules[m]
+			}
+		}
+	}
+	t.Fatalf("no frontend module %s", id)
+	return nil
+}
+
 func TestAFrontendNeedsItsOwnBackendToImplementItsSpecs(t *testing.T) {
 	cat := load(t, "fullstack.json")
-	cat.Stacks[1].Modules[3].ImplementsSpec = map[string]string{"parameters": "0.1.0", "feature-flags": "0.1.0"}
+	frontendModule(t, &cat, "parameters").ImplementsSpec = map[string]string{"parameters": "0.1.0", "feature-flags": "0.1.0"}
 	sel := multiSelection(
 		backendEntry("acme-srv-first", "parameters"),
 		backendEntry("acme-srv-second", "parameters", "feature-flags"),

@@ -254,7 +254,9 @@ func TestAMultiGenerateTextNamesTheComponentOfEachAddition(t *testing.T) {
 	}
 	out.Reset()
 	result.added[0].Component = ""
-	writeGenerate(ctx, result)
+	if code := writeGenerate(ctx, result); code != exitOK {
+		t.Fatalf("exit %d", code)
+	}
 	if !strings.HasPrefix(out.String(), "Added identity (required by tenancy, api-keys).\n") {
 		t.Fatalf("a single project names no component: %q", out.String())
 	}
@@ -286,5 +288,20 @@ func TestAnInheritedMissingModuleIsReportedPerBackendComponent(t *testing.T) {
 		if found.Code != "MODULE_UNKNOWN" || !strings.HasSuffix(found.Path, "#/modules/0") || !strings.HasSuffix(found.Message, "(backend component "+component+")") {
 			t.Fatalf("issue %d = %+v", i, found)
 		}
+	}
+}
+
+// Two backends with distinct go modules reach the multi guard through generate
+// with no other issue; the per-entry values themselves are covered by the plan
+// tests (TestEntryValuesOverrideTheDerivedDefaults).
+func TestSeveralBackendsWithOwnGoModulesStopOnlyAtTheMultiGuard(t *testing.T) {
+	e := newEnv(t)
+	args := e.fullstackArgs(
+		"--component", "go-srv=acme-srv-first,go-module=example.org/first",
+		"--component", "go-srv=acme-srv-second,go-module=example.org/second",
+		"--component", "ng-web=acme-web,backend=acme-srv-first")
+	code, stdout, _ := executeJSON(t, args...)
+	if got := issuesOf(t, stdout).codes(); code != exitIssues || !reflect.DeepEqual(got, []string{"COMPONENT_MULTI_UNSUPPORTED"}) {
+		t.Fatalf("exit %d codes %v", code, got)
 	}
 }
