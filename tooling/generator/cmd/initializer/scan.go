@@ -20,15 +20,24 @@ type Problem struct {
 	Hint string `json:"hint,omitempty"`
 	// Suggestion is a close flag, command or key, or "".
 	Suggestion string `json:"suggestion,omitempty"`
+	// Retired marks a removed flag: Suggestion is the text to follow, not a close spelling.
+	Retired bool `json:"-"`
+}
+
+// retired maps a flag spelling the CLI no longer has to what to type instead.
+// It applies only where the flag is unknown, so catalog build --out never
+// reaches it.
+var retired = map[string]string{
+	"--out":       "pass the folder as an argument: initializer generate <dir>",
+	"--selection": "use -f <file>",
+	"--project":   "pass the folder as an argument: initializer verify <dir>",
 }
 
 // flagSpec is the help metadata of one flag; the Value is registered on a flag.FlagSet.
 type flagSpec struct {
 	Name, Short, Placeholder, Usage, Default string
 	Hidden, Repeatable, Bool                 bool
-	// Deprecated is the warning text of a hidden alias; empty for a real flag.
-	Deprecated string
-	Value      flag.Value
+	Value                                    flag.Value
 }
 
 // flagSet wraps flag.FlagSet with help metadata and the count of times scan
@@ -152,6 +161,14 @@ func scan(set *flagSet, args []string) (positionals []string, problems []Problem
 		name, value, hasValue := strings.Cut(name, "=")
 		spec := set.lookup(name)
 		if spec == nil {
+			if replacement, isRetired := retired["--"+name]; isRetired {
+				problems = append(problems, Problem{Arg: arg, Message: "was removed", Suggestion: replacement, Retired: true})
+				// The removed flag took a value: skip it so it is not read as an extra argument.
+				if !hasValue && i+1 < len(args) && !looksLikeFlag(args[i+1]) {
+					i++
+				}
+				continue
+			}
 			problems = append(problems, Problem{
 				Arg:        arg,
 				Message:    "unknown flag",

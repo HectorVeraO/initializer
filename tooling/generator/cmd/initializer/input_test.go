@@ -314,7 +314,7 @@ func TestInputFormatIsDecidedByTheExtension(t *testing.T) {
 		})
 	}
 	t.Run("the alias is checked too", func(t *testing.T) {
-		code, _, stderr := executeIn(t, t.TempDir(), "", e.inputArgs("--selection", "acme.txt")...)
+		code, _, stderr := executeIn(t, t.TempDir(), "", e.inputArgs("-f", "acme.txt")...)
 		if code != exitUsage || !strings.Contains(stderr, "[INPUT_FORMAT_UNKNOWN]") || !strings.Contains(stderr, "hint: use .yaml, .yml or .json") {
 			t.Fatalf("exit %d: %s", code, stderr)
 		}
@@ -472,15 +472,6 @@ func TestComponentFlagsDefineTheEntriesOfAStackTheFileLeavesUnnamed(t *testing.T
 	}
 	if _, err := os.Stat(filepath.Join(wd, "acme", "acme-srv", "go.mod")); err != nil {
 		t.Fatalf("the go-srv component is not in acme-srv/: %v", err)
-	}
-}
-
-func TestSelectionAliasStillReadsTheFileWithItsWarning(t *testing.T) {
-	e := newEnv(t)
-	wd := t.TempDir()
-	code, _, stderr := executeIn(t, wd, "", e.inputArgs("--selection", writeSelection(t, validSelection))...)
-	if code != exitOK || !strings.Contains(stderr, "warning: --selection is deprecated; use -f <file>") {
-		t.Fatalf("exit %d: %s", code, stderr)
 	}
 }
 

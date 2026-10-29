@@ -94,7 +94,7 @@ func issueArray(t *testing.T, stdout string) []map[string]string {
 
 func TestUsageErrorsExitTwo(t *testing.T) {
 	sel := writeSelection(t, validSelection)
-	common := []string{"generate", "--root", ".", "--catalog", "c.json", "--out", "o"}
+	common := []string{"generate", "--root", ".", "--catalog", "c.json", "o"}
 	cases := map[string]struct {
 		args    []string
 		message string
@@ -104,10 +104,9 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 		"catalog without build":    {[]string{"catalog"}, "catalog needs a command: build"},
 		"unknown flag":             {[]string{"verify", "--nope"}, "unknown flag"},
 		"unexpected argument":      {[]string{"verify", "p", "extra"}, "unexpected argument"},
-		"folder twice":             {[]string{"verify", "p", "--project", "p"}, "pass the folder once"},
 		"missing catalog out flag": {[]string{"catalog", "build", "--root", "."}, "--out: is required"},
 		"all-modules plus modules": {append(append([]string{}, common...), "--all-modules", "--modules", "a", "--name", "n"), "cannot be combined"},
-		"selection plus file":      {append(append([]string{}, common...), "--selection", sel, "-f", sel), "pass the file once"},
+		"file twice":               {append(append([]string{}, common...), "-f", sel, "-f", sel), "is given twice"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -175,7 +174,7 @@ func TestSelectionSizeLimit(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			path := writeSelection(t, validSelection+strings.Repeat(" ", tc.padding))
-			code, stdout, stderr := executeLogged(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", path)
+			code, stdout, stderr := executeLogged(t, "generate", "--root", ".", "--catalog", "c.json", "o", "-f", path)
 			if tc.code == 3 && code != 3 {
 				t.Fatalf("exit %d, want 3", code)
 			}
@@ -191,7 +190,7 @@ func TestSelectionSizeLimit(t *testing.T) {
 
 func TestSelectionIssuesExitOneWithSortedArray(t *testing.T) {
 	bad := `{"schema":1,"project":{"name":"A","goModule":"x"},"stacks":["ng-web"],"modules":["Bad"]}`
-	code, stdout, _ := executeJSON(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", writeSelection(t, bad))
+	code, stdout, _ := executeJSON(t, "generate", "--root", ".", "--catalog", "c.json", "o", "-f", writeSelection(t, bad))
 	if code != 1 {
 		t.Fatalf("exit %d, want 1", code)
 	}
@@ -223,7 +222,7 @@ func TestSelectionIssuesExitOneWithSortedArray(t *testing.T) {
 }
 
 func TestFlagSelectionIssuesUseFlagsSource(t *testing.T) {
-	code, stdout, _ := executeJSON(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o",
+	code, stdout, _ := executeJSON(t, "generate", "--root", ".", "--catalog", "c.json", "o",
 		"--name", "A", "--stacks", "go-srv", "--go-module", "example.com/acme/backend", "--modules", "parameters")
 	if code != 1 {
 		t.Fatalf("exit %d, want 1", code)

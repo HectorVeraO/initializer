@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -163,8 +162,10 @@ func TestOtherCommandHelpListsItsFlags(t *testing.T) {
 					t.Errorf("help %s misses %q:\n%s", name, want, stdout)
 				}
 			}
-			if strings.Contains(stdout, "--project") {
-				t.Errorf("help lists the hidden alias --project")
+			for _, retiredFlag := range []string{"--project", "--selection"} {
+				if strings.Contains(stdout, retiredFlag) {
+					t.Errorf("help lists the retired flag %s", retiredFlag)
+				}
 			}
 		})
 	}
@@ -220,7 +221,7 @@ func TestUnknownCommandsExitTwoWithAClosestMatch(t *testing.T) {
 }
 
 func TestOneInvocationReportsEveryCommandLineProblem(t *testing.T) {
-	code, stdout, stderr := executeLogged(t, "generate", "acme", "extra", "--bogus", "--name", "a", "--name", "b", "--out", "o", "--modules")
+	code, stdout, stderr := executeLogged(t, "generate", "acme", "extra", "--bogus", "--name", "a", "--name", "b", "--modules")
 	if code != exitUsage || stdout != "" {
 		t.Fatalf("exit %d, stdout %q", code, stdout)
 	}
@@ -229,17 +230,16 @@ func TestOneInvocationReportsEveryCommandLineProblem(t *testing.T) {
 		"error: extra: unexpected argument",
 		"error: --name: is given twice",
 		"error: --modules: needs a value",
-		"error: --out: pass the folder once",
 	}
 	for _, want := range wants {
 		if !strings.Contains(stderr, want) {
 			t.Errorf("stderr misses %q:\n%s", want, stderr)
 		}
 	}
-	if !strings.Contains(stderr, "6 problems.") {
-		t.Errorf("want the count of 6 problems (the five above and the invalid name):\n%s", stderr)
+	if !strings.Contains(stderr, "5 problems.") {
+		t.Errorf("want the count of 5 problems (the four above and the invalid name):\n%s", stderr)
 	}
-	if event := usageEvent(t, stderr); event["problem_count"] != float64(5) {
+	if event := usageEvent(t, stderr); event["problem_count"] != float64(4) {
 		t.Errorf("usage_error event = %v", event)
 	}
 }
@@ -514,33 +514,6 @@ func TestADashedFolderAfterDoubleDashIsAFolderNotAFlag(t *testing.T) {
 	}
 }
 
-func TestDeprecatedSpellingsWarnOnceAndStillWork(t *testing.T) {
-	e := newEnv(t)
-	sel := writeSelection(t, validSelection)
-
-	code, _, stderr := execute(t, "generate", "--root", e.root, "--catalog", e.catalog, "--out", e.out, "--selection", sel)
-	if code != exitOK {
-		t.Fatalf("generate: exit %d: %s", code, stderr)
-	}
-	warnings := linesWithPrefix(stderr, "warning:")
-	want := []string{
-		"warning: --out is deprecated; pass the folder as an argument: initializer generate <dir>",
-		"warning: --selection is deprecated; use -f <file>",
-	}
-	if !slices.Equal(warnings, want) {
-		t.Fatalf("warnings = %q", warnings)
-	}
-
-	code, _, stderr = execute(t, "verify", "--project", e.out)
-	if code != exitOK {
-		t.Fatalf("verify: exit %d: %s", code, stderr)
-	}
-	warnings = linesWithPrefix(stderr, "warning:")
-	if len(warnings) != 1 || warnings[0] != "warning: --project is deprecated; pass the folder as an argument: initializer verify <dir>" {
-		t.Fatalf("warnings = %q", warnings)
-	}
-}
-
 func TestCurrentSpellingsPrintNoWarning(t *testing.T) {
 	e := newEnv(t)
 	list := writeFileList(t)
@@ -560,26 +533,73 @@ func TestCurrentSpellingsPrintNoWarning(t *testing.T) {
 	}
 }
 
-func TestAnAliasWithItsNewSpellingIsAUsageError(t *testing.T) {
-	e := newEnv(t)
-	cases := map[string]struct {
-		args []string
-		want string
-	}{
-		"--out and a folder":     {append([]string{"generate", "acme", "--out", "o"}, e.flagSelection()...), "error: --out: pass the folder once"},
-		"--selection and -f":     {[]string{"generate", "--root", e.root, "--catalog", e.catalog, "-f", "a.json", "--selection", "b.json"}, "error: --selection: pass the file once"},
-		"--project and a folder": {[]string{"verify", "dir", "--project", "dir"}, "error: --project: pass the folder once"},
-	}
-	for name, tc := range cases {
+// retiredCases are the removed spellings with the text each one answers.
+var retiredCases = map[string]struct {
+	args       []string
+	flag       string
+	suggestion string
+}{
+	"generate --out":       {[]string{"generate", "acme", "--out", "other"}, "--out", "pass the folder as an argument: initializer generate <dir>"},
+	"generate --selection": {[]string{"generate", "acme", "--selection", "acme.json"}, "--selection", "use -f <file>"},
+	"verify --project":     {[]string{"verify", "--project", "acme"}, "--project", "pass the folder as an argument: initializer verify <dir>"},
+}
+
+func TestARetiredSpellingExitsTwoWithItsReplacement(t *testing.T) {
+	for name, tc := range retiredCases {
 		t.Run(name, func(t *testing.T) {
-			code, _, stderr := execute(t, tc.args...)
-			if code != exitUsage || !strings.Contains(stderr, tc.want) {
-				t.Fatalf("exit %d: %s", code, stderr)
+			code, stdout, stderr := execute(t, tc.args...)
+			if code != exitUsage || stdout != "" {
+				t.Fatalf("exit %d, stdout %q", code, stdout)
 			}
-			if strings.Contains(stderr, "warning:") {
-				t.Fatalf("no warning when the line is refused: %s", stderr)
+			want := "error: " + tc.flag + ": was removed\n  hint: " + tc.suggestion + "\n"
+			if !strings.Contains(stderr, want) {
+				t.Fatalf("stderr misses %q:\n%s", want, stderr)
+			}
+			if strings.Contains(stderr, "deprecated") || strings.Contains(stderr, "unexpected argument") {
+				t.Fatalf("stderr holds more than the removal: %s", stderr)
 			}
 		})
+	}
+}
+
+func TestARetiredSpellingInJSONCarriesFlagAndSuggestion(t *testing.T) {
+	for name, tc := range retiredCases {
+		t.Run(name, func(t *testing.T) {
+			code, stdout, stderr := executeJSON(t, tc.args...)
+			if code != exitUsage || stdout != "" {
+				t.Fatalf("exit %d, stdout %q", code, stdout)
+			}
+			var doc struct {
+				OK       bool `json:"ok"`
+				Problems []struct {
+					Arg        string `json:"arg"`
+					Suggestion string `json:"suggestion"`
+				} `json:"problems"`
+			}
+			decodeDocument(t, stderr, &doc)
+			if doc.OK || len(doc.Problems) != 1 || doc.Problems[0].Arg != tc.flag || doc.Problems[0].Suggestion != tc.suggestion {
+				t.Fatalf("document = %+v", doc)
+			}
+		})
+	}
+}
+
+func TestARetiredSpellingIsReportedWithEveryOtherProblem(t *testing.T) {
+	code, _, stderr := execute(t, "generate", "acme", "--out=other", "--bogus")
+	if code != exitUsage {
+		t.Fatalf("exit %d", code)
+	}
+	for _, want := range []string{"error: --out=other: was removed", "error: --bogus: unknown flag", "2 problems."} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr misses %q:\n%s", want, stderr)
+		}
+	}
+}
+
+func TestCatalogBuildOutIsNotRetired(t *testing.T) {
+	code, _, stderr := execute(t, "catalog", "build", "--root", filepath.Join(cleanFixture, "repo"), "--files", writeFileList(t), "--out", filepath.Join(t.TempDir(), "c.json"))
+	if code != exitOK || strings.Contains(stderr, "was removed") {
+		t.Fatalf("exit %d: %s", code, stderr)
 	}
 }
 

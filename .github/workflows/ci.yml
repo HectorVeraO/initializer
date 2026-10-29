@@ -171,9 +171,9 @@ jobs:
           go -C tooling/generator run ./cmd/initializer generate \
             --root "${GITHUB_WORKSPACE}" \
             --catalog "${RUNNER_TEMP}/catalog.lock.json" \
-            --out "${ref}" \
             -f "${GITHUB_WORKSPACE}/.initializer/reference.json" --all-modules \
-            --go-module "$(head -1 go-srv/go.mod | cut -d' ' -f2)"
+            --go-module "$(head -1 go-srv/go.mod | cut -d' ' -f2)" \
+            "${ref}"
           jq -e --slurpfile catalog "${RUNNER_TEMP}/catalog.lock.json" '
             (.components | length) == 2
             and (.components | all(.name == .stack))
@@ -253,7 +253,7 @@ jobs:
           git ls-files -z > "${RUNNER_TEMP}/files.bin"
           bin="${GITHUB_WORKSPACE}/tooling/generator/bin/initializer"
           "${bin}" catalog build --root "${GITHUB_WORKSPACE}" --files "${RUNNER_TEMP}/files.bin" --out "${RUNNER_TEMP}/catalog.lock.json"
-          "${bin}" generate --root "${GITHUB_WORKSPACE}" --catalog "${RUNNER_TEMP}/catalog.lock.json" --out "${RUNNER_TEMP}/demo" --name demo --go-module example.com/demo --stacks go-srv --modules identity
+          "${bin}" generate --root "${GITHUB_WORKSPACE}" --catalog "${RUNNER_TEMP}/catalog.lock.json" "${RUNNER_TEMP}/demo" --name demo --go-module example.com/demo --stacks go-srv --modules identity
           cd "${RUNNER_TEMP}/demo"
           mise trust
           mise install
@@ -336,11 +336,11 @@ jobs:
             "${RUNNER_TEMP}/initializer" generate \
               --root "${GITHUB_WORKSPACE}" \
               --catalog "${RUNNER_TEMP}/catalog.lock.json" \
-              --selection "${GITHUB_WORKSPACE}/tooling/generator/testdata/ci/${{ matrix.selection }}.json" \
-              --out "${RUNNER_TEMP}/${name}"
+              -f "${GITHUB_WORKSPACE}/tooling/generator/testdata/ci/${{ matrix.selection }}.json" \
+              "${RUNNER_TEMP}/${name}"
           done
           diff -r "${RUNNER_TEMP}/gen-a" "${RUNNER_TEMP}/gen-b"
-          "${RUNNER_TEMP}/initializer" verify --project "${RUNNER_TEMP}/gen-a"
+          "${RUNNER_TEMP}/initializer" verify "${RUNNER_TEMP}/gen-a"
       - name: Read the project layout from the lock
         id: layout
         env:
@@ -600,9 +600,9 @@ jobs:
           "${RUNNER_TEMP}/initializer" generate \
             --root "${GITHUB_WORKSPACE}" \
             --catalog "${RUNNER_TEMP}/catalog.lock.json" \
-            --selection "${GITHUB_WORKSPACE}/tooling/generator/testdata/ci/api-keys+identity-web.json" \
-            --out "${RUNNER_TEMP}/gen-a"
-          "${RUNNER_TEMP}/initializer" verify --project "${RUNNER_TEMP}/gen-a"
+            -f "${GITHUB_WORKSPACE}/tooling/generator/testdata/ci/api-keys+identity-web.json" \
+            "${RUNNER_TEMP}/gen-a"
+          "${RUNNER_TEMP}/initializer" verify "${RUNNER_TEMP}/gen-a"
       - name: Read the project layout from the lock
         id: layout
         run: |

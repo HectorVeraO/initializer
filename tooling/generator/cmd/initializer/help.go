@@ -45,7 +45,7 @@ func writeGroupHelp(w io.Writer, group string) {
 }
 
 // writeCommandHelp writes the help of one command from its table entry and
-// the specs of its flags; hidden aliases are not listed.
+// the specs of its flags; hidden flags are not listed.
 func writeCommandHelp(w io.Writer, cmd *Command) {
 	fmt.Fprintf(w, "Usage:\n  initializer %s\n\n%s\n", cmd.Usage, cmd.Description)
 	set := newFlagSet(strings.Join(cmd.Path, " "))

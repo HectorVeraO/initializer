@@ -52,7 +52,7 @@ func realCatalog(t *testing.T) (root, catalogPath string) {
 func TestGenerateReadmeFlagsFileResolvesFromGoSrv(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--all-modules")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
@@ -78,7 +78,7 @@ func TestGenerateReadmeFlagsFileResolvesFromGoSrv(t *testing.T) {
 func TestGenerateWithoutFeatureFlagsShipsNoFlagsConfig(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "parameters")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
@@ -114,7 +114,7 @@ func TestGenerateWithoutFeatureFlagsShipsNoFlagsConfig(t *testing.T) {
 func TestGenerateWithFeatureFlagsOnlyKeepsFlagsConfig(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "feature-flags")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
@@ -137,7 +137,7 @@ func TestGenerateWithFeatureFlagsOnlyKeepsFlagsConfig(t *testing.T) {
 func TestGenerateWithFeatureFlagsAndTenancyKeepsConfigByteForByte(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"-f", filepath.Join(root, ".initializer", "reference.json"), "--go-module", repoGoModule(t, root), "--modules", "feature-flags,tenancy")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
@@ -162,7 +162,7 @@ func TestGenerateCoreOnlyShipsNoIdentity(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
 	selection := writeSelection(t, `{"schema":1,"project":{"name":"acme-backend","goModule":"example.com/acme/backend"},"stacks":["go-srv"],"modules":[]}`)
-	code, _, stderr := executeLogged(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out, "--selection", selection)
+	code, _, stderr := executeLogged(t, "generate", "--root", root, "--catalog", catalogPath, out, "-f", selection)
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
 	}
@@ -206,7 +206,7 @@ func moduleRequiredEvents(t *testing.T, stderr string) []map[string]any {
 func TestGenerateLogsEachPulledModuleOnStderrOnly(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	code, stdout, stderr := executeLogged(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, stdout, stderr := executeLogged(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "parameters")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
@@ -235,7 +235,7 @@ func TestGenerateLogsNothingWhenTheSelectionNamesTheRequirement(t *testing.T) {
 	for name, modules := range map[string]string{"named": "identity,parameters", "all": ""} {
 		t.Run(name, func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out")
-			args := []string{"generate", "--root", root, "--catalog", catalogPath, "--out", out,
+			args := []string{"generate", "--root", root, "--catalog", catalogPath, out,
 				"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv"}
 			if modules == "" {
 				args = append(args, "--all-modules")
@@ -264,8 +264,8 @@ func TestGenerateRefusedSelectionLogsNoPull(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string][]string{
-		"unknown module":   {"--out", filepath.Join(t.TempDir(), "out"), "--modules", "parameters,no-such-module"},
-		"non-empty output": {"--out", busy, "--modules", "parameters"},
+		"unknown module":   {filepath.Join(t.TempDir(), "out"), "--modules", "parameters,no-such-module"},
+		"non-empty output": {busy, "--modules", "parameters"},
 	}
 	for name, extra := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -285,7 +285,7 @@ func TestGenerateRefusedSelectionLogsNoPull(t *testing.T) {
 func TestGenerateWithTwoRequirersListsBothSorted(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	code, _, stderr := executeLogged(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, _, stderr := executeLogged(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "parameters,feature-flags")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)

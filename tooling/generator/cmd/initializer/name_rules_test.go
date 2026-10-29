@@ -30,7 +30,7 @@ func repoGoModule(t *testing.T, root string) string {
 func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"--name", "acme", "--go-module", "example.com/acme", "--stacks", "go-srv,ng-web", "--all-modules")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
@@ -92,7 +92,7 @@ var excludedFromRoundtrip = map[string]bool{
 func TestGenerateFromTheReferenceFileReproducesTheRepo(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"-f", filepath.Join(root, ".initializer", "reference.json"), "--all-modules", "--go-module", repoGoModule(t, root))
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)

@@ -420,7 +420,7 @@ func TestGeneratedFilesLeakNoReferenceName(t *testing.T) {
 	tokens := leakTokens(t, catalogDoc.Reference)
 
 	out := filepath.Join(t.TempDir(), "out")
-	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"--name", "acme", "--stacks", "go-srv,ng-web", "--all-modules", "--go-module", "example.com/acme",
 		"--component", "go-srv=acme-api", "--component", "ng-web=acme-console",
 		"--service", "postgres=acme-db", "--service", "postgres-init=acme-dbinit",

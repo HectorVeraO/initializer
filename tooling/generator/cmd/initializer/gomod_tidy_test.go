@@ -105,7 +105,7 @@ func generateSelection(t *testing.T, modules string) string {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
 	selection := filepath.Join(root, "tooling", "generator", "testdata", "ci", "core.json")
-	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out, "--selection", selection)
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out, "-f", selection)
 	if code != exitOK {
 		t.Fatalf("generate core only exit %d: %s", code, stderr)
 	}

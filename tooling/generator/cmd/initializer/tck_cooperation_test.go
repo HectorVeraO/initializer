@@ -25,7 +25,7 @@ func generateFromCheckout(t *testing.T, modules string) string {
 	t.Helper()
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	args := []string{"generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	args := []string{"generate", "--root", root, "--catalog", catalogPath, out,
 		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv"}
 	if modules != "" {
 		args = append(args, "--modules", modules)

@@ -76,7 +76,7 @@ func TestAFileEntryNamesAComponentAndAFlagNamesTheOther(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t)
-			code, stdout, stderr := executeJSON(t, append(e.args("--selection", file), tc.extra...)...)
+			code, stdout, stderr := executeJSON(t, append(e.args("-f", file), tc.extra...)...)
 			if code != exitOK {
 				t.Fatalf("exit %d: %s", code, stderr)
 			}
@@ -144,7 +144,7 @@ func TestAnOverrideEqualToTheOtherDefaultConflicts(t *testing.T) {
 func TestASchema1FileGetsTheProjectNamedDefaults(t *testing.T) {
 	e := newEnv(t)
 	body := `{"schema":1,"project":{"name":"acme","goModule":"example.com/acme"},"stacks":["go-srv"],"modules":[]}`
-	code, stdout, stderr := executeJSON(t, e.args("--selection", writeSelection(t, body))...)
+	code, stdout, stderr := executeJSON(t, e.args("-f", writeSelection(t, body))...)
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
