@@ -14,5 +14,8 @@
     "go-srv/internal/platform/identity/",
     "specs/tck-support/actors/"
   ],
-  "exclude": []
+  "exclude": [],
+  "names": [
+    { "path": ".deploy/local/kratos/identity.schema.json", "text": "schemas.%{project}.local" }
+  ]
 }

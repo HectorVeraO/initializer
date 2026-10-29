@@ -3,6 +3,7 @@
   "project": {
     "name": "initializer"
   },
+  "displayName": "initializer",
   "stacks": [
     "go-srv",
     "ng-web"

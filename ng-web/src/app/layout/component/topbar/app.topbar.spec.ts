@@ -5,6 +5,7 @@ import { TranslocoTestingModule } from '@jsverse/transloco';
 import { provideOptimus } from '@openng/optimus-ui/config';
 import { PLATFORM_MODULES } from '@/platform/core';
 import type { TopbarItem, WebModule } from '@/platform/core';
+import { BRAND } from '@/core/config/brand';
 import { byTestId, stubMatchMedia, textOf } from '@/core/testing/ui-testing';
 import es from '../../../../assets/i18n/es.json';
 import { AppTopbar } from './app.topbar';
@@ -70,7 +71,7 @@ describe('AppTopbar', () => {
     const root = render([moduleWith('core')]);
 
     expect(slotIds(root)).toEqual([]);
-    expect(textOf(byTestId(root, 'topbar-logo'))).toBe('initializer');
+    expect(textOf(byTestId(root, 'topbar-logo'))).toBe(BRAND);
     expect(byTestId(root, 'language-select')).not.toBeNull();
     expect(byTestId(root, 'theme-toggle')).not.toBeNull();
   });

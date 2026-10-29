@@ -86,10 +86,32 @@ func TestRuleOfAnUninstalledModuleIsNotLive(t *testing.T) {
 	}
 }
 
-func TestRuleUsingASlotWithoutAValueSourceIsAnInternalError(t *testing.T) {
+func TestDisplayNameDefaultsToTheProjectNameAndIsLiveWhenARuleUsesIt(t *testing.T) {
 	core := []catalog.NameRule{{Path: "a", Text: "x: %{displayName}", Blocks: []string{""}}}
 	cat := withRules(t, load(t, "fullstack.json"), core, nil)
+	p := mustResolve(t, cat, selection())
+	if p.LockNames()["displayName"] != "acme-backend" {
+		t.Fatalf("LockNames = %v", p.LockNames())
+	}
+	given := selection()
+	given.DisplayName = "Acme Shop"
+	p = mustResolve(t, cat, given)
+	if p.LockNames()["displayName"] != "Acme Shop" {
+		t.Fatalf("LockNames = %v", p.LockNames())
+	}
+}
+
+func TestRuleUsingASlotWithoutAValueSourceIsAnInternalError(t *testing.T) {
+	core := []catalog.NameRule{{Path: "a", Text: "x: %{component.unknown-stack}", Blocks: []string{""}}}
+	cat := withRules(t, load(t, "fullstack.json"), core, nil)
 	wantCodes(t, cat, selection(), "INTERNAL_ERROR")
+}
+
+func TestDisplayNameWithoutALiveRuleIsAnUnusedOverride(t *testing.T) {
+	cat := load(t, "fullstack.json")
+	given := selection()
+	given.DisplayName = "Acme Shop"
+	wantCodes(t, cat, given, plan.CodeNameOverrideUnused)
 }
 
 func TestRuleOutsideBlocksDoesNotMakeAnUnselectedComponentSlotLive(t *testing.T) {

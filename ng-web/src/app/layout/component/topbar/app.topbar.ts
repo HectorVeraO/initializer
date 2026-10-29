@@ -4,6 +4,7 @@ import { RouterModule } from '@angular/router';
 import { SelectModule } from '@openng/optimus-ui/select';
 import { FormsModule } from '@angular/forms';
 import { PLATFORM_MODULES, platformTopbar } from '@/platform/core';
+import { BRAND } from '@/core/config/brand';
 import { LayoutService } from '../../service/layout.service';
 import { TranslocoModule, TranslocoService } from '@jsverse/transloco';
 
@@ -15,6 +16,8 @@ import { TranslocoModule, TranslocoService } from '@jsverse/transloco';
   templateUrl: './app.topbar.html'
 })
 export class AppTopbar {
+  protected readonly brand = BRAND;
+
   public readonly layoutService = inject(LayoutService);
   private readonly translocoService = inject(TranslocoService);
 

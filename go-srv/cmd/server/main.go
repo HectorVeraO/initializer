@@ -1,4 +1,4 @@
-// Command server runs the go-srv HTTP API.
+// Command server runs the HTTP API.
 package main
 
 import (

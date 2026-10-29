@@ -1,2 +1,2 @@
-# Feature flag manifest; rules and shape: go-srv/cookbooks/tbd-feature-flags.md
+# Feature flag manifest
 flags: []

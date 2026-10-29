@@ -1,5 +1,5 @@
 # initializer:stack go-srv
-upstream go-srv {
+upstream api {
     ip_hash;
     server ${GO_SRV_HOST};
 }
@@ -25,7 +25,7 @@ server {
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://go-srv;
+        proxy_pass http://api;
     }
     # initializer:end go-srv
 
@@ -34,7 +34,7 @@ server {
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://go-srv;
+        proxy_pass http://api;
     }
     # initializer:end identity
 
@@ -43,7 +43,7 @@ server {
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://go-srv;
+        proxy_pass http://api;
     }
     # initializer:end go-srv
 

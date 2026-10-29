@@ -1,4 +1,4 @@
-/** Top-level `error.code` values: the `Issue: false` rows of `go-srv/internal/platform/core/api/codes.go` `Registry()` (also `specs/core/openapi.yaml` `ApiErrorCode`). */
+/** Top-level `error.code` values: the `Issue: false` rows of the backend core `api/codes.go` `Registry()` (also `specs/core/openapi.yaml` `ApiErrorCode`). */
 export const ApiErrorCode = {
   SessionInvalid: 'SESSION_INVALID',
   ApiKeyInvalidOrRevoked: 'API_KEY_INVALID_OR_REVOKED',

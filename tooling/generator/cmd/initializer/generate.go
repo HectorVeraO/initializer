@@ -50,11 +50,12 @@ func (o *generateOptions) flagsOf() manifest.Flags {
 		return o.given[name] > 0
 	}
 	return manifest.Flags{
-		Name:     o.name,
-		GoModule: o.goModule,
+		Name:        o.name,
+		GoModule:    o.goModule,
+		DisplayName: o.displayName,
 		Has: manifest.FlagPresence{
 			Name: given("name"), GoModule: given("go-module"), Stacks: given("stacks"), Modules: given("modules"),
-			DBName: given("db-name"), DBUser: given("db-user"),
+			DBName: given("db-name"), DBUser: given("db-user"), DisplayName: given("display-name"),
 		},
 		Stacks:     splitList(o.stacks),
 		Modules:    splitList(o.modules),

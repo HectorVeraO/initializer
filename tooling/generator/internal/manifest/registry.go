@@ -27,6 +27,7 @@ type FieldSpec struct {
 // Registry lists every selection key. A track that adds a field appends its rows.
 var Registry = []FieldSpec{
 	{Pointer: "/schema", Kind: KindInt, Since: 1, Required1: true},
+	{Pointer: "/displayName", Kind: KindString, Since: 2},
 	{Pointer: "/project", Kind: KindMap, Since: 1, Required1: true},
 	{Pointer: "/project/name", Kind: KindString, Since: 1, Required1: true},
 	{Pointer: "/project/goModule", Kind: KindString, Since: 1},
@@ -50,6 +51,7 @@ const MaxSchema = 2
 
 // Patterns of the selection keys the grammar rules and the extraction name.
 const (
+	patternDisplay    = "/displayName"
 	patternName       = "/project/name"
 	patternGoModule   = "/project/goModule"
 	patternStacksItem = "/stacks/*"
@@ -137,6 +139,10 @@ func valueProblem(pattern, value string) (code, message string, bad bool) {
 	case patternName, patternCompName:
 		if !names.ValidLabel(value) {
 			return CodeNameInvalid, names.LabelMessage(value), true
+		}
+	case patternDisplay:
+		if !names.ValidDisplay(value) {
+			return CodeNameInvalid, names.DisplayMessage(value), true
 		}
 	case patternDBName, patternDBUser:
 		if !names.ValidPGIdent(value) {
@@ -289,6 +295,9 @@ func (w *inputDecoder) extract(root *Node) Selection {
 		if module, found := project.Member("goModule"); found && module.Kind == KindString {
 			s.Project.GoModule, s.Has.GoModule = module.Value, true
 		}
+	}
+	if display, found := root.Member("displayName"); found && display.Kind == KindString && w.schema >= 2 {
+		s.DisplayName = display.Value
 	}
 	s.Stacks, s.Has.Stacks = stringList(root, "stacks")
 	s.Modules, s.Has.Modules = stringList(root, "modules")

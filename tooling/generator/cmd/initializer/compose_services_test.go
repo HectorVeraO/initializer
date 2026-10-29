@@ -117,7 +117,7 @@ func TestBackendOnlyProjectShipsNoConsole(t *testing.T) {
 func TestWebProjectNginxTemplateIsDeliveredWithItsBackendBlocks(t *testing.T) {
 	out := generateAcme(t, "go-srv,ng-web")
 	nginx := readProjectFile(t, out, "acme-web/nginx.conf.template")
-	for _, want := range []string{"upstream go-srv {", "location /api/ {", "location /health/ {", "location /kratos/ {"} {
+	for _, want := range []string{"upstream api {", "location /api/ {", "location /health/ {", "location /kratos/ {"} {
 		if !strings.Contains(nginx, want) {
 			t.Errorf("nginx.conf.template lacks %q", want)
 		}
