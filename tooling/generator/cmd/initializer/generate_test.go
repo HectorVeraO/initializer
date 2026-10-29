@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -61,10 +60,10 @@ func tree(t *testing.T, dir string) map[string]string {
 	return files
 }
 
-func issueCodes(t *testing.T, stderr string) string {
+func issueCodes(t *testing.T, stdout string) string {
 	t.Helper()
 	var codes []string
-	for _, found := range issueArray(t, stderr) {
+	for _, found := range issueArray(t, stdout) {
 		codes = append(codes, found["code"])
 	}
 	return strings.Join(codes, ",")
@@ -72,19 +71,18 @@ func issueCodes(t *testing.T, stderr string) string {
 
 func TestGenerateWritesTheProjectAndReportsTheCount(t *testing.T) {
 	e := newEnv(t)
-	code, stdout, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...)
+	code, stdout, stderr := executeLogged(t, e.args("--selection", writeSelection(t, validSelection), "--format", "json")...)
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
 	files := tree(t, e.out)
 	var result struct {
 		Project string
+		Path    string
 		Files   int
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
-		t.Fatalf("stdout %q: %v", stdout, err)
-	}
-	if result.Files != len(files) || result.Project != filepath.ToSlash(e.out) {
+	decodeDocument(t, stdout, &result)
+	if result.Files != len(files) || result.Path != filepath.ToSlash(e.out) || result.Project != "acme-backend" {
 		t.Fatalf("result %+v, files on disk %d", result, len(files))
 	}
 	if !strings.Contains(stderr, `"msg":"project_generated"`) {
@@ -148,9 +146,12 @@ func TestNonEmptyOutputIsRefusedAndNothingIsWritten(t *testing.T) {
 	if err := os.WriteFile(keep, []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...)
-	if code != exitIssues || issueCodes(t, stderr) != "OUTPUT_NOT_EMPTY" || stdout != "" {
-		t.Fatalf("exit %d, codes %q, stdout %q", code, issueCodes(t, stderr), stdout)
+	code, stdout, stderr := executeJSON(t, e.args("--selection", writeSelection(t, validSelection))...)
+	if code != exitIssues || issueCodes(t, stdout) != "OUTPUT_NOT_EMPTY" {
+		t.Fatalf("exit %d, codes %q, stdout %q", code, issueCodes(t, stdout), stdout)
+	}
+	if strings.Contains(stderr, "{") {
+		t.Fatalf("a JSON run writes its document to stdout only: %s", stderr)
 	}
 	if got := tree(t, e.out); len(got) != 1 || got["keep.txt"] != "mine" {
 		t.Fatalf("output changed: %v", got)
@@ -162,18 +163,18 @@ func TestOutputThatIsAFileIsRefused(t *testing.T) {
 	if err := os.WriteFile(e.out, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...)
-	if code != exitIssues || issueCodes(t, stderr) != "OUTPUT_NOT_EMPTY" {
-		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stderr))
+	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, validSelection))...)
+	if code != exitIssues || issueCodes(t, stdout) != "OUTPUT_NOT_EMPTY" {
+		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stdout))
 	}
 }
 
 func TestPlanIssuesWriteNothing(t *testing.T) {
 	e := newEnv(t)
 	unknown := strings.Replace(validSelection, `"parameters"`, `"nonexistent"`, 1)
-	code, _, stderr := execute(t, e.args("--selection", writeSelection(t, unknown))...)
-	if code != exitIssues || issueCodes(t, stderr) != "MODULE_UNKNOWN" {
-		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stderr))
+	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, unknown))...)
+	if code != exitIssues || issueCodes(t, stdout) != "MODULE_UNKNOWN" {
+		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stdout))
 	}
 	if _, err := os.Stat(e.out); err == nil {
 		t.Fatal("the output directory was created")
@@ -205,9 +206,12 @@ func TestCatalogFromAnotherTreeIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.root = other
-	code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...)
-	if code != exitIssues || issueCodes(t, stderr) != "CATALOG_FILE_MISMATCH" {
-		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stderr))
+	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, validSelection))...)
+	if code != exitIssues || issueCodes(t, stdout) != "CATALOG_FILE_MISMATCH" {
+		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stdout))
+	}
+	if issueArray(t, stdout)[0]["hint"] != "rebuild the catalog: initializer catalog build" {
+		t.Fatalf("the mismatch must say how to recover: %s", stdout)
 	}
 	if _, err := os.Stat(e.out); err == nil {
 		t.Fatal("the output directory was created")
@@ -227,9 +231,9 @@ func TestCatalogFromAnotherGeneratorVersionIsRefused(t *testing.T) {
 	if err := os.WriteFile(e.catalog, []byte(changed), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...)
-	if code != exitIssues || issueCodes(t, stderr) != "CATALOG_GENERATOR_MISMATCH" {
-		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stderr))
+	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, validSelection))...)
+	if code != exitIssues || issueCodes(t, stdout) != "CATALOG_GENERATOR_MISMATCH" {
+		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stdout))
 	}
 }
 
@@ -263,7 +267,7 @@ func TestCatalogPathOutsideTheRepositoryExitsThreeBeforeAnyWrite(t *testing.T) {
 	if code != exitInternal {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(stderr, "catalog_undecodable") || !strings.Contains(stderr, "must be a repo-relative path") {
+	if !strings.Contains(stderr, "[CATALOG_UNREADABLE]") || !strings.Contains(stderr, "must be a repo-relative path") {
 		t.Fatalf("want the path-validation error on stderr, got %s", stderr)
 	}
 	if _, err := os.Stat(e.out); err == nil {
@@ -315,8 +319,8 @@ func TestVerifyExitCodes(t *testing.T) {
 	if code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...); code != exitOK {
 		t.Fatalf("generate: %d %s", code, stderr)
 	}
-	code, stdout, stderr := execute(t, "verify", "--project", e.out)
-	if code != exitOK || strings.TrimSpace(stdout) != `{"project":"`+filepath.ToSlash(e.out)+`","differences":0}` {
+	code, stdout, stderr := executeJSON(t, "verify", "--project", e.out)
+	if code != exitOK || stdout != `{"schema":1,"ok":true,"project":"acme-backend","differences":[],"warnings":[{"code":"FLAG_DEPRECATED","message":"--project is deprecated","hint":"pass the folder as an argument: initializer verify <dir>"}]}`+"\n" {
 		t.Fatalf("fresh project: exit %d, stdout %q, stderr %s", code, stdout, stderr)
 	}
 
@@ -330,15 +334,30 @@ func TestVerifyExitCodes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(e.out, "go-srv", "internal", "platform", "identity", "new.go"), []byte("package identity\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, stderr = execute(t, "verify", "--project", e.out)
-	if code != exitIssues || !strings.Contains(stdout, `"differences":3`) {
+	code, stdout, stderr = executeLogged(t, "verify", "--project", e.out, "--format", "json")
+	var report struct {
+		OK          bool
+		Differences []struct{ Code, Path, Message string }
+	}
+	decodeDocument(t, stdout, &report)
+	if code != exitIssues || report.OK || len(report.Differences) != 3 {
 		t.Fatalf("edited project: exit %d, stdout %q", code, stdout)
 	}
-	if got := issueCodes(t, stderr); got != "UNTRACKED,MODIFIED,MISSING" && got != "MODIFIED,UNTRACKED,MISSING" {
+	var codes []string
+	for _, found := range report.Differences {
+		codes = append(codes, found.Code)
+	}
+	if got := strings.Join(codes, ","); got != "MODIFIED,MISSING,UNTRACKED" && got != "MODIFIED,UNTRACKED,MISSING" && got != "UNTRACKED,MODIFIED,MISSING" {
 		t.Fatalf("codes %q", got)
 	}
 	if !strings.Contains(stderr, `"msg":"verify_failed"`) {
 		t.Fatalf("no verify_failed event: %s", stderr)
+	}
+	code, stdout, _ = execute(t, "verify", e.out)
+	wantLines := 4
+	if code != exitIssues || strings.Count(stdout, "\n") != wantLines || !strings.HasSuffix(stdout, "3 differences\n") ||
+		!strings.Contains(stdout, "MODIFIED go-srv/internal/platform/core/core.go: ") {
+		t.Fatalf("text differences: exit %d, stdout %q", code, stdout)
 	}
 
 	if err := os.Remove(filepath.Join(e.out, "initializer.lock.json")); err != nil {

@@ -47,6 +47,10 @@ Flags:
         Source checkout (required)
   --catalog FILE
         Catalog file built by 'initializer catalog build' (required)
+  --format text|json
+        Result format (default: text)
+  --log json
+        Write structured log events to stderr (default: off)
 
 Examples:
   # a backend with identity, in ./acme
@@ -190,7 +194,7 @@ func TestUnknownCommandsExitTwoWithAClosestMatch(t *testing.T) {
 }
 
 func TestOneInvocationReportsEveryCommandLineProblem(t *testing.T) {
-	code, stdout, stderr := execute(t, "generate", "acme", "extra", "--bogus", "--name", "a", "--name", "b", "--out", "o", "--modules")
+	code, stdout, stderr := executeLogged(t, "generate", "acme", "extra", "--bogus", "--name", "a", "--name", "b", "--out", "o", "--modules")
 	if code != exitUsage || stdout != "" {
 		t.Fatalf("exit %d, stdout %q", code, stdout)
 	}
@@ -291,7 +295,7 @@ func TestGenerateTakesTheFolderAsAnArgumentAndNamesTheProjectAfterIt(t *testing.
 	if recordedName(t, filepath.Join(dir, "acme")) != "acme" {
 		t.Fatalf("the project must be named after its folder")
 	}
-	if !strings.Contains(stdout, `"project":"acme"`) {
+	if !strings.Contains(stdout, "Project acme generated in ./acme (") {
 		t.Fatalf("stdout = %s", stdout)
 	}
 	notes := linesWithPrefix(stderr, "note:")
@@ -381,10 +385,18 @@ func TestGenerateIntoANonEmptyFolderIsRefusedWithAHint(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, stdout, stderr := execute(t, append([]string{"generate", "acme"}, e.flagSelection()...)...)
-	if code != exitIssues || stdout != "" {
-		t.Fatalf("exit %d, stdout %q", code, stdout)
+	wantText := "note: project name \"acme\" comes from the folder; pass --name to set it\n" +
+		"error: ./acme: output directory is not empty [OUTPUT_NOT_EMPTY]\n" +
+		"  hint: choose another folder: initializer generate <dir>\n" +
+		"1 problem; nothing was written.\n"
+	if code != exitIssues || stdout != "" || stderr != wantText {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
-	issues := issueArray(t, stderr)
+	code, stdout, _ = executeJSON(t, append([]string{"generate", "acme"}, e.flagSelection()...)...)
+	if code != exitIssues {
+		t.Fatalf("exit %d", code)
+	}
+	issues := issueArray(t, stdout)
 	if len(issues) != 1 || issues[0]["code"] != "OUTPUT_NOT_EMPTY" || issues[0]["hint"] != "choose another folder: initializer generate <dir>" {
 		t.Fatalf("issues = %v", issues)
 	}
@@ -396,11 +408,11 @@ func TestGenerateIntoANonEmptyFolderIsRefusedWithAHint(t *testing.T) {
 func TestGenerateRefusesAFolderNameThatIsNotAProjectName(t *testing.T) {
 	e := newEnv(t)
 	dir := inFreshDir(t)
-	code, stdout, stderr := execute(t, append([]string{"generate", "My App"}, e.flagSelection()...)...)
-	if code != exitIssues || stdout != "" {
-		t.Fatalf("exit %d, stdout %q", code, stdout)
+	code, stdout, _ := executeJSON(t, append([]string{"generate", "My App"}, e.flagSelection()...)...)
+	if code != exitIssues {
+		t.Fatalf("exit %d", code)
 	}
-	issues := issueArray(t, stderr)
+	issues := issueArray(t, stdout)
 	want := `name "My App" comes from the folder "My App" and is not a project name`
 	if len(issues) != 1 || issues[0]["code"] != "SELECTION_INVALID" || issues[0]["path"] != "args#/dir" || issues[0]["message"] != want {
 		t.Fatalf("issues = %v", issues)
@@ -413,12 +425,12 @@ func TestGenerateRefusesAFolderNameThatIsNotAProjectName(t *testing.T) {
 func TestFolderNameIssueKeepsTheOtherSelectionIssues(t *testing.T) {
 	e := newEnv(t)
 	inFreshDir(t)
-	code, _, stderr := execute(t, "generate", "My App", "--root", e.root, "--catalog", e.catalog, "--stacks", "go-srv", "--modules", "parameters")
+	code, stdout, _ := executeJSON(t, "generate", "My App", "--root", e.root, "--catalog", e.catalog, "--stacks", "go-srv", "--modules", "parameters")
 	if code != exitIssues {
 		t.Fatalf("exit %d", code)
 	}
 	paths := map[string]bool{}
-	for _, found := range issueArray(t, stderr) {
+	for _, found := range issueArray(t, stdout) {
 		paths[found["path"]] = true
 	}
 	if !paths["args#/dir"] || !paths["flags#/project/goModule"] {
@@ -509,7 +521,7 @@ func TestCurrentSpellingsPrintNoWarning(t *testing.T) {
 		t.Fatalf("generate: exit %d: %s", code, stderr)
 	}
 	code, stdout, stderr := execute(t, "verify", e.out)
-	if code != exitOK || strings.Contains(stderr, "warning:") || !strings.Contains(stdout, `"differences":0`) {
+	if code != exitOK || strings.Contains(stderr, "warning:") || stdout != "No differences.\n" {
 		t.Fatalf("verify: exit %d, stdout %s, stderr %s", code, stdout, stderr)
 	}
 }

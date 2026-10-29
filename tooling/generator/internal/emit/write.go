@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/lockfile"
@@ -19,7 +20,10 @@ const CodeOutputNotEmpty = "OUTPUT_NOT_EMPTY"
 // directory. The error is for I/O failures only.
 func CheckOutput(out string) ([]issue.Issue, error) {
 	info, err := os.Stat(out)
-	if errors.Is(err, fs.ErrNotExist) {
+	// ENOTDIR: a parent of out is a regular file, so nothing exists at out and
+	// the write reports the failure (Windows answers not-exist here).
+	isAbsent := errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)
+	if isAbsent {
 		return nil, nil
 	}
 	if err != nil {

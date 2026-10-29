@@ -62,3 +62,15 @@ func TestWriteKeepsTheHintAndOmitsAnEmptyOne(t *testing.T) {
 		t.Fatalf("an empty hint must not be written: %v", raw[1])
 	}
 }
+
+func TestIssueEncodesLineHintAndNamesOnlyWhenSet(t *testing.T) {
+	plain, err := json.Marshal(issue.Issue{Code: "C", Path: "p", Message: "m"})
+	if err != nil || string(plain) != `{"code":"C","path":"p","message":"m"}` {
+		t.Fatalf("plain = %s (%v)", plain, err)
+	}
+	full, err := json.Marshal(issue.Issue{Code: "C", Path: "p", Line: 3, Message: "m", Hint: "h", SuggestedNames: []string{"a-srv"}})
+	want := `{"code":"C","path":"p","line":3,"message":"m","hint":"h","suggestedNames":["a-srv"]}`
+	if err != nil || string(full) != want {
+		t.Fatalf("full = %s (%v)", full, err)
+	}
+}
