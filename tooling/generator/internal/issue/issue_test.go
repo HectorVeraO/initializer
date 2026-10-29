@@ -41,3 +41,24 @@ func TestPointerEscapes(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestWriteKeepsTheHintAndOmitsAnEmptyOne(t *testing.T) {
+	in := []issue.Issue{
+		{Code: "A", Path: "f#/a", Message: "m", Hint: "do this"},
+		{Code: "B", Path: "f#/b", Message: "m"},
+	}
+	var out bytes.Buffer
+	if err := issue.Write(&out, in); err != nil {
+		t.Fatal(err)
+	}
+	var raw []map[string]string
+	if err := json.Unmarshal(out.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if raw[0]["hint"] != "do this" {
+		t.Fatalf("hint = %q", raw[0]["hint"])
+	}
+	if _, present := raw[1]["hint"]; present {
+		t.Fatalf("an empty hint must not be written: %v", raw[1])
+	}
+}

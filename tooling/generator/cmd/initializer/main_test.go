@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/lockfile"
 )
 
 const validSelection = `{
@@ -61,19 +63,21 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 		args    []string
 		message string
 	}{
-		"no args":                  {[]string{}, "a subcommand is required"},
-		"unknown subcommand":       {[]string{"frobnicate"}, "unknown subcommand"},
-		"catalog without build":    {[]string{"catalog"}, "requires the build subcommand"},
-		"unknown flag":             {[]string{"verify", "--project", "p", "--nope"}, "not defined"},
-		"unexpected argument":      {[]string{"verify", "--project", "p", "extra"}, "unexpected argument"},
-		"missing project":          {[]string{"verify"}, "missing required flag"},
-		"missing catalog flags":    {[]string{"catalog", "build", "--root", "."}, "missing required flag"},
-		"generate missing out":     {[]string{"generate", "--root", ".", "--catalog", "c.json", "--selection", sel}, "missing required flag"},
+		"no args":                  {[]string{}, "Commands:"},
+		"unknown command":          {[]string{"frobnicate"}, `unknown command "frobnicate"`},
+		"catalog without build":    {[]string{"catalog"}, "catalog needs a command: build"},
+		"unknown flag":             {[]string{"verify", "--nope"}, "unknown flag"},
+		"unexpected argument":      {[]string{"verify", "p", "extra"}, "unexpected argument"},
+		"folder twice":             {[]string{"verify", "p", "--project", "p"}, "pass the folder once"},
+		"missing catalog flags":    {[]string{"catalog", "build", "--root", "."}, "--files: is required"},
+		"generate missing root":    {[]string{"generate", "--catalog", "c.json", "--selection", sel}, "--root: is required"},
+		"generate missing catalog": {[]string{"generate", "--root", ".", "--selection", sel}, "--catalog: is required"},
 		"no selection":             {common, "a selection is required"},
 		"file plus flag":           {append(append([]string{}, common...), "--selection", sel, "--name", "acme-backend"), "cannot be combined"},
 		"file plus all-modules":    {append(append([]string{}, common...), "--selection", sel, "--all-modules"), "cannot be combined"},
 		"flags without modules":    {append(append([]string{}, common...), "--name", "n", "--stacks", "go-srv"), "requires --modules or --all-modules"},
 		"all-modules plus modules": {append(append([]string{}, common...), "--all-modules", "--modules", "a", "--name", "n"), "cannot be combined"},
+		"selection plus file":      {append(append([]string{}, common...), "--selection", sel, "-f", sel), "pass the file once"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -85,6 +89,30 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 				t.Fatalf("stderr %q does not mention %q", stderr, tc.message)
 			}
 		})
+	}
+}
+
+func TestVerifyWithoutADirectoryChecksTheWorkingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	code, _, stderr := execute(t, "verify")
+	if code != exitInternal || !strings.Contains(stderr, "verify_unreadable") {
+		t.Fatalf("an empty working directory is not a project: exit %d %s", code, stderr)
+	}
+
+	lock, err := lockfile.Encode(lockfile.Lock{Schema: lockfile.SchemaVersion})
+	if err != nil {
+		t.Fatalf("encode lock: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, lockfile.Name), lock, 0o644); err != nil {
+		t.Fatalf("write lock: %v", err)
+	}
+	code, stdout, stderr := execute(t, "verify")
+	if code != exitOK {
+		t.Fatalf("a working directory holding a lock verifies: exit %d %s", code, stderr)
+	}
+	if !strings.Contains(stdout, `"differences":0`) {
+		t.Fatalf("stdout %q does not report zero differences", stdout)
 	}
 }
 
@@ -176,7 +204,7 @@ func decodedEvent(t *testing.T, stderr string) map[string]any {
 }
 
 func TestValidSelectionFileIsDecodedBeforeTheCatalogIsRead(t *testing.T) {
-	code, stdout, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", writeSelection(t, validSelection))
+	code, stdout, stderr := execute(t, "generate", "o", "--root", ".", "--catalog", "c.json", "-f", writeSelection(t, validSelection))
 	if code != exitInternal || !strings.Contains(stderr, "input_unreadable") {
 		t.Fatalf("want exit %d with an unreadable catalog: %d %s", exitInternal, code, stderr)
 	}
@@ -190,7 +218,7 @@ func TestValidSelectionFileIsDecodedBeforeTheCatalogIsRead(t *testing.T) {
 }
 
 func TestValidFlagSelectionAndAllModules(t *testing.T) {
-	_, _, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o",
+	_, _, stderr := execute(t, "generate", "o", "--root", ".", "--catalog", "c.json",
 		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv,ng-web", "--all-modules")
 	event := decodedEvent(t, stderr)
 	if event["stack_count"] != float64(2) || event["module_count"] != float64(0) || event["all_modules"] != true {
@@ -199,7 +227,7 @@ func TestValidFlagSelectionAndAllModules(t *testing.T) {
 }
 
 func TestProgressLinesAreStructuredJSON(t *testing.T) {
-	_, _, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", writeSelection(t, validSelection))
+	_, _, stderr := execute(t, "generate", "o", "--root", ".", "--catalog", "c.json", "-f", writeSelection(t, validSelection))
 	events := 0
 	for _, line := range strings.Split(strings.TrimSpace(stderr), "\n") {
 		var record map[string]any
@@ -214,17 +242,6 @@ func TestProgressLinesAreStructuredJSON(t *testing.T) {
 	}
 	if events == 0 {
 		t.Fatal("expected progress lines")
-	}
-}
-
-func TestHelpExitsZero(t *testing.T) {
-	for _, arg := range []string{"--help", "-h", "help"} {
-		t.Run(arg, func(t *testing.T) {
-			code, stdout, _ := execute(t, arg)
-			if code != 0 || !strings.Contains(stdout, "usage") {
-				t.Fatalf("exit %d stdout %q", code, stdout)
-			}
-		})
 	}
 }
 

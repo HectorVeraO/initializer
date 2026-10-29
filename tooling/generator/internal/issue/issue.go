@@ -13,6 +13,8 @@ type Issue struct {
 	Code    string `json:"code"`
 	Path    string `json:"path"`
 	Message string `json:"message"`
+	// Hint is what to do next; omitted from the output when empty.
+	Hint string `json:"hint,omitempty"`
 }
 
 // Sort orders issues by path, then code, then message, in place.
