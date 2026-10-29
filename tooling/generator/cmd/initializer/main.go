@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -37,11 +35,14 @@ const maxInputBytes = 1 << 20
 // maxFileListBytes bounds the tracked file list.
 const maxFileListBytes = 32 << 20
 
-const usageText = `usage:
-  initializer catalog build --root <repo> --files <file> --out <file>
-  initializer generate --root <repo> --catalog <file> --out <dir> (--selection <file> | --name <n> --go-module <m> --stacks <a,b> (--modules <a,b> | --all-modules))
-  initializer verify --project <dir>
-`
+// Context is what a command reads and writes; tests pass fakes.
+type Context struct {
+	Stdout, Stderr io.Writer
+	Stdin          io.Reader
+	// Args is the original command line.
+	Args   []string
+	Logger *slog.Logger
+}
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -49,84 +50,136 @@ func main() {
 
 // run executes one command line and returns the process exit code.
 func run(args []string, stdout, stderr io.Writer) int {
-	logger := slog.New(slog.NewJSONHandler(stderr, nil))
-	if len(args) == 0 {
-		return usageError(logger, "a subcommand is required")
+	ctx := &Context{
+		Stdout: stdout,
+		Stderr: stderr,
+		Stdin:  os.Stdin,
+		Logger: slog.New(slog.NewJSONHandler(stderr, nil)),
 	}
-	switch args[0] {
-	case "-h", "--help", "help":
-		_, _ = io.WriteString(stdout, usageText)
-		return exitOK
-	case "catalog":
-		if len(args) < 2 || args[1] != "build" {
-			return usageError(logger, "catalog requires the build subcommand")
-		}
-		return runCatalogBuild(args[2:], stdout, stderr, logger)
-	case "generate":
-		return runGenerate(args[1:], stdout, stderr, logger)
-	case "verify":
-		return runVerify(args[1:], stdout, stderr, logger)
-	}
-	return usageError(logger, "unknown subcommand")
+	return runWith(ctx, args)
 }
 
-func usageError(logger *slog.Logger, message string) int {
-	logger.Error("usage_error", slog.String("error", message))
+// runWith executes one command line against ctx and returns the exit code.
+func runWith(ctx *Context, args []string) int {
+	ctx.Args = args
+	if len(args) == 0 {
+		writeOverview(ctx.Stderr)
+		return exitUsage
+	}
+	if args[0] == "-h" || args[0] == "--help" {
+		writeOverview(ctx.Stdout)
+		return exitOK
+	}
+	found := resolve(args)
+	switch {
+	case found.problem != nil:
+		return reportProblems(ctx, []Problem{*found.problem})
+	case found.group != "":
+		return runGroup(ctx, found.group, args[1:])
+	}
+	return runCommand(ctx, found.cmd, args[found.consumed:])
+}
+
+// runGroup answers a noun group named without a verb: its help on request,
+// else a usage error that lists the verbs.
+func runGroup(ctx *Context, group string, rest []string) int {
+	if len(rest) > 0 && (rest[0] == "-h" || rest[0] == "--help") {
+		writeGroupHelp(ctx.Stdout, group)
+		return exitOK
+	}
+	var verbs []string
+	for _, cmd := range groupCommands(group) {
+		verbs = append(verbs, cmd.Path[1])
+	}
+	fmt.Fprintf(ctx.Stderr, "error: %s needs a command: %s\n\nCommands:\n", group, strings.Join(verbs, ", "))
+	writeCommandRows(ctx.Stderr, groupCommands(group))
+	ctx.Logger.Error("usage_error", slog.Int("problem_count", 1))
 	return exitUsage
 }
 
-// newFlagSet returns a flag set that reports errors through run, not the process.
-func newFlagSet(name string) *flag.FlagSet {
-	fs := flag.NewFlagSet(name, flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	return fs
-}
-
-// parseFlags parses args and reports the first problem as a usage error.
-func parseFlags(fs *flag.FlagSet, args []string, stdout io.Writer, logger *slog.Logger) (code int, done bool) {
-	err := fs.Parse(args)
-	if errors.Is(err, flag.ErrHelp) {
-		_, _ = io.WriteString(stdout, usageText)
-		return exitOK, true
+// runCommand scans args against cmd's flags, reports every command-line
+// problem at once, warns about deprecated spellings and runs the command.
+func runCommand(ctx *Context, cmd *Command, args []string) int {
+	set := newFlagSet(strings.Join(cmd.Path, " "))
+	opts := cmd.Flags(set)
+	var wantsHelp bool
+	set.boolean(&wantsHelp, flagSpec{Name: "help", Short: "h", Hidden: true})
+	positionals, problems := scan(set, args)
+	if set.given["help"] > 0 {
+		writeCommandHelp(ctx.Stdout, cmd)
+		return exitOK
 	}
-	if err != nil {
-		return usageError(logger, err.Error()), true
-	}
-	if fs.NArg() > 0 {
-		return usageError(logger, "unexpected argument"), true
-	}
-	return exitOK, false
-}
-
-func missingFlag(fs *flag.FlagSet, names ...string) string {
-	set := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
-	for _, name := range names {
-		if !set[name] {
-			return name
+	if cmd.MaxArgs >= 0 && len(positionals) > cmd.MaxArgs {
+		for _, extra := range positionals[cmd.MaxArgs:] {
+			problems = append(problems, Problem{Arg: extra, Message: "unexpected argument"})
 		}
 	}
-	return ""
+	if cmd.Check != nil {
+		problems = append(problems, cmd.Check(set, opts, positionals)...)
+	}
+	if len(problems) > 0 {
+		return reportProblems(ctx, problems)
+	}
+	for _, spec := range set.specs {
+		if spec.Deprecated != "" && set.given[spec.Name] > 0 {
+			fmt.Fprintf(ctx.Stderr, "warning: --%s is deprecated; %s\n", spec.Name, spec.Deprecated)
+		}
+	}
+	return cmd.Run(ctx, opts, positionals)
 }
 
-func runCatalogBuild(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
-	fs := newFlagSet("catalog build")
-	root := fs.String("root", "", "repository root")
-	filesPath := fs.String("files", "", "tracked file list")
-	outPath := fs.String("out", "", "catalog output file")
-	if code, done := parseFlags(fs, args, stdout, logger); done {
-		return code
+// reportProblems writes every problem, a count and the usage_error event; it
+// returns the usage exit code.
+func reportProblems(ctx *Context, problems []Problem) int {
+	for _, problem := range problems {
+		if problem.Arg == "" {
+			fmt.Fprintf(ctx.Stderr, "error: %s\n", problem.Message)
+		} else {
+			fmt.Fprintf(ctx.Stderr, "error: %s: %s\n", problem.Arg, problem.Message)
+		}
+		if problem.Suggestion != "" {
+			fmt.Fprintf(ctx.Stderr, "  hint: did you mean %q?\n", problem.Suggestion)
+		}
 	}
-	if name := missingFlag(fs, "root", "files", "out"); name != "" {
-		return usageError(logger, "missing required flag: "+name)
+	noun := "problems"
+	if len(problems) == 1 {
+		noun = "problem"
 	}
+	fmt.Fprintf(ctx.Stderr, "%d %s.\n", len(problems), noun)
+	ctx.Logger.Error("usage_error", slog.Int("problem_count", len(problems)))
+	return exitUsage
+}
 
-	info, err := os.Stat(*root)
+// runHelp prints the overview, a group's command list or one command's help.
+func runHelp(ctx *Context, _ any, words []string) int {
+	if len(words) == 0 {
+		writeOverview(ctx.Stdout)
+		return exitOK
+	}
+	found := resolve(words)
+	switch {
+	case found.problem != nil:
+		return reportProblems(ctx, []Problem{*found.problem})
+	case found.group != "":
+		writeGroupHelp(ctx.Stdout, found.group)
+		return exitOK
+	case found.consumed < len(words):
+		return reportProblems(ctx, []Problem{{Arg: words[found.consumed], Message: "unexpected argument"}})
+	}
+	writeCommandHelp(ctx.Stdout, found.cmd)
+	return exitOK
+}
+
+func runCatalogBuild(ctx *Context, opts any, _ []string) int {
+	o := opts.(*catalogBuildOptions)
+	stdout, stderr, logger := ctx.Stdout, ctx.Stderr, ctx.Logger
+
+	info, err := os.Stat(o.root)
 	if err != nil || !info.IsDir() {
 		logger.Error("input_unreadable", slog.String("error", "root is not a readable directory"))
 		return exitInternal
 	}
-	list, err := readLimited(*filesPath, maxFileListBytes)
+	list, err := readLimited(o.files, maxFileListBytes)
 	if err != nil {
 		logger.Error("input_unreadable", slog.String("error", err.Error()))
 		return exitInternal
@@ -138,7 +191,7 @@ func runCatalogBuild(args []string, stdout, stderr io.Writer, logger *slog.Logge
 	}
 
 	built, issues, err := catalog.Build(catalog.BuildOptions{
-		Root:      os.DirFS(*root),
+		Root:      os.DirFS(o.root),
 		Files:     files,
 		Generator: generator.Version,
 	})
@@ -159,7 +212,7 @@ func runCatalogBuild(args []string, stdout, stderr io.Writer, logger *slog.Logge
 		logger.Error("catalog_build_failed", slog.String("error", err.Error()))
 		return exitInternal
 	}
-	if err := writeOutput(*outPath, encoded); err != nil {
+	if err := writeOutput(o.out, encoded); err != nil {
 		logger.Error("output_unwritable", slog.String("error", err.Error()))
 		return exitInternal
 	}
@@ -167,7 +220,7 @@ func runCatalogBuild(args []string, stdout, stderr io.Writer, logger *slog.Logge
 	result := struct {
 		Catalog string `json:"catalog"`
 		SHA256  string `json:"sha256"`
-	}{Catalog: filepath.ToSlash(*outPath), SHA256: hex.EncodeToString(sum[:])}
+	}{Catalog: filepath.ToSlash(o.out), SHA256: hex.EncodeToString(sum[:])}
 	line, err := json.Marshal(result)
 	if err != nil {
 		logger.Error("catalog_build_failed", slog.String("error", err.Error()))
@@ -192,16 +245,17 @@ func writeOutput(path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func runVerify(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
-	fs := newFlagSet("verify")
-	project := fs.String("project", "", "generated project directory")
-	if code, done := parseFlags(fs, args, stdout, logger); done {
-		return code
+func runVerify(ctx *Context, opts any, positionals []string) int {
+	o := opts.(*verifyOptions)
+	stdout, stderr, logger := ctx.Stdout, ctx.Stderr, ctx.Logger
+	dir := "."
+	if o.project != "" {
+		dir = o.project
 	}
-	if name := missingFlag(fs, "project"); name != "" {
-		return usageError(logger, "missing required flag: "+name)
+	if len(positionals) > 0 {
+		dir = positionals[0]
 	}
-	differences, err := verify.Project(*project)
+	differences, err := verify.Project(dir)
 	if err != nil {
 		logger.Error("verify_unreadable", slog.String("error", err.Error()))
 		return exitInternal
@@ -209,7 +263,7 @@ func runVerify(args []string, stdout, stderr io.Writer, logger *slog.Logger) int
 	result := struct {
 		Project     string `json:"project"`
 		Differences int    `json:"differences"`
-	}{Project: filepath.ToSlash(*project), Differences: len(differences)}
+	}{Project: filepath.ToSlash(dir), Differences: len(differences)}
 	if code := writeResult(stdout, result, logger); code != exitOK {
 		return code
 	}
@@ -238,61 +292,46 @@ func writeResult(stdout io.Writer, v any, logger *slog.Logger) int {
 	return exitOK
 }
 
-func runGenerate(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
-	fs := newFlagSet("generate")
-	root := fs.String("root", "", "repository root")
-	catalogPath := fs.String("catalog", "", "catalog file")
-	outDir := fs.String("out", "", "output directory")
-	selectionFile := fs.String("selection", "", "selection file")
-	name := fs.String("name", "", "project name")
-	goModule := fs.String("go-module", "", "Go module path")
-	stacks := fs.String("stacks", "", "comma-separated stacks")
-	modules := fs.String("modules", "", "comma-separated modules")
-	allModules := fs.Bool("all-modules", false, "select every module of the backend stack")
-	if code, done := parseFlags(fs, args, stdout, logger); done {
-		return code
-	}
-	if missing := missingFlag(fs, "root", "catalog", "out"); missing != "" {
-		return usageError(logger, "missing required flag: "+missing)
-	}
-
-	hasFile := missingFlag(fs, "selection") == ""
-	hasFlags := false
-	fs.Visit(func(f *flag.Flag) {
-		switch f.Name {
-		case "name", "go-module", "stacks", "modules", "all-modules":
-			hasFlags = true
-		}
-	})
-	hasModules := missingFlag(fs, "modules") == ""
-	switch {
-	case hasFile && hasFlags:
-		return usageError(logger, "--selection cannot be combined with selection flags")
-	case !hasFile && !hasFlags:
-		return usageError(logger, "a selection is required: --selection or selection flags")
-	case *allModules && hasModules:
-		return usageError(logger, "--all-modules cannot be combined with --modules")
-	case !hasFile && !*allModules && !hasModules:
-		return usageError(logger, "flag selection requires --modules or --all-modules")
+func runGenerate(ctx *Context, opts any, positionals []string) int {
+	o := opts.(*generateOptions)
+	stdout, stderr, logger := ctx.Stdout, ctx.Stderr, ctx.Logger
+	dir := o.out
+	if len(positionals) > 0 {
+		dir = positionals[0]
 	}
 
 	var selection manifest.Selection
 	var issues []issue.Issue
-	if hasFile {
-		data, err := readInput(*selectionFile)
+	var notes []string
+	if filePath := o.filePath(); filePath != "" {
+		data, err := readInput(filePath)
 		if err != nil {
 			logger.Error("input_unreadable", slog.String("error", err.Error()))
 			return exitInternal
 		}
-		selection, issues = manifest.DecodeSelection(filepath.ToSlash(*selectionFile), data)
+		selection, issues = manifest.DecodeSelection(filepath.ToSlash(filePath), data)
 	} else {
+		name := o.name
+		fromFolder := false
+		switch {
+		case name != "":
+		case dir != "":
+			name, fromFolder = folderName(dir), true
+			notes = append(notes, fmt.Sprintf("note: project name %q comes from the folder; pass --name to set it", name))
+		default:
+			name = defaultProjectName
+			notes = append(notes, fmt.Sprintf("note: no name given; using %q", name))
+		}
 		selection, issues = manifest.SelectionFromFlags(manifest.SelectionFlags{
-			Name:       *name,
-			GoModule:   *goModule,
-			Stacks:     splitList(*stacks),
-			Modules:    splitList(*modules),
-			AllModules: *allModules,
+			Name:       name,
+			GoModule:   o.goModule,
+			Stacks:     splitList(o.stacks),
+			Modules:    splitList(o.modules),
+			AllModules: o.allModules,
 		})
+		if fromFolder {
+			issues = folderNameIssues(issues, name, dir)
+		}
 	}
 	if len(issues) > 0 {
 		logger.Warn("validation_failed", slog.Int("issue_count", len(issues)))
@@ -302,13 +341,50 @@ func runGenerate(args []string, stdout, stderr io.Writer, logger *slog.Logger) i
 		}
 		return exitIssues
 	}
+	for _, note := range notes {
+		fmt.Fprintln(stderr, note)
+	}
+	if dir == "" {
+		dir = selection.Project.Name
+	}
 	logger.Info("selection_decoded",
 		slog.Int("stack_count", len(selection.Stacks)),
 		slog.Int("module_count", len(selection.Modules)),
 		slog.Bool("all_modules", selection.AllModules))
 	return generateProject(generateInput{
-		root: *root, catalogPath: *catalogPath, out: *outDir, selection: selection,
+		root: o.root, catalogPath: o.catalog, out: dir, selection: selection,
 	}, stdout, stderr, logger)
+}
+
+// defaultProjectName names a project when neither a flag nor a folder does.
+const defaultProjectName = "demo"
+
+// folderName returns the base name of dir as an absolute, cleaned path; for
+// "." that is the working directory's name. It never lowercases or repairs it.
+func folderName(dir string) string {
+	absolute, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	return filepath.Base(absolute)
+}
+
+// folderNameIssues rewrites the issue about a name taken from a folder so it
+// points at the DIR argument instead of a flag the person never typed.
+func folderNameIssues(issues []issue.Issue, name, dir string) []issue.Issue {
+	nameIssue := issue.Path(manifest.FlagsSource, issue.Pointer("project", "name"))
+	rewritten := make([]issue.Issue, 0, len(issues))
+	for _, found := range issues {
+		if found.Path == nameIssue {
+			found = issue.Issue{
+				Code:    manifest.CodeSelectionInvalid,
+				Path:    issue.Path("args", issue.Pointer("dir")),
+				Message: fmt.Sprintf("name %q comes from the folder %q and is not a project name", name, dir),
+			}
+		}
+		rewritten = append(rewritten, found)
+	}
+	return rewritten
 }
 
 type generateInput struct {
@@ -349,6 +425,11 @@ func generateProject(in generateInput, stdout, stderr io.Writer, logger *slog.Lo
 	if err != nil {
 		logger.Error("output_unreadable", slog.String("error", err.Error()))
 		return exitInternal
+	}
+	for i := range outputIssues {
+		if outputIssues[i].Code == emit.CodeOutputNotEmpty {
+			outputIssues[i].Hint = "choose another folder: initializer generate <dir>"
+		}
 	}
 	issues = append(issues, outputIssues...)
 	if len(issues) > 0 {
