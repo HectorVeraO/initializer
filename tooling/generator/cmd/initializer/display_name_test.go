@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -51,6 +52,21 @@ func TestDisplayNameNeedsSchema2InAFile(t *testing.T) {
 func TestDisplayNameGrammarIsEnforced(t *testing.T) {
 	for _, bad := range []string{"Acme's", "<b>", " Acme", "%{x}", ""} {
 		code, stdout, _ := infraDryRun(t, "--name", "acme", "--stacks", "go-srv,ng-web", "--display-name", bad, "--format", "json")
+		found := issueArray(t, stdout)
+		if code != exitIssues || len(found) != 1 || found[0]["code"] != "NAME_INVALID" {
+			t.Errorf("%q: exit %d issues %v", bad, code, found)
+		}
+	}
+}
+
+func TestDisplayNameGrammarIsEnforcedInAFile(t *testing.T) {
+	for _, bad := range []string{"Acme's", "<b>", " Acme", "%{x}", ""} {
+		path := filepath.Join(t.TempDir(), "in.json")
+		body := `{"schema":2,"project":{"name":"acme"},"displayName":` + strconv.Quote(bad) + `,"stacks":["go-srv","ng-web"],"modules":[]}`
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		code, stdout, _ := infraDryRun(t, "-f", path, "--format", "json")
 		found := issueArray(t, stdout)
 		if code != exitIssues || len(found) != 1 || found[0]["code"] != "NAME_INVALID" {
 			t.Errorf("%q: exit %d issues %v", bad, code, found)
