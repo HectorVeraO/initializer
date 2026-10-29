@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -546,10 +547,15 @@ func TestRecordedSelectionOfEveryCISelection(t *testing.T) {
 			}
 
 			s := in.Selection
-			flags, flagIssues := manifest.FlagsInput(manifest.Flags{
+			flagValues := manifest.Flags{
 				Name: s.Project.Name, GoModule: s.Project.GoModule, Stacks: s.Stacks, Modules: s.Modules,
 				Has: manifest.FlagPresence{Name: true, GoModule: s.Has.GoModule, Stacks: true, Modules: true},
-			})
+			}
+			if s.Ports != nil {
+				flagValues.PortBand = strconv.Itoa(s.Ports.Band)
+				flagValues.Has.PortBand = true
+			}
+			flags, flagIssues := manifest.FlagsInput(flagValues)
 			if len(flagIssues) != 0 {
 				t.Fatalf("flag issues: %v", flagIssues)
 			}
