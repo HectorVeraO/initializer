@@ -4,12 +4,13 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
@@ -40,8 +41,14 @@ type Context struct {
 	Stdout, Stderr io.Writer
 	Stdin          io.Reader
 	// Args is the original command line.
-	Args   []string
+	Args []string
+	// Format is "text" or "json".
+	Format string
+	// Logger discards every event unless --log json is set.
 	Logger *slog.Logger
+	// Notes and Warnings are collected for the result document.
+	Notes    []string
+	Warnings []Warning
 }
 
 func main() {
@@ -54,14 +61,29 @@ func run(args []string, stdout, stderr io.Writer) int {
 		Stdout: stdout,
 		Stderr: stderr,
 		Stdin:  os.Stdin,
-		Logger: slog.New(slog.NewJSONHandler(stderr, nil)),
+		Format: formatText,
+		Logger: discardLogger(),
 	}
 	return runWith(ctx, args)
+}
+
+// useOutputOptions applies --format and --log to ctx.
+func useOutputOptions(ctx *Context, format string, logJSON bool) {
+	ctx.Format = format
+	if logJSON {
+		ctx.Logger = slog.New(slog.NewJSONHandler(ctx.Stderr, nil))
+	}
 }
 
 // runWith executes one command line against ctx and returns the exit code.
 func runWith(ctx *Context, args []string) int {
 	ctx.Args = args
+	if ctx.Logger == nil {
+		ctx.Logger = discardLogger()
+	}
+	if ctx.Format == "" {
+		ctx.Format = formatText
+	}
 	if len(args) == 0 {
 		writeOverview(ctx.Stderr)
 		return exitUsage
@@ -73,6 +95,8 @@ func runWith(ctx *Context, args []string) int {
 	found := resolve(args)
 	switch {
 	case found.problem != nil:
+		format, logJSON := lookAhead(args)
+		useOutputOptions(ctx, format, logJSON)
 		return reportProblems(ctx, []Problem{*found.problem})
 	case found.group != "":
 		return runGroup(ctx, found.group, args[1:])
@@ -91,20 +115,41 @@ func runGroup(ctx *Context, group string, rest []string) int {
 	for _, cmd := range groupCommands(group) {
 		verbs = append(verbs, cmd.Path[1])
 	}
+	format, logJSON := lookAhead(rest)
+	useOutputOptions(ctx, format, logJSON)
+	if ctx.isJSON() {
+		return reportProblems(ctx, []Problem{{Arg: group, Message: "needs a command: " + strings.Join(verbs, ", ")}})
+	}
 	fmt.Fprintf(ctx.Stderr, "error: %s needs a command: %s\n\nCommands:\n", group, strings.Join(verbs, ", "))
 	writeCommandRows(ctx.Stderr, groupCommands(group))
 	ctx.Logger.Error("usage_error", slog.Int("problem_count", 1))
 	return exitUsage
 }
 
+// registerFlags registers the flags of cmd on set: its own, then --format and
+// --log (every command but help). It returns the bound options and the output
+// options (nil for help).
+func registerFlags(set *flagSet, cmd *Command) (opts any, out *outputOptions) {
+	if cmd.Flags != nil {
+		opts = cmd.Flags(set)
+	}
+	if cmd.Path[0] != "help" {
+		out = registerOutputFlags(set)
+	}
+	return opts, out
+}
+
 // runCommand scans args against cmd's flags, reports every command-line
 // problem at once, warns about deprecated spellings and runs the command.
 func runCommand(ctx *Context, cmd *Command, args []string) int {
 	set := newFlagSet(strings.Join(cmd.Path, " "))
-	opts := cmd.Flags(set)
+	opts, out := registerFlags(set, cmd)
 	var wantsHelp bool
 	set.boolean(&wantsHelp, flagSpec{Name: "help", Short: "h", Hidden: true})
 	positionals, problems := scan(set, args)
+	if out != nil {
+		useOutputOptions(ctx, out.format, out.log == formatJSON)
+	}
 	if set.given["help"] > 0 {
 		writeCommandHelp(ctx.Stdout, cmd)
 		return exitOK
@@ -121,33 +166,15 @@ func runCommand(ctx *Context, cmd *Command, args []string) int {
 		return reportProblems(ctx, problems)
 	}
 	for _, spec := range set.specs {
-		if spec.Deprecated != "" && set.given[spec.Name] > 0 {
-			fmt.Fprintf(ctx.Stderr, "warning: --%s is deprecated; %s\n", spec.Name, spec.Deprecated)
+		if spec.Deprecated == "" || set.given[spec.Name] == 0 {
+			continue
 		}
+		message := fmt.Sprintf("--%s is deprecated", spec.Name)
+		fmt.Fprintf(ctx.Stderr, "warning: %s; %s\n", message, spec.Deprecated)
+		ctx.Warnings = append(ctx.Warnings, Warning{Code: codeFlagDeprecated, Message: message, Hint: spec.Deprecated})
+		ctx.Logger.Warn("flag_deprecated", slog.String("flag", "--"+spec.Name))
 	}
 	return cmd.Run(ctx, opts, positionals)
-}
-
-// reportProblems writes every problem, a count and the usage_error event; it
-// returns the usage exit code.
-func reportProblems(ctx *Context, problems []Problem) int {
-	for _, problem := range problems {
-		if problem.Arg == "" {
-			fmt.Fprintf(ctx.Stderr, "error: %s\n", problem.Message)
-		} else {
-			fmt.Fprintf(ctx.Stderr, "error: %s: %s\n", problem.Arg, problem.Message)
-		}
-		if problem.Suggestion != "" {
-			fmt.Fprintf(ctx.Stderr, "  hint: did you mean %q?\n", problem.Suggestion)
-		}
-	}
-	noun := "problems"
-	if len(problems) == 1 {
-		noun = "problem"
-	}
-	fmt.Fprintf(ctx.Stderr, "%d %s.\n", len(problems), noun)
-	ctx.Logger.Error("usage_error", slog.Int("problem_count", len(problems)))
-	return exitUsage
 }
 
 // runHelp prints the overview, a group's command list or one command's help.
@@ -172,22 +199,18 @@ func runHelp(ctx *Context, _ any, words []string) int {
 
 func runCatalogBuild(ctx *Context, opts any, _ []string) int {
 	o := opts.(*catalogBuildOptions)
-	stdout, stderr, logger := ctx.Stdout, ctx.Stderr, ctx.Logger
 
 	info, err := os.Stat(o.root)
 	if err != nil || !info.IsDir() {
-		logger.Error("input_unreadable", slog.String("error", "root is not a readable directory"))
-		return exitInternal
+		return fail(ctx, "input_unreadable", codeInputUnreadable, errors.New("root is not a readable directory"))
 	}
-	list, err := readLimited(o.files, maxFileListBytes)
+	fileList, err := readLimited(o.files, maxFileListBytes)
 	if err != nil {
-		logger.Error("input_unreadable", slog.String("error", err.Error()))
-		return exitInternal
+		return fail(ctx, "input_unreadable", codeInputUnreadable, err)
 	}
-	files, err := catalog.ParseFileList(list)
+	files, err := catalog.ParseFileList(fileList)
 	if err != nil {
-		logger.Error("input_unreadable", slog.String("error", err.Error()))
-		return exitInternal
+		return fail(ctx, "input_unreadable", codeInputUnreadable, err)
 	}
 
 	built, issues, err := catalog.Build(catalog.BuildOptions{
@@ -196,44 +219,27 @@ func runCatalogBuild(ctx *Context, opts any, _ []string) int {
 		Generator: generator.Version,
 	})
 	if err != nil {
-		logger.Error("catalog_build_failed", slog.String("error", err.Error()))
-		return exitInternal
+		return fail(ctx, "catalog_build_failed", codeInternalError, err)
 	}
 	if len(issues) > 0 {
-		logger.Warn("validation_failed", slog.Int("issue_count", len(issues)))
-		if err := issue.Write(stderr, issues); err != nil {
-			logger.Error("issues_unwritable", slog.String("error", err.Error()))
-			return exitInternal
-		}
-		return exitIssues
+		return reportIssues(ctx, issues, issueView{})
 	}
 	encoded, err := catalog.Encode(built)
 	if err != nil {
-		logger.Error("catalog_build_failed", slog.String("error", err.Error()))
-		return exitInternal
+		return fail(ctx, "catalog_build_failed", codeInternalError, err)
 	}
 	if err := writeOutput(o.out, encoded); err != nil {
-		logger.Error("output_unwritable", slog.String("error", err.Error()))
-		return exitInternal
+		return fail(ctx, "output_unwritable", codeOutputUnwritable, err)
 	}
 	sum := sha256.Sum256(encoded)
-	result := struct {
-		Catalog string `json:"catalog"`
-		SHA256  string `json:"sha256"`
-	}{Catalog: filepath.ToSlash(o.out), SHA256: hex.EncodeToString(sum[:])}
-	line, err := json.Marshal(result)
-	if err != nil {
-		logger.Error("catalog_build_failed", slog.String("error", err.Error()))
-		return exitInternal
+	digest := hex.EncodeToString(sum[:])
+	if code := writeCatalogBuilt(ctx, o.out, digest); code != exitOK {
+		return code
 	}
-	if _, err := stdout.Write(append(line, '\n')); err != nil {
-		logger.Error("result_unwritable", slog.String("error", err.Error()))
-		return exitInternal
-	}
-	logger.Info("catalog_built",
+	ctx.Logger.Info("catalog_built",
 		slog.Int("spec_count", len(built.Specs)),
 		slog.Int("stack_count", len(built.Stacks)),
-		slog.String("sha256", result.SHA256))
+		slog.String("sha256", digest))
 	return exitOK
 }
 
@@ -247,7 +253,6 @@ func writeOutput(path string, data []byte) error {
 
 func runVerify(ctx *Context, opts any, positionals []string) int {
 	o := opts.(*verifyOptions)
-	stdout, stderr, logger := ctx.Stdout, ctx.Stderr, ctx.Logger
 	dir := "."
 	if o.project != "" {
 		dir = o.project
@@ -255,46 +260,18 @@ func runVerify(ctx *Context, opts any, positionals []string) int {
 	if len(positionals) > 0 {
 		dir = positionals[0]
 	}
-	differences, err := verify.Project(dir)
+	report, err := verify.Check(dir)
 	if err != nil {
-		logger.Error("verify_unreadable", slog.String("error", err.Error()))
-		return exitInternal
+		return fail(ctx, "verify_unreadable", codeVerifyUnreadable, err)
 	}
-	result := struct {
-		Project     string `json:"project"`
-		Differences int    `json:"differences"`
-	}{Project: filepath.ToSlash(dir), Differences: len(differences)}
-	if code := writeResult(stdout, result, logger); code != exitOK {
-		return code
+	if len(report.Differences) > 0 {
+		ctx.Logger.Warn("verify_failed", slog.Int("difference_count", len(report.Differences)))
 	}
-	if len(differences) > 0 {
-		logger.Warn("verify_failed", slog.Int("difference_count", len(differences)))
-		if err := issue.Write(stderr, differences); err != nil {
-			logger.Error("issues_unwritable", slog.String("error", err.Error()))
-			return exitInternal
-		}
-		return exitIssues
-	}
-	return exitOK
-}
-
-// writeResult writes v as one JSON line on stdout.
-func writeResult(stdout io.Writer, v any, logger *slog.Logger) int {
-	line, err := json.Marshal(v)
-	if err != nil {
-		logger.Error("result_unencodable", slog.String("error", err.Error()))
-		return exitInternal
-	}
-	if _, err := stdout.Write(append(line, 0x0a)); err != nil {
-		logger.Error("result_unwritable", slog.String("error", err.Error()))
-		return exitInternal
-	}
-	return exitOK
+	return writeVerify(ctx, report.Project, report.Differences)
 }
 
 func runGenerate(ctx *Context, opts any, positionals []string) int {
 	o := opts.(*generateOptions)
-	stdout, stderr, logger := ctx.Stdout, ctx.Stderr, ctx.Logger
 	dir := o.out
 	if len(positionals) > 0 {
 		dir = positionals[0]
@@ -306,8 +283,7 @@ func runGenerate(ctx *Context, opts any, positionals []string) int {
 	if filePath := o.filePath(); filePath != "" {
 		data, err := readInput(filePath)
 		if err != nil {
-			logger.Error("input_unreadable", slog.String("error", err.Error()))
-			return exitInternal
+			return fail(ctx, "input_unreadable", codeInputUnreadable, err)
 		}
 		selection, issues = manifest.DecodeSelection(filepath.ToSlash(filePath), data)
 	} else {
@@ -317,10 +293,10 @@ func runGenerate(ctx *Context, opts any, positionals []string) int {
 		case name != "":
 		case dir != "":
 			name, fromFolder = folderName(dir), true
-			notes = append(notes, fmt.Sprintf("note: project name %q comes from the folder; pass --name to set it", name))
+			notes = append(notes, fmt.Sprintf("project name %q comes from the folder; pass --name to set it", name))
 		default:
 			name = defaultProjectName
-			notes = append(notes, fmt.Sprintf("note: no name given; using %q", name))
+			notes = append(notes, fmt.Sprintf("no name given; using %q", name))
 		}
 		selection, issues = manifest.SelectionFromFlags(manifest.SelectionFlags{
 			Name:       name,
@@ -334,26 +310,22 @@ func runGenerate(ctx *Context, opts any, positionals []string) int {
 		}
 	}
 	if len(issues) > 0 {
-		logger.Warn("validation_failed", slog.Int("issue_count", len(issues)))
-		if err := issue.Write(stderr, issues); err != nil {
-			logger.Error("issues_unwritable", slog.String("error", err.Error()))
-			return exitInternal
-		}
-		return exitIssues
+		return reportIssues(ctx, issues, issueView{dir: dir, selectionFile: o.filePath()})
 	}
 	for _, note := range notes {
-		fmt.Fprintln(stderr, note)
+		fmt.Fprintf(ctx.Stderr, "note: %s\n", note)
 	}
+	ctx.Notes = notes
 	if dir == "" {
 		dir = selection.Project.Name
 	}
-	logger.Info("selection_decoded",
+	ctx.Logger.Info("selection_decoded",
 		slog.Int("stack_count", len(selection.Stacks)),
 		slog.Int("module_count", len(selection.Modules)),
 		slog.Bool("all_modules", selection.AllModules))
-	return generateProject(generateInput{
-		root: o.root, catalogPath: o.catalog, out: dir, selection: selection,
-	}, stdout, stderr, logger)
+	return generateProject(ctx, generateInput{
+		root: o.root, catalogPath: o.catalog, out: dir, selection: selection, selectionFile: o.filePath(),
+	})
 }
 
 // defaultProjectName names a project when neither a flag nor a folder does.
@@ -388,81 +360,95 @@ func folderNameIssues(issues []issue.Issue, name, dir string) []issue.Issue {
 }
 
 type generateInput struct {
-	root, catalogPath, out string
-	selection              manifest.Selection
+	root, catalogPath, out, selectionFile string
+	selection                             manifest.Selection
+}
+
+// moduleIDs returns the sorted, distinct module ids of every stack of c.
+func moduleIDs(c catalog.Catalog) []string {
+	seen := map[string]bool{}
+	var ids []string
+	for _, stack := range c.Stacks {
+		for _, module := range stack.Modules {
+			if !seen[module.Module] {
+				seen[module.Module] = true
+				ids = append(ids, module.Module)
+			}
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // generateProject runs everything after the selection is decoded: catalog,
 // plan, source and output checks, the in-memory build and the write.
-func generateProject(in generateInput, stdout, stderr io.Writer, logger *slog.Logger) int {
+func generateProject(ctx *Context, in generateInput) int {
+	logger := ctx.Logger
 	info, err := os.Stat(in.root)
 	if err != nil || !info.IsDir() {
-		logger.Error("input_unreadable", slog.String("error", "root is not a readable directory"))
-		return exitInternal
+		return fail(ctx, "input_unreadable", codeInputUnreadable, errors.New("root is not a readable directory"))
 	}
 	catalogBytes, err := readLimited(in.catalogPath, maxFileListBytes)
 	if err != nil {
-		logger.Error("input_unreadable", slog.String("error", err.Error()))
-		return exitInternal
+		return fail(ctx, "input_unreadable", codeCatalogUnreadable, err)
 	}
 	built, decodeIssues := catalog.Decode(catalogBytes)
 	if len(decodeIssues) > 0 {
-		logger.Error("catalog_undecodable", slog.Int("issue_count", len(decodeIssues)),
-			slog.String("error", decodeIssues[0].Message))
-		return exitInternal
+		cause := errors.New(decodeIssues[0].Message)
+		logger.Error("catalog_undecodable", slog.Int("issue_count", len(decodeIssues)), slog.String("error", cause.Error()))
+		return reportFailure(ctx, codeCatalogUnreadable, cause.Error())
 	}
 	resolved, issues := plan.Resolve(built, in.selection)
 	root := os.DirFS(in.root)
 	if len(issues) == 0 {
 		sourceIssues, err := plan.CheckSources(root, resolved)
 		if err != nil {
-			logger.Error("sources_unreadable", slog.String("error", err.Error()))
-			return exitInternal
+			return fail(ctx, "sources_unreadable", codeInternalError, err)
 		}
 		issues = append(issues, sourceIssues...)
 	}
 	outputIssues, err := emit.CheckOutput(in.out)
 	if err != nil {
-		logger.Error("output_unreadable", slog.String("error", err.Error()))
-		return exitInternal
-	}
-	for i := range outputIssues {
-		if outputIssues[i].Code == emit.CodeOutputNotEmpty {
-			outputIssues[i].Hint = "choose another folder: initializer generate <dir>"
-		}
+		return fail(ctx, "output_unreadable", codeInternalError, err)
 	}
 	issues = append(issues, outputIssues...)
 	if len(issues) > 0 {
-		logger.Warn("validation_failed", slog.Int("issue_count", len(issues)))
-		if err := issue.Write(stderr, issues); err != nil {
-			logger.Error("issues_unwritable", slog.String("error", err.Error()))
-			return exitInternal
-		}
-		return exitIssues
+		return reportIssues(ctx, issues, issueView{dir: in.out, moduleIDs: moduleIDs(built), selectionFile: in.selectionFile})
 	}
 
+	var added []moduleAdded
 	for _, pull := range plan.Pulls(resolved, in.selection) {
 		logger.Info("module_required",
 			slog.String("module", pull.Module),
 			slog.String("required_by", strings.Join(pull.RequiredBy, ",")),
 			slog.String("stack", pull.Stack))
+		added = append(added, moduleAdded{Module: pull.Module, RequiredBy: pull.RequiredBy, Stack: pull.Stack})
 	}
 
 	sum := sha256.Sum256(catalogBytes)
-	project, err := emit.Build(emit.BuildOptions{Root: root, Plan: resolved, CatalogSHA256: hex.EncodeToString(sum[:])})
+	digest := hex.EncodeToString(sum[:])
+	project, err := emit.Build(emit.BuildOptions{Root: root, Plan: resolved, CatalogSHA256: digest})
 	if err != nil {
-		logger.Error("project_build_failed", slog.String("error", err.Error()))
-		return exitInternal
+		return fail(ctx, "project_build_failed", codeInternalError, err)
 	}
 	if err := emit.Write(in.out, project); err != nil {
-		logger.Error("project_write_failed", slog.String("error", err.Error()))
-		return exitInternal
+		return fail(ctx, "project_write_failed", codeOutputUnwritable, err)
 	}
-	result := struct {
-		Project string `json:"project"`
-		Files   int    `json:"files"`
-	}{Project: filepath.ToSlash(in.out), Files: len(project.Files)}
-	if code := writeResult(stdout, result, logger); code != exitOK {
+	var installed []moduleInstalled
+	for _, stack := range resolved.Stacks {
+		for _, module := range stack.Modules {
+			installed = append(installed, moduleInstalled{Stack: stack.Stack, Module: module.Module, Version: module.Version})
+		}
+	}
+	code := writeGenerate(ctx, generateResult{
+		project: resolved.Selection.Project.Name,
+		path:    in.out,
+		files:   len(project.Files),
+		catalog: catalogRef{SHA256: digest, File: filepath.ToSlash(in.catalogPath)},
+		modules: installed,
+		added:   added,
+	})
+	if code != exitOK {
 		return code
 	}
 	logger.Info("project_generated",

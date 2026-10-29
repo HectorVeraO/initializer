@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"reflect"
 	"testing"
 	"testing/fstest"
 
@@ -66,7 +67,7 @@ func TestMarkerIssues(t *testing.T) {
 			_, issues := buildRepo(t, repo)
 			want := issue.Issue{Code: tc.code, Path: tc.path, Message: tc.message}
 			for _, got := range issues {
-				if got == want {
+				if reflect.DeepEqual(got, want) {
 					return
 				}
 			}
@@ -80,7 +81,7 @@ func TestStackCoreMarkerReportsOnlyTheUnknownStack(t *testing.T) {
 	put(repo, composeFile, "name: fixture-app\n# initializer:stack core\n# initializer:end core\n")
 	_, issues := buildRepo(t, repo)
 	want := []issue.Issue{{Code: "MARKER_STACK_UNKNOWN", Path: composeFile, Message: `marker names stack "core" (line 2), which is not a stack of the stack table`}}
-	if len(issues) != len(want) || issues[0] != want[0] {
+	if len(issues) != len(want) || !reflect.DeepEqual(issues[0], want[0]) {
 		t.Errorf("want exactly %+v, got %+v", want, issues)
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,22 +38,55 @@ func writeSelection(t *testing.T, content string) string {
 	return path
 }
 
-// issueArray returns the issue array printed on stderr, or nil when none.
-func issueArray(t *testing.T, stderr string) []map[string]string {
+// executeJSON runs args with --format json.
+func executeJSON(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
-	var found []map[string]string
-	arrays := 0
-	for _, line := range strings.Split(stderr, "\n") {
-		if !strings.HasPrefix(line, "[") {
-			continue
-		}
-		arrays++
-		if err := json.Unmarshal([]byte(line), &found); err != nil {
-			t.Fatalf("stderr array is not JSON: %v", err)
-		}
+	return execute(t, append(append([]string{}, args...), "--format", "json")...)
+}
+
+// executeLogged runs args with --log json.
+func executeLogged(t *testing.T, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	return execute(t, append(append([]string{}, args...), "--log", "json")...)
+}
+
+// decodeDocument decodes text, which must hold exactly one JSON value, into target.
+func decodeDocument(t *testing.T, text string, target any) {
+	t.Helper()
+	decoder := json.NewDecoder(strings.NewReader(text))
+	if err := decoder.Decode(target); err != nil {
+		t.Fatalf("not one JSON document: %v\n%s", err, text)
 	}
-	if arrays > 1 {
-		t.Fatalf("want at most one array on stderr, got %d", arrays)
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		t.Fatalf("more than one JSON value: %s", text)
+	}
+}
+
+// issueArray returns the issues of the exit-1 document in stdout, or nil when
+// stdout is empty. Values are the string members only.
+func issueArray(t *testing.T, stdout string) []map[string]string {
+	t.Helper()
+	if stdout == "" {
+		return nil
+	}
+	var doc struct {
+		Schema int              `json:"schema"`
+		OK     bool             `json:"ok"`
+		Issues []map[string]any `json:"issues"`
+	}
+	decodeDocument(t, stdout, &doc)
+	if doc.Schema != 1 || doc.OK {
+		t.Fatalf("not an issues document: %s", stdout)
+	}
+	var found []map[string]string
+	for _, raw := range doc.Issues {
+		flat := map[string]string{}
+		for key, value := range raw {
+			if text, ok := value.(string); ok {
+				flat[key] = text
+			}
+		}
+		found = append(found, flat)
 	}
 	return found
 }
@@ -96,7 +131,7 @@ func TestVerifyWithoutADirectoryChecksTheWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	code, _, stderr := execute(t, "verify")
-	if code != exitInternal || !strings.Contains(stderr, "verify_unreadable") {
+	if code != exitInternal || !strings.HasSuffix(stderr, "[VERIFY_UNREADABLE]\n") {
 		t.Fatalf("an empty working directory is not a project: exit %d %s", code, stderr)
 	}
 
@@ -111,19 +146,25 @@ func TestVerifyWithoutADirectoryChecksTheWorkingDirectory(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("a working directory holding a lock verifies: exit %d %s", code, stderr)
 	}
-	if !strings.Contains(stdout, `"differences":0`) {
+	if stdout != "No differences.\n" {
 		t.Fatalf("stdout %q does not report zero differences", stdout)
 	}
 }
 
 func TestUnreadableSelectionExitsThree(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "absent.json")
-	code, _, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", missing)
-	if code != 3 {
-		t.Fatalf("exit %d, want 3", code)
+	code, stdout, stderr := executeJSON(t, "generate", "o", "--root", ".", "--catalog", "c.json", "-f", missing)
+	if code != 3 || stdout != "" {
+		t.Fatalf("exit %d, stdout %q, want 3 and empty", code, stdout)
 	}
-	if issueArray(t, stderr) != nil {
-		t.Fatalf("no issue array expected for an I/O error: %s", stderr)
+	var doc struct {
+		Schema int  `json:"schema"`
+		OK     bool `json:"ok"`
+		Error  struct{ Code, Message string }
+	}
+	decodeDocument(t, stderr, &doc)
+	if doc.Schema != 1 || doc.OK || doc.Error.Code != "INPUT_UNREADABLE" || doc.Error.Message == "" {
+		t.Fatalf("exit-3 document = %+v", doc)
 	}
 }
 
@@ -139,12 +180,12 @@ func TestSelectionSizeLimit(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			path := writeSelection(t, validSelection+strings.Repeat(" ", tc.padding))
-			code, _, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", path)
+			code, stdout, stderr := executeLogged(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", path)
 			if tc.code == 3 && code != 3 {
 				t.Fatalf("exit %d, want 3", code)
 			}
-			if tc.code == 3 && issueArray(t, stderr) != nil {
-				t.Fatalf("no issue array expected for an I/O error: %s", stderr)
+			if tc.code == 3 && (stdout != "" || !strings.Contains(stderr, "[INPUT_UNREADABLE]")) {
+				t.Fatalf("want an I/O error on stderr only: %q %s", stdout, stderr)
 			}
 			if tc.code == 0 && !strings.Contains(stderr, "selection_decoded") {
 				t.Fatalf("input at the limit must be decoded, got exit %d: %s", code, stderr)
@@ -155,11 +196,11 @@ func TestSelectionSizeLimit(t *testing.T) {
 
 func TestSelectionIssuesExitOneWithSortedArray(t *testing.T) {
 	bad := `{"schema":1,"project":{"name":"A","goModule":"x"},"stacks":["ng-web"],"modules":["Bad"]}`
-	code, _, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", writeSelection(t, bad))
+	code, stdout, _ := executeJSON(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o", "--selection", writeSelection(t, bad))
 	if code != 1 {
 		t.Fatalf("exit %d, want 1", code)
 	}
-	issues := issueArray(t, stderr)
+	issues := issueArray(t, stdout)
 	if len(issues) < 3 {
 		t.Fatalf("want every problem reported, got %v", issues)
 	}
@@ -176,12 +217,12 @@ func TestSelectionIssuesExitOneWithSortedArray(t *testing.T) {
 }
 
 func TestFlagSelectionIssuesUseFlagsSource(t *testing.T) {
-	code, _, stderr := execute(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o",
+	code, stdout, _ := executeJSON(t, "generate", "--root", ".", "--catalog", "c.json", "--out", "o",
 		"--name", "A", "--stacks", "go-srv", "--go-module", "example.com/acme/backend", "--modules", "parameters")
 	if code != 1 {
 		t.Fatalf("exit %d, want 1", code)
 	}
-	issues := issueArray(t, stderr)
+	issues := issueArray(t, stdout)
 	if len(issues) != 1 || issues[0]["path"] != "flags#/project/name" {
 		t.Fatalf("want one issue at flags#/project/name, got %v", issues)
 	}
@@ -204,12 +245,12 @@ func decodedEvent(t *testing.T, stderr string) map[string]any {
 }
 
 func TestValidSelectionFileIsDecodedBeforeTheCatalogIsRead(t *testing.T) {
-	code, stdout, stderr := execute(t, "generate", "o", "--root", ".", "--catalog", "c.json", "-f", writeSelection(t, validSelection))
-	if code != exitInternal || !strings.Contains(stderr, "input_unreadable") {
+	code, stdout, stderr := executeLogged(t, "generate", "o", "--root", ".", "--catalog", "c.json", "-f", writeSelection(t, validSelection))
+	if code != exitInternal || !strings.Contains(stderr, "input_unreadable") || !strings.Contains(stderr, "[CATALOG_UNREADABLE]") {
 		t.Fatalf("want exit %d with an unreadable catalog: %d %s", exitInternal, code, stderr)
 	}
-	if issueArray(t, stderr) != nil || stdout != "" {
-		t.Fatalf("want no issues and empty stdout: %q %s", stdout, stderr)
+	if stdout != "" {
+		t.Fatalf("want empty stdout: %q", stdout)
 	}
 	event := decodedEvent(t, stderr)
 	if event["stack_count"] != float64(1) || event["module_count"] != float64(1) || event["all_modules"] != false {
@@ -218,7 +259,7 @@ func TestValidSelectionFileIsDecodedBeforeTheCatalogIsRead(t *testing.T) {
 }
 
 func TestValidFlagSelectionAndAllModules(t *testing.T) {
-	_, _, stderr := execute(t, "generate", "o", "--root", ".", "--catalog", "c.json",
+	_, _, stderr := executeLogged(t, "generate", "o", "--root", ".", "--catalog", "c.json",
 		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv,ng-web", "--all-modules")
 	event := decodedEvent(t, stderr)
 	if event["stack_count"] != float64(2) || event["module_count"] != float64(0) || event["all_modules"] != true {
@@ -227,9 +268,12 @@ func TestValidFlagSelectionAndAllModules(t *testing.T) {
 }
 
 func TestProgressLinesAreStructuredJSON(t *testing.T) {
-	_, _, stderr := execute(t, "generate", "o", "--root", ".", "--catalog", "c.json", "-f", writeSelection(t, validSelection))
+	_, _, stderr := executeLogged(t, "generate", "o", "--root", ".", "--catalog", "c.json", "-f", writeSelection(t, validSelection))
 	events := 0
 	for _, line := range strings.Split(strings.TrimSpace(stderr), "\n") {
+		if strings.HasPrefix(line, "error:") {
+			continue
+		}
 		var record map[string]any
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("stderr line is not JSON: %q", line)
@@ -268,13 +312,14 @@ func TestCatalogBuildWritesTheCatalogTwiceIdentically(t *testing.T) {
 	outA, outB := filepath.Join(dir, "a", "catalog.lock.json"), filepath.Join(dir, "b.json")
 	root := filepath.Join(cleanFixture, "repo")
 	for _, out := range []string{outA, outB} {
-		code, stdout, stderr := execute(t, "catalog", "build", "--root", root, "--files", list, "--out", out)
+		code, stdout, stderr := executeJSON(t, "catalog", "build", "--root", root, "--files", list, "--out", out)
 		if code != exitOK {
 			t.Fatalf("exit %d: %s", code, stderr)
 		}
-		var result map[string]string
-		if err := json.Unmarshal([]byte(stdout), &result); err != nil || result["catalog"] == "" {
-			t.Fatalf("stdout = %q (%v)", stdout, err)
+		var result map[string]any
+		decodeDocument(t, stdout, &result)
+		if result["schema"] != float64(1) || result["ok"] != true || result["catalog"] == "" {
+			t.Fatalf("stdout = %q", stdout)
 		}
 		written, readErr := os.ReadFile(out)
 		if readErr != nil {
@@ -309,18 +354,18 @@ func TestCatalogBuildIssueExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := filepath.Join(t.TempDir(), "c.json")
-	code, stdout, stderr := execute(t, "catalog", "build", "--root", repo, "--files", list, "--out", out)
-	if code != exitIssues || stdout != "" {
-		t.Fatalf("exit %d stdout %q", code, stdout)
+	code, stdout, stderr := executeJSON(t, "catalog", "build", "--root", repo, "--files", list, "--out", out)
+	if code != exitIssues || stderr != "" {
+		t.Fatalf("exit %d stderr %q", code, stderr)
 	}
 	hasUnowned := false
-	for _, issue := range issueArray(t, stderr) {
+	for _, issue := range issueArray(t, stdout) {
 		if issue["code"] == "FILE_UNOWNED" && issue["path"] == "specs/stray/x.md" {
 			hasUnowned = true
 		}
 	}
 	if !hasUnowned {
-		t.Fatalf("want a FILE_UNOWNED issue for specs/stray/x.md on stderr: %q", stderr)
+		t.Fatalf("want a FILE_UNOWNED issue for specs/stray/x.md on stdout: %q", stdout)
 	}
 	if _, err := os.Stat(out); err == nil {
 		t.Fatalf("no catalog may be written when issues exist")

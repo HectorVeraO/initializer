@@ -10,11 +10,15 @@ import (
 
 // Issue is one validation problem; commands collect all of them before failing.
 type Issue struct {
-	Code    string `json:"code"`
-	Path    string `json:"path"`
+	Code string `json:"code"`
+	Path string `json:"path"`
+	// Line is the 1-based source line of a YAML input; omitted when unknown.
+	Line    int    `json:"line,omitempty"`
 	Message string `json:"message"`
 	// Hint is what to do next; omitted from the output when empty.
 	Hint string `json:"hint,omitempty"`
+	// SuggestedNames lists names that would resolve a COMPONENT_NAME_REQUIRED issue.
+	SuggestedNames []string `json:"suggestedNames,omitempty"`
 }
 
 // Sort orders issues by path, then code, then message, in place.

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -171,7 +172,11 @@ func scan(set *flagSet, args []string) (positionals []string, problems []Problem
 			continue
 		}
 		if err := spec.Value.Set(value); err != nil {
-			problems = append(problems, Problem{Arg: arg, Message: "invalid value: " + err.Error()})
+			problem := Problem{Arg: arg, Message: "invalid value: " + err.Error()}
+			if suggester, ok := spec.Value.(interface{ Suggest(value string) string }); ok {
+				problem.Suggestion = suggester.Suggest(value)
+			}
+			problems = append(problems, problem)
 		}
 	}
 	return positionals, problems
@@ -205,13 +210,15 @@ func suggest(word string, candidates []string) string {
 	return best
 }
 
-// levenshtein returns the edit distance between a and b, counted in runes.
+// levenshtein returns the edit distance between a and b, counted in runes;
+// swapping two adjacent runes costs one edit.
 func levenshtein(a, b string) int {
 	left, right := []rune(a), []rune(b)
 	previous := make([]int, len(right)+1)
 	for j := range previous {
 		previous[j] = j
 	}
+	beforePrevious := make([]int, len(right)+1)
 	for i := 1; i <= len(left); i++ {
 		current := make([]int, len(right)+1)
 		current[0] = i
@@ -221,8 +228,43 @@ func levenshtein(a, b string) int {
 				cost = 0
 			}
 			current[j] = min(previous[j]+1, current[j-1]+1, previous[j-1]+cost)
+			if i > 1 && j > 1 && left[i-1] == right[j-2] && left[i-2] == right[j-1] {
+				current[j] = min(current[j], beforePrevious[j-2]+1)
+			}
 		}
-		previous = current
+		beforePrevious, previous = previous, current
 	}
 	return previous[len(right)]
+}
+
+// choiceValue is a string flag value limited to a fixed set.
+type choiceValue struct {
+	target  *string
+	choices []string
+}
+
+func (v choiceValue) String() string {
+	if v.target == nil {
+		return ""
+	}
+	return *v.target
+}
+
+func (v choiceValue) Set(value string) error {
+	if !slices.Contains(v.choices, value) {
+		return fmt.Errorf("%q must be %s", value, strings.Join(v.choices, " or "))
+	}
+	*v.target = value
+	return nil
+}
+
+// Suggest returns the choice closest to a mistyped value, or "".
+func (v choiceValue) Suggest(value string) string {
+	return suggest(value, v.choices)
+}
+
+// choice registers a flag limited to choices, bound to target.
+func (s *flagSet) choice(target *string, choices []string, spec flagSpec) {
+	spec.Value = choiceValue{target: target, choices: choices}
+	s.add(spec)
 }

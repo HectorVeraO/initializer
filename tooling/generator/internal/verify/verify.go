@@ -26,17 +26,31 @@ const (
 // maxLockBytes bounds the lock read from disk.
 const maxLockBytes = 32 << 20
 
+// Report is the outcome of checking one project.
+type Report struct {
+	// Project is the project name the lock records.
+	Project string
+	// Differences are sorted by path then code.
+	Differences []issue.Issue
+}
+
 // Project recomputes every hash the lock lists and returns the differences
 // sorted by path then code. The error is for an unreadable or undecodable
 // lock and for I/O failures; a project that differs is not an error.
 func Project(dir string) ([]issue.Issue, error) {
+	report, err := Check(dir)
+	return report.Differences, err
+}
+
+// Check is Project plus the project name the lock records.
+func Check(dir string) (Report, error) {
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		return nil, errors.New("project is not a readable directory")
+		return Report{}, errors.New("project is not a readable directory")
 	}
 	lock, err := readLock(filepath.Join(dir, lockfile.Name))
 	if err != nil {
-		return nil, err
+		return Report{}, err
 	}
 
 	var entries []lockfile.File
@@ -58,7 +72,7 @@ func Project(dir string) ([]issue.Issue, error) {
 		listed[entry.Path] = true
 		difference, err := compare(dir, entry)
 		if err != nil {
-			return nil, err
+			return Report{}, err
 		}
 		if difference != nil {
 			differences = append(differences, *difference)
@@ -66,11 +80,11 @@ func Project(dir string) ([]issue.Issue, error) {
 	}
 	untracked, err := findUntracked(dir, folders, listed)
 	if err != nil {
-		return nil, err
+		return Report{}, err
 	}
 	differences = append(differences, untracked...)
 	issue.Sort(differences)
-	return differences, nil
+	return Report{Project: lock.Selection.Project.Name, Differences: differences}, nil
 }
 
 func readLock(path string) (lockfile.Lock, error) {

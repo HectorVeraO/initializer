@@ -49,9 +49,7 @@ func writeGroupHelp(w io.Writer, group string) {
 func writeCommandHelp(w io.Writer, cmd *Command) {
 	fmt.Fprintf(w, "Usage:\n  initializer %s\n\n%s\n", cmd.Usage, cmd.Description)
 	set := newFlagSet(strings.Join(cmd.Path, " "))
-	if cmd.Flags != nil {
-		cmd.Flags(set)
-	}
+	registerFlags(set, cmd)
 	var visible []flagSpec
 	for _, spec := range set.specs {
 		if !spec.Hidden {
