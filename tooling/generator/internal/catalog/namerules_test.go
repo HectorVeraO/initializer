@@ -72,6 +72,9 @@ func TestNameRuleIssueCodes(t *testing.T) {
 		{"reference value breaks the label grammar", func(t *testing.T, r fstest.MapFS) {
 			edit(t, r, referenceFile, `"name": "fixture-app"`, `"name": "Fixture_App"`)
 		}, []string{"REFERENCE_INVALID"}},
+		{"reference lists a stack twice", func(t *testing.T, r fstest.MapFS) {
+			put(r, referenceFile, "{\"schema\": 2, \"project\": {\"name\": \"fixture-app\"}, \"components\": [{\"stack\": \"go-srv\", \"name\": \"go-srv\"}, {\"stack\": \"go-srv\", \"name\": \"go-srv\"}, {\"stack\": \"ng-web\", \"name\": \"ng-web\"}]}\n")
+		}, []string{"REFERENCE_INVALID"}},
 		{"reference values conflict", func(t *testing.T, r fstest.MapFS) {
 			put(r, referenceFile, "{\"schema\": 2, \"project\": {\"name\": \"fixture-app\"}, \"components\": [{\"stack\": \"go-srv\", \"name\": \"same\"}, {\"stack\": \"ng-web\", \"name\": \"same\"}]}\n")
 		}, []string{"REFERENCE_INVALID"}},
