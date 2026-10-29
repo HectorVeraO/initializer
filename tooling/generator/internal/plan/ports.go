@@ -37,7 +37,7 @@ func (r *resolver) originOffsets() map[string]int {
 // portPlan applies the origin rule: the origin port is the origin of the
 // selected frontend stack, else of the backend stack, and the origin offset of
 // every unselected stack maps to it.
-func (r *resolver) portPlan(stacks []StackPlan) PortPlan {
+func (r *resolver) portPlan(stacks []ComponentPlan) PortPlan {
 	band := ports.DefaultBand
 	if r.sel.Ports != nil {
 		band = r.sel.Ports.Band

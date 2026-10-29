@@ -231,28 +231,22 @@ func componentFlags(entries []componentEntry) []manifest.ComponentFlag {
 	return flags
 }
 
-// multiComponentIssues reports COMPONENT_MULTI_UNSUPPORTED once when a stack
-// has several components.
-func multiComponentIssues(in manifest.Input) []issue.Issue {
-	if !hasSeveralOfStack(in.Selection) {
-		return nil
-	}
-	found := issue.Issue{
+// multiComponentIssue is the refusal of a plan with several backend components.
+func multiComponentIssue() issue.Issue {
+	return issue.Issue{
 		Code:    plan.CodeComponentMultiUnsupported,
 		Path:    issue.Path(selectionSource, "/components"),
 		Message: "several backend components are not supported by this generator yet",
 	}
-	return []issue.Issue{found}
 }
 
-// hasSeveralOfStack reports two components of one stack in the entries.
-func hasSeveralOfStack(sel manifest.Selection) bool {
-	seen := map[string]bool{}
+// hasSeveralBackends reports two or more backend entries.
+func hasSeveralBackends(sel manifest.Selection) bool {
+	count := 0
 	for _, component := range sel.Components {
-		if seen[component.Stack] {
-			return true
+		if manifest.IsBackendStack(component.Stack) {
+			count++
 		}
-		seen[component.Stack] = true
 	}
-	return false
+	return count > 1
 }

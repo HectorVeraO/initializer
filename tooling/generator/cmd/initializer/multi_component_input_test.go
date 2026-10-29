@@ -130,8 +130,11 @@ func TestThePastedNameHintClearsTheNameRequiredIssue(t *testing.T) {
 	if stdout == "" {
 		t.Fatalf("pasted %v: exit %d stderr %s", pasted, code, stderr)
 	}
-	if got := issuesOf(t, stdout).codes(); code != exitIssues || !reflect.DeepEqual(got, []string{"COMPONENT_MULTI_UNSUPPORTED"}) {
-		t.Fatalf("pasted %v: exit %d codes %v", pasted, code, got)
+	// The fixture catalog has no rule that uses a display name, so the plan, which
+	// now runs for a multi project, reports the override; the guard needs a clean plan.
+	got := issuesOf(t, stdout)
+	if code != exitIssues || !reflect.DeepEqual(got.codes(), []string{"NAME_OVERRIDE_UNUSED"}) || !strings.HasSuffix(got.Issues[0].Path, "#/displayName") {
+		t.Fatalf("pasted %v: exit %d issues %+v", pasted, code, got.Issues)
 	}
 }
 

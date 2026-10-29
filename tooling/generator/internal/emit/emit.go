@@ -64,7 +64,7 @@ func (b *builder) reserved(p string) bool {
 	case readmeName, lockfile.SelectionName, lockfile.Name:
 		return true
 	}
-	for _, stack := range b.opts.Plan.Stacks {
+	for _, stack := range b.opts.Plan.Components {
 		if root, ok := b.compositionRoot(stack.Stack); ok && root == p {
 			return true
 		}
@@ -101,7 +101,7 @@ func Build(opts BuildOptions) (Project, error) {
 	switch {
 	case opts.Root == nil:
 		return Project{}, errors.New("source file system is nil")
-	case len(opts.Plan.Stacks) == 0:
+	case len(opts.Plan.Components) == 0:
 		return Project{}, errors.New("plan has no stacks")
 	case selection.Project.Name == "":
 		return Project{}, errors.New("plan has no project name")
@@ -151,7 +151,7 @@ func (b *builder) run() (Project, error) {
 		}
 		lock.Specs = append(lock.Specs, entry)
 	}
-	for _, stack := range p.Stacks {
+	for _, stack := range p.Components {
 		for _, module := range stack.Modules {
 			entry := lockfile.Module{
 				Stack:          stack.Stack,
@@ -289,13 +289,13 @@ func (b *builder) readmeRun() render.ReadmeRun {
 	run := render.ReadmeRun{PortLow: band * 100, PortHigh: band*100 + 99}
 	originURL := "http://localhost:" + strconv.Itoa(p.Ports.Origin)
 	var web string
-	for _, stack := range p.Stacks {
+	for _, stack := range p.Components {
 		component, hasComponent := p.Component(stack.Stack)
 		if stack.Role == manifest.RoleFrontend && hasComponent {
 			web = component.Name
 		}
 	}
-	for _, stack := range p.Stacks {
+	for _, stack := range p.Components {
 		component, hasComponent := p.Component(stack.Stack)
 		if stack.Role != manifest.RoleBackend || !hasComponent {
 			continue
@@ -331,7 +331,7 @@ func portFiles(p plan.Plan) map[string]bool {
 	if p.Ports.RefBand == 0 {
 		return files
 	}
-	for _, stack := range p.Stacks {
+	for _, stack := range p.Components {
 		for _, module := range stack.Modules {
 			for _, path := range module.PortFiles {
 				files[path] = true
@@ -351,7 +351,7 @@ func (b *builder) recorded() manifest.Selection {
 
 // hasModule reports whether any selected stack installs the module.
 func (b *builder) hasModule(id string) bool {
-	for _, stack := range b.opts.Plan.Stacks {
+	for _, stack := range b.opts.Plan.Components {
 		for _, module := range stack.Modules {
 			if module.Module == id {
 				return true
@@ -363,7 +363,7 @@ func (b *builder) hasModule(id string) bool {
 
 // hasStack reports whether the plan selects the stack.
 func (b *builder) hasStack(id string) bool {
-	for _, stack := range b.opts.Plan.Stacks {
+	for _, stack := range b.opts.Plan.Components {
 		if stack.Stack == id {
 			return true
 		}
@@ -375,7 +375,7 @@ func (b *builder) hasStack(id string) bool {
 // in the catalog order of (path, text).
 func nameRules(p plan.Plan) map[string][]names.Rule {
 	rules := map[string][]names.Rule{}
-	for _, stack := range p.Stacks {
+	for _, stack := range p.Components {
 		for _, module := range stack.Modules {
 			for _, rule := range module.Names {
 				rules[rule.Path] = append(rules[rule.Path], names.Rule{Path: rule.Path, Text: rule.Text})
@@ -399,7 +399,7 @@ func (b *builder) render() ([]lockfile.File, error) {
 	}
 
 	var rows []render.ReadmeModule
-	for _, stack := range p.Stacks {
+	for _, stack := range p.Components {
 		for _, module := range stack.Modules {
 			rows = append(rows, render.ReadmeModule{Stack: stack.Stack, Module: module.Module, Version: module.Version})
 		}
@@ -436,7 +436,7 @@ func (b *builder) render() ([]lockfile.File, error) {
 		return nil, err
 	}
 
-	for _, stack := range p.Stacks {
+	for _, stack := range p.Components {
 		switch stack.Stack {
 		case manifest.StackGoSrv:
 			if err := b.renderGoRoot(stack, record); err != nil {
@@ -455,7 +455,7 @@ func (b *builder) render() ([]lockfile.File, error) {
 }
 
 // renderGoRoot renders the go-srv composition root.
-func (b *builder) renderGoRoot(stack plan.StackPlan, record func(string, []byte) error) error {
+func (b *builder) renderGoRoot(stack plan.ComponentPlan, record func(string, []byte) error) error {
 	var folders []string
 	for _, module := range stack.Modules {
 		if module.Module != manifest.CoreModule {
@@ -477,7 +477,7 @@ func (b *builder) renderGoRoot(stack plan.StackPlan, record func(string, []byte)
 }
 
 // renderWebRoot renders the ng-web composition root; no path is rewritten.
-func (b *builder) renderWebRoot(stack plan.StackPlan, record func(string, []byte) error) error {
+func (b *builder) renderWebRoot(stack plan.ComponentPlan, record func(string, []byte) error) error {
 	ids := make([]string, 0, len(stack.Modules))
 	for _, module := range stack.Modules {
 		ids = append(ids, module.Module)

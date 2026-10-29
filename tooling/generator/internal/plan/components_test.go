@@ -41,8 +41,8 @@ func issuesAt(issues []issue.Issue, code string) []issue.Issue {
 func TestComponentNamesComeFromTheEntriesElseTheProjectName(t *testing.T) {
 	repo := fixture.Load(t)
 	p := mustResolve(t, repo.Catalog, fullstackSelection(manifest.Component{Stack: "go-srv", Name: "acme-srv"}))
-	want := []plan.Component{{Stack: "go-srv", Name: "acme-srv"}, {Stack: "ng-web", Name: "acme-backend-web"}}
-	if !reflect.DeepEqual(p.Components, want) {
+	want := []plan.ComponentPlan{{Stack: "go-srv", Name: "acme-srv"}, {Stack: "ng-web", Name: "acme-backend-web"}}
+	if !reflect.DeepEqual(nameOnly(p), want) {
 		t.Fatalf("components = %+v, want %+v", p.Components, want)
 	}
 }
@@ -197,20 +197,6 @@ func TestAnInvalidComponentNameIsSkippedByThePlanChecks(t *testing.T) {
 		manifest.Component{Stack: "ng-web", Name: "Specs"}))
 	if len(issues) != 0 {
 		t.Fatalf("a grammar-invalid name is the decoder's issue, got %+v", issues)
-	}
-}
-
-func TestTwoEntriesOfOneStackAreAnInternalError(t *testing.T) {
-	repo := fixture.Load(t)
-	sel := fullstackSelection(
-		manifest.Component{Stack: "go-srv", Name: "acme-srv"},
-		manifest.Component{Stack: "go-srv", Name: "other-srv"})
-	p, issues := plan.Resolve(repo.Catalog, sel)
-	if len(issues) != 1 || issues[0].Code != plan.CodeInternalError || issues[0].Path != "selection#/components/1" {
-		t.Fatalf("issues = %+v", issues)
-	}
-	if !reflect.DeepEqual(p, plan.Plan{}) {
-		t.Fatalf("plan must be zero: %+v", p)
 	}
 }
 

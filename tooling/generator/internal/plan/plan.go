@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
@@ -41,49 +42,101 @@ var (
 // Plan is the resolved selection: what to copy and how to certify it.
 type Plan struct {
 	// Selection is the resolved selection: the effective project, stacks
-	// sorted, modules in backend catalog order with implied modules included.
+	// sorted and the modules of the index-0 backend in plan order with implied
+	// modules included. A multi project records every backend's list on its
+	// entry and no top-level modules.
 	Selection manifest.Selection
-	// Stacks are the selected stacks, sorted by stack name.
-	Stacks []StackPlan
-	// Components holds one component per selected stack, sorted by Stack.
-	Components []Component
-	// Specs are the specs to copy, sorted by spec.
+	// Components holds every delivered component, sorted by (Stack, Index).
+	Components []ComponentPlan
+	// Specs are the specs to copy, the union over the backends, sorted by spec.
 	Specs []catalog.SpecEntry
-	// TCKTags is the sorted union of the copied specs' tags.
+	// TCKTags is the sorted tags of the specs of the index-0 backend (L131).
 	TCKTags []string
 	// TCKGrep is the anchored Playwright --grep pattern built from TCKTags.
 	TCKGrep string
 	// TCKGrepInvert is the anchored Playwright --grep-invert pattern built from
-	// the cooperatesWith tags of the copied specs that are not in TCKTags,
-	// sorted; "" when every cooperating tag is installed.
+	// the cooperatesWith tags of the index-0 backend's specs that are not in
+	// TCKTags, sorted; "" when every cooperating tag is installed.
 	TCKGrepInvert string
-	// TCKEnv is the union of the copied specs' tckEnv.
+	// TCKEnv is the union of the index-0 backend's specs' tckEnv.
 	TCKEnv   map[string]string
 	GoModule string
 	// Reference is the slot map of the catalog: the value every name rule
 	// matches in the source files.
 	Reference map[string]string
 	// Slots holds a value for every slot a rule of a delivered file uses, live
-	// or not, plus the project, component and derived slots.
+	// or not, plus the project, component and derived slots. A multi project
+	// holds the slots of the index-0 backend and its frontend.
 	Slots map[string]string
 	// Live is the set of live slots: the project, the component slot of every
-	// selected stack and the slots of every live rule.
+	// selected stack and the slots of every live rule (index-0 instance).
 	Live map[string]bool
 	// Ports is the effective port layout.
 	Ports PortPlan
+	// Notes lists the defaults a multi project derived, one line per kind,
+	// without the "note: " prefix.
+	Notes []string
 }
 
-// Component is one delivered stack and the name of its project folder,
-// compose service and %{component.<stack>} slot.
-type Component struct {
+// ComponentPlan is one delivered component: a stack copied into one folder
+// with its own modules, Go module, names and ports.
+type ComponentPlan struct {
+	// Stack is the stack id, "go-srv".
 	Stack string
-	Name  string
+	// Role is "backend" or "frontend", from the stack table.
+	Role string
+	// Name is the component and folder name, "acme-srv-second".
+	Name string
+	// Index is the position among the components of Stack.
+	Index int
+	// Partner is the bound backend of a frontend, the bound frontend of a
+	// backend, or "".
+	Partner string
+	// Modules are the installed modules in plan order, core first while core exists.
+	Modules []catalog.ModuleEntry
+	// GoModule is the target Go module path; "" for a stack without one.
+	GoModule string
+	// Database is the effective {Name, User} of a backend; zero when no database
+	// slot is live.
+	Database manifest.Database
+	// Services maps the live service keys of a backend to their effective names.
+	Services map[string]string
+	// Ports maps each declared port of the installed modules to its host port.
+	Ports map[string]int
+	// Origin is the public base URL of a backend.
+	Origin string
+	// TCK is the TCK selection of a backend with at least one spec, else nil.
+	TCK *TCKPlan
+}
+
+// TCKPlan is the TCK selection of one backend component.
+type TCKPlan struct {
+	// Tags are the tags of the specs its modules implement, sorted.
+	Tags []string
+	// Grep is Grep(Tags).
+	Grep string
+	// GrepInvert holds the cooperation tags of its specs that it does not
+	// install; "" when none.
+	GrepInvert string
+	// Env is the union of its specs' tckEnv.
+	Env map[string]string
+}
+
+// Multi reports whether the plan has two or more backend components.
+func (p Plan) Multi() bool {
+	backends := 0
+	for _, component := range p.Components {
+		if component.Role == roleBackend {
+			backends++
+		}
+	}
+	return backends > 1
 }
 
 // Component returns the single component of a stack, and false when the stack
 // is not selected or has several components.
-func (p Plan) Component(stack string) (Component, bool) {
-	var found Component
+func (p Plan) Component(stack string) (ComponentPlan, bool) {
+	var found ComponentPlan
 	count := 0
 	for _, component := range p.Components {
 		if component.Stack == stack {
@@ -92,42 +145,62 @@ func (p Plan) Component(stack string) (Component, bool) {
 		}
 	}
 	if count != 1 {
-		return Component{}, false
+		return ComponentPlan{}, false
 	}
 	return found, true
-}
-
-// StackPlan is the modules of one selected stack in catalog order, core first.
-type StackPlan struct {
-	Stack, Role string
-	Modules     []catalog.ModuleEntry
 }
 
 // origin is where an id of the resolved set came from, for issue paths.
 type origin struct {
 	path string
+	// component names the backend component of an id that a top-level list
+	// gave in a multi project.
+	component string
 }
 
 type resolver struct {
 	cat    catalog.Catalog
 	sel    manifest.Selection
 	issues []issue.Issue
-	// values and live are the slot values and the live slots of the planned
-	// stacks, computed once before the name checks that need liveness.
-	values map[string]string
-	live   map[string]bool
+	// multi is true with two or more backend components.
+	multi bool
+	// undetermined is true when a component has no name or no resolvable
+	// backend: the component checks report it and the plan skips that part.
+	undetermined bool
 }
 
-// Resolve returns the modules per stack in catalog order, the specs, TCK tags and TCK env,
+// UndeterminedMessage is the INTERNAL_ERROR message of a selection whose
+// components have no name or no backend: the component checks report those, so
+// a caller that ran them drops this issue.
+const UndeterminedMessage = "internal error: a component has no name or no backend"
+
+// Resolve returns the modules per component, the specs, TCK tags and TCK env,
 // or every issue found. With any issue the returned Plan is the zero value.
 func Resolve(cat catalog.Catalog, sel manifest.Selection) (Plan, []issue.Issue) {
 	r := &resolver{cat: cat, sel: sel}
 	result := r.run()
 	if len(r.issues) > 0 {
+		r.issues = uniqueIssues(r.issues)
 		issue.Sort(r.issues)
 		return Plan{}, r.issues
 	}
 	return result, nil
+}
+
+// uniqueIssues drops an issue equal to an earlier one: the pairs of a multi
+// project share catalog issues.
+func uniqueIssues(issues []issue.Issue) []issue.Issue {
+	seen := map[string]bool{}
+	kept := make([]issue.Issue, 0, len(issues))
+	for _, found := range issues {
+		key := found.Code + "\x00" + found.Path + "\x00" + found.Message + "\x00" + found.Hint
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		kept = append(kept, found)
+	}
+	return kept
 }
 
 func (r *resolver) add(code, source, pointer, message string) {
@@ -139,19 +212,11 @@ func (r *resolver) run() Plan {
 		r.add(CodeGeneratorMismatch, catalogSource, "/generator",
 			fmt.Sprintf("catalog was built by generator %q, this is %q", r.cat.Generator, generator.Version))
 	}
-	if r.entryError() {
-		return Plan{}
-	}
+	r.multi = r.backendCount() > 1
 	r.checkNames()
 	selected := r.selectedStacks()
 	if selected == nil {
 		return Plan{}
-	}
-	backend := -1
-	for i, entry := range selected {
-		if r.cat.Stacks[entry].Role == roleBackend {
-			backend = i
-		}
 	}
 	afterStacks := len(r.issues)
 	for _, entry := range selected {
@@ -162,21 +227,38 @@ func (r *resolver) run() Plan {
 	if len(r.issues) > afterStacks {
 		return Plan{}
 	}
-	closure := r.closure(selected)
-	r.checkPresence(selected[backend], closure)
-	stackPlans := make([]StackPlan, 0, len(selected))
-	for _, entry := range selected {
-		stackPlans = append(stackPlans, r.planStack(entry, closure))
+	var pairs []pairPlan
+	for _, input := range r.pairInputs() {
+		pairs = append(pairs, r.planPair(selected, input))
 	}
-	r.checkFrontendSpecs(selected, stackPlans)
-	r.checkFolders(stackPlans, r.wantedSpecs(backendPlan(stackPlans)))
-	sort.Slice(stackPlans, func(i, j int) bool { return stackPlans[i].Stack < stackPlans[j].Stack })
-	r.values, r.live = r.slots(stackPlans)
-	r.checkInfraNames()
+	if len(pairs) == 0 {
+		return Plan{}
+	}
+	components := flatten(pairs)
+	r.checkFolders(components, r.wantedSpecs(components))
+	for i := range pairs {
+		r.nameSlots(&pairs[i])
+	}
+	r.checkInfraNames(pairs)
 	if len(r.issues) > 0 {
 		return Plan{}
 	}
-	return r.assemble(stackPlans, backendPlan(stackPlans))
+	if r.undetermined {
+		r.add(CodeInternalError, selectionSource, "/components", UndeterminedMessage)
+		return Plan{}
+	}
+	return r.assemble(pairs)
+}
+
+// backendCount returns the number of backend components of the input.
+func (r *resolver) backendCount() int {
+	count := 0
+	for _, input := range r.componentInputs() {
+		if input.role == roleBackend {
+			count++
+		}
+	}
+	return count
 }
 
 // selectedStacks returns the catalog indexes of the selected stacks, or nil
@@ -213,10 +295,10 @@ func (r *resolver) selectedStacks() []int {
 	return selected
 }
 
-// closure computes step 1 and 2: implied ids and the selection, closed under
-// requiresModules in every selected stack. The map value records where the id
-// first came from.
-func (r *resolver) closure(selected []int) map[string]origin {
+// closure computes step 1 and 2 for one pair: implied ids and the starting
+// list, closed under requiresModules in the pair's stacks. The map value
+// records where the id first came from. component names the backend.
+func (r *resolver) closure(selected []int, start startList, component string) map[string]origin {
 	set := map[string]origin{coreID: {}}
 	var queue []string
 	push := func(id string, from origin) {
@@ -234,7 +316,7 @@ func (r *resolver) closure(selected []int) map[string]origin {
 		}
 	}
 	queue = append(queue, coreID)
-	if r.sel.AllModules {
+	if start.all {
 		for _, entry := range selected {
 			if r.cat.Stacks[entry].Role != roleBackend {
 				continue
@@ -244,8 +326,12 @@ func (r *resolver) closure(selected []int) map[string]origin {
 			}
 		}
 	}
-	for i, id := range r.sel.Modules {
-		push(id, origin{path: issue.Path(selectionSource, fmt.Sprintf("/modules/%d", i))})
+	for i, id := range start.ids {
+		from := origin{path: issue.Path(selectionSource, fmt.Sprintf("%s/%d", start.pointer, i))}
+		if start.inherited && r.multi {
+			from.component = component
+		}
+		push(id, from)
 	}
 	for head := 0; head < len(queue); head++ {
 		id := queue[head]
@@ -276,12 +362,15 @@ func (r *resolver) checkPresence(backendEntry int, closure map[string]origin) {
 		if path == "" {
 			path = issue.Path(catalogSource, fmt.Sprintf("/stacks/%d", backendEntry))
 		}
+		if component := closure[id].component; component != "" {
+			message = fmt.Sprintf("%s (backend component %s)", message, component)
+		}
 		r.issues = append(r.issues, issue.Issue{Code: code, Path: path, Message: message})
 	}
 }
 
 // planStack applies steps 4 and 5 to one stack.
-func (r *resolver) planStack(entry int, closure map[string]origin) StackPlan {
+func (r *resolver) planStack(entry int, closure map[string]origin) ComponentPlan {
 	stack := r.cat.Stacks[entry]
 	var present []int
 	for position, module := range stack.Modules {
@@ -295,7 +384,11 @@ func (r *resolver) planStack(entry int, closure map[string]origin) StackPlan {
 	for _, position := range ordered {
 		modules = append(modules, stack.Modules[position])
 	}
-	return StackPlan{Stack: stack.Stack, Role: stack.Role, Modules: modules}
+	role := stack.Role
+	if info, known := manifest.LookupStack(stack.Stack); known {
+		role = info.Role
+	}
+	return ComponentPlan{Stack: stack.Stack, Role: role, Modules: modules}
 }
 
 func (r *resolver) checkRequirements(entry int, present []int) {
@@ -397,49 +490,40 @@ func (r *resolver) order(entry int, present []int) []int {
 	return ordered
 }
 
-func backendPlan(stacks []StackPlan) StackPlan {
-	for _, stack := range stacks {
-		if stack.Role == roleBackend {
-			return stack
+// specsOf returns the specs the modules implement.
+func specsOf(modules []catalog.ModuleEntry) map[string]bool {
+	specs := map[string]bool{}
+	for _, module := range modules {
+		for spec := range module.ImplementsSpec {
+			specs[spec] = true
 		}
 	}
-	return StackPlan{}
+	return specs
 }
 
-// checkFrontendSpecs reports SPEC_NOT_IN_BACKEND.
-func (r *resolver) checkFrontendSpecs(selected []int, stacks []StackPlan) {
-	backendSpecs := map[string]bool{}
-	for _, module := range backendPlan(stacks).Modules {
-		for spec := range module.ImplementsSpec {
-			backendSpecs[spec] = true
-		}
-	}
-	for _, entry := range selected {
-		stack := r.cat.Stacks[entry]
-		if stack.Role != roleFrontend {
-			continue
-		}
-		for _, planned := range stacks {
-			if planned.Stack != stack.Stack {
+// checkFrontendSpecs reports SPEC_NOT_IN_BACKEND for a spec that a module of
+// the frontend implements and the backend of its pair does not.
+func (r *resolver) checkFrontendSpecs(backend, frontend ComponentPlan, entry int) {
+	backendSpecs := specsOf(backend.Modules)
+	stack := r.cat.Stacks[entry]
+	for _, module := range frontend.Modules {
+		for _, spec := range sortedKeys(module.ImplementsSpec) {
+			if backendSpecs[spec] {
 				continue
 			}
-			for _, module := range planned.Modules {
-				for _, spec := range sortedKeys(module.ImplementsSpec) {
-					if !backendSpecs[spec] {
-						position := findModule(stack, module.Module)
-						pointer := fmt.Sprintf("/stacks/%d/modules/%d/implementsSpec/%s", entry, position, strings.NewReplacer("~", "~0", "/", "~1").Replace(spec))
-						r.add(CodeSpecNotInBackend, catalogSource, pointer, r.specNotInBackendMessage(spec, planned.Stack, module.Module))
-					}
-				}
-			}
+			position := findModule(stack, module.Module)
+			pointer := fmt.Sprintf("/stacks/%d/modules/%d/implementsSpec/%s", entry, position, strings.NewReplacer("~", "~0", "/", "~1").Replace(spec))
+			found := issue.Issue{Code: CodeSpecNotInBackend, Path: issue.Path(catalogSource, pointer)}
+			found.Message, found.Hint = r.specNotInBackendMessage(spec, backend, frontend, module.Module)
+			r.issues = append(r.issues, found)
 		}
 	}
 }
 
-// specNotInBackendMessage is the SPEC_NOT_IN_BACKEND text: it names the
-// backend catalog modules that implement spec, when there are any.
-func (r *resolver) specNotInBackendMessage(spec, stack, module string) string {
-	message := fmt.Sprintf("no selected backend module implements spec %q (needed by %s %s)", spec, stack, module)
+// specNotInBackendMessage is the SPEC_NOT_IN_BACKEND text and hint. A single
+// project names the backend catalog modules that implement spec, when there are
+// any; a multi project names both components.
+func (r *resolver) specNotInBackendMessage(spec string, backend, frontend ComponentPlan, module string) (message, hint string) {
 	var implementers []string
 	for _, entry := range r.cat.Stacks {
 		if entry.Role != roleBackend {
@@ -451,30 +535,39 @@ func (r *resolver) specNotInBackendMessage(spec, stack, module string) string {
 			}
 		}
 	}
-	if len(implementers) == 0 {
-		return message
-	}
 	sort.Strings(implementers)
-	return fmt.Sprintf("%s; select module %q or drop stack %s", message, strings.Join(implementers, ","), stack)
+	list := strings.Join(implementers, ",")
+	if r.multi {
+		message = fmt.Sprintf("no module of backend component %s implements spec %q (needed by %s %s in %s)",
+			backend.Name, spec, frontend.Stack, module, frontend.Name)
+		if len(implementers) > 0 {
+			hint = fmt.Sprintf("select module %q in %s or bind %s to another backend", list, backend.Name, frontend.Name)
+		}
+		return message, hint
+	}
+	message = fmt.Sprintf("no selected backend module implements spec %q (needed by %s %s)", spec, frontend.Stack, module)
+	if len(implementers) > 0 {
+		message = fmt.Sprintf("%s; select module %q or drop stack %s", message, list, frontend.Stack)
+	}
+	return message, ""
 }
 
-// assemble applies step 6 and builds the Plan.
-func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
-	wanted := map[string]bool{}
-	for _, module := range backend.Modules {
-		for spec := range module.ImplementsSpec {
-			wanted[spec] = true
-		}
-	}
-	var specs []catalog.SpecEntry
-	tagSet := map[string]bool{}
+// tckOf returns the TCK selection of the specs wanted by one backend, the
+// catalog entries of those specs in catalog order and their tags. It reports
+// the catalog problems of those specs; the entries still carry every file.
+func (r *resolver) tckOf(wanted map[string]bool) (tck *TCKPlan, specs []catalog.SpecEntry, tagSet map[string]bool) {
+	tagSet = map[string]bool{}
 	env := map[string]string{}
 	envFrom := map[string]string{}
+	remaining := map[string]bool{}
+	for spec := range wanted {
+		remaining[spec] = true
+	}
 	for i, spec := range r.cat.Specs {
 		if !wanted[spec.Spec] {
 			continue
 		}
-		delete(wanted, spec.Spec)
+		delete(remaining, spec.Spec)
 		specs = append(specs, spec)
 		for _, tag := range spec.TCKTags {
 			if !manifest.TagPattern.MatchString(tag) {
@@ -500,13 +593,9 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 			envFrom[key] = spec.Spec
 		}
 	}
-	for i := range specs {
-		specs[i].Files = installedFiles(specs[i].Files, tagSet)
-	}
-	for _, spec := range sortedKeys(wanted) {
+	for _, spec := range sortedKeys(remaining) {
 		r.add(catalog.CodeSpecUnknown, catalogSource, "/specs", fmt.Sprintf("spec %q is implemented by a module but not in the catalog", spec))
 	}
-	tags := sortedKeys(tagSet)
 	invertSet := map[string]bool{}
 	for i, spec := range specs {
 		for _, tag := range spec.CooperatesWith {
@@ -519,28 +608,90 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 			}
 		}
 	}
-	recorded := make([]string, 0, len(backend.Modules))
-	for _, module := range backend.Modules {
-		recorded = append(recorded, module.Module)
+	tags := sortedKeys(tagSet)
+	tck = &TCKPlan{Tags: tags, Grep: Grep(tags), GrepInvert: Grep(sortedKeys(invertSet)), Env: env}
+	return tck, specs, tagSet
+}
+
+// assemble applies step 6 and builds the Plan.
+func (r *resolver) assemble(pairs []pairPlan) Plan {
+	unionWanted := map[string]bool{}
+	unionTags := map[string]bool{}
+	var firstTCK *TCKPlan
+	lists := make([][]string, 0, len(pairs))
+	for i := range pairs {
+		backend := &pairs[i].backend
+		wanted := specsOf(backend.Modules)
+		for spec := range wanted {
+			unionWanted[spec] = true
+		}
+		tck, specs, tags := r.tckOf(wanted)
+		for tag := range tags {
+			unionTags[tag] = true
+		}
+		if len(specs) > 0 {
+			backend.TCK = tck
+		}
+		if i == 0 {
+			firstTCK = tck
+		}
+		installed := make([]string, 0, len(backend.Modules))
+		for _, module := range backend.Modules {
+			installed = append(installed, module.Module)
+		}
+		lists = append(lists, installed)
 	}
-	stackNames := make([]string, 0, len(stacks))
-	for _, stack := range stacks {
-		stackNames = append(stackNames, stack.Stack)
+	var specs []catalog.SpecEntry
+	for _, spec := range r.cat.Specs {
+		if unionWanted[spec.Spec] {
+			spec.Files = installedFiles(spec.Files, unionTags)
+			specs = append(specs, spec)
+		}
+	}
+	components := flatten(pairs)
+	portPlan := r.portPlan(components)
+	r.fillPorts(components, portPlan)
+	tags, grep, invert, env := []string{}, "", "", map[string]string{}
+	if firstTCK != nil {
+		tags, grep, invert, env = firstTCK.Tags, firstTCK.Grep, firstTCK.GrepInvert, firstTCK.Env
+	}
+	stackNames := make([]string, 0, len(components))
+	for _, component := range components {
+		if len(stackNames) == 0 || stackNames[len(stackNames)-1] != component.Stack {
+			stackNames = append(stackNames, component.Stack)
+		}
 	}
 	return Plan{
-		Selection:     r.recordedSelection(stackNames, recorded),
-		Stacks:        stacks,
-		Components:    r.components(stacks),
+		Selection:     r.recordedSelection(stackNames, lists),
+		Components:    components,
 		Specs:         specs,
 		TCKTags:       tags,
-		TCKGrep:       Grep(tags),
-		TCKGrepInvert: Grep(sortedKeys(invertSet)),
+		TCKGrep:       grep,
+		TCKGrepInvert: invert,
 		TCKEnv:        env,
 		GoModule:      r.cat.GoModule,
 		Reference:     r.cat.Reference,
-		Slots:         r.values,
-		Live:          r.live,
-		Ports:         r.portPlan(stacks),
+		Slots:         pairs[0].values,
+		Live:          pairs[0].live,
+		Ports:         portPlan,
+		Notes:         r.derivedNotes(pairs),
+	}
+}
+
+// fillPorts sets the host ports and the public origin of every component from
+// the effective band.
+func (r *resolver) fillPorts(components []ComponentPlan, layout PortPlan) {
+	for i := range components {
+		component := &components[i]
+		component.Ports = map[string]int{}
+		for _, module := range component.Modules {
+			for _, port := range module.Ports {
+				component.Ports[port.Name] = layout.Band*100 + port.Offset
+			}
+		}
+		if component.Role == roleBackend {
+			component.Origin = "http://localhost:" + strconv.Itoa(layout.Origin)
+		}
 	}
 }
 
@@ -590,48 +741,94 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
-// Pull is a module the requirement closure added to one stack.
+// Pull is a module the requirement closure added to one component.
 type Pull struct {
 	// Module is the pulled module id.
 	Module string
-	// RequiredBy lists the present modules of the stack whose requiresModules
+	// RequiredBy lists the present modules of the component whose requiresModules
 	// names Module, sorted bytewise.
 	RequiredBy []string
 	// Stack is the stack name.
 	Stack string
+	// Component is the component name in a multi project, "" in a single one.
+	Component string
 }
 
 // Pulls returns the modules of p that the requirement closure added, ordered
-// by stack then module. It returns nil when sel is --all-modules.
+// by component then module. A module is typed when the list its backend
+// started from names it (a frontend follows its backend). It returns nil for
+// a backend that started from --all-modules.
 func Pulls(p Plan, sel manifest.Selection) []Pull {
-	if sel.AllModules {
-		return nil
-	}
-	typed := map[string]bool{coreID: true}
-	for _, id := range sel.Modules {
-		typed[id] = true
-	}
 	var pulls []Pull
-	for _, stack := range p.Stacks {
+	multi := p.Multi()
+	for _, component := range p.Components {
+		typed, expanded := typedModules(p, sel, component, multi)
+		if expanded {
+			continue
+		}
 		requirers := map[string][]string{}
-		for _, module := range stack.Modules {
+		for _, module := range component.Modules {
 			for _, requirement := range module.RequiresModules {
 				requirers[requirement.Module] = append(requirers[requirement.Module], module.Module)
 			}
 		}
 		var found []Pull
-		for _, module := range stack.Modules {
+		for _, module := range component.Modules {
 			by := requirers[module.Module]
 			if typed[module.Module] || len(by) == 0 {
 				continue
 			}
 			sort.Strings(by)
-			found = append(found, Pull{Module: module.Module, RequiredBy: by, Stack: stack.Stack})
+			pull := Pull{Module: module.Module, RequiredBy: by, Stack: component.Stack}
+			if multi {
+				pull.Component = component.Name
+			}
+			found = append(found, pull)
 		}
 		sort.Slice(found, func(i, j int) bool { return found[i].Module < found[j].Module })
 		pulls = append(pulls, found...)
 	}
 	return pulls
+}
+
+// typedModules returns the ids the person listed for the backend of
+// component, core included, and whether the backend started from
+// --all-modules.
+func typedModules(p Plan, sel manifest.Selection, component ComponentPlan, multi bool) (typed map[string]bool, expanded bool) {
+	typed = map[string]bool{coreID: true}
+	ids, all := sel.Modules, sel.AllModules
+	if multi {
+		backend := component
+		if component.Role != roleBackend {
+			for _, candidate := range p.Components {
+				if candidate.Name == component.Partner {
+					backend = candidate
+				}
+			}
+		}
+		if entry, has := backendEntry(sel, backend.Index); has && entry.HasModules {
+			ids, all = entry.Modules, false
+		}
+	}
+	for _, id := range ids {
+		typed[id] = true
+	}
+	return typed, all
+}
+
+// backendEntry returns the k-th entry of a backend stack.
+func backendEntry(sel manifest.Selection, k int) (manifest.Component, bool) {
+	seen := 0
+	for _, entry := range sel.Components {
+		if !manifest.IsBackendStack(entry.Stack) {
+			continue
+		}
+		if seen == k {
+			return entry, true
+		}
+		seen++
+	}
+	return manifest.Component{}, false
 }
 
 // catalogRole returns the role the catalog gives a stack, "" when it has none.

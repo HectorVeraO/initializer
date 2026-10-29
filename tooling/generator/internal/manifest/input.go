@@ -220,9 +220,15 @@ func checkValue(d *decoder, pattern, pointer, value string) {
 // as the one exception (modules are always recorded). Name, Go module, stacks
 // and components are recorded only when given; stacks are sorted. The schema
 // is 1 when every recorded key exists in schema 1 and the schema 1 required
-// keys are all present, else 2.
-func RecordedSelection(in Input, installedModules []string) Selection {
+// keys are all present, else 2. A single project passes the installed list of
+// its backend; a multi project passes one list per backend component in index
+// order, and every backend entry records its own with no top-level list.
+func RecordedSelection(in Input, installed ...[]string) Selection {
 	given := in.Selection
+	var installedModules []string
+	if len(installed) > 0 {
+		installedModules = installed[0]
+	}
 	recorded := Selection{
 		Modules: append([]string{}, installedModules...),
 		Has:     Presence{Modules: true},
@@ -240,7 +246,11 @@ func RecordedSelection(in Input, installedModules []string) Selection {
 		recorded.Has.Stacks = true
 	}
 	recorded.Components = append([]Component(nil), given.Components...)
-	recordEntryModules(&recorded, installedModules)
+	if len(installed) > 1 {
+		recordBackendModules(&recorded, installed)
+	} else {
+		recordEntryModules(&recorded, installedModules)
+	}
 	if given.Database != nil {
 		copied := *given.Database
 		recorded.Database = &copied

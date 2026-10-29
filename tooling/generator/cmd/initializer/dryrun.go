@@ -5,11 +5,13 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/emit"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/lockfile"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
 )
 
@@ -25,6 +27,8 @@ type dryRun struct {
 	source        sourceRef
 	catalog       catalogRef
 	added         []moduleAdded
+	// notes are the derived defaults of a multi project, printed after the table.
+	notes []string
 }
 
 // resolvedSelection returns the resolved document of a dry run: schema 2, every
@@ -66,29 +70,34 @@ func writeDryRun(ctx *Context, d dryRun) int {
 	name := d.plan.Selection.Project.Name
 	if ctx.isJSON() {
 		doc := struct {
-			Schema     int                  `json:"schema"`
-			OK         bool                 `json:"ok"`
-			DryRun     bool                 `json:"dryRun"`
-			Project    string               `json:"project"`
-			Path       string               `json:"path"`
-			Files      int                  `json:"files"`
-			Source     sourceRef            `json:"source"`
-			Catalog    catalogRef           `json:"catalog"`
-			Selection  manifest.Selection   `json:"selection"`
-			Recorded   manifest.Selection   `json:"recorded"`
-			Components []lockfile.Component `json:"components"`
-			Names      map[string]string    `json:"names"`
-			Ports      manifest.Ports       `json:"ports"`
-			Added      []moduleAdded        `json:"added"`
-			Notes      []string             `json:"notes"`
-			Warnings   []Warning            `json:"warnings"`
+			Schema     int                `json:"schema"`
+			OK         bool               `json:"ok"`
+			DryRun     bool               `json:"dryRun"`
+			Project    string             `json:"project"`
+			Path       string             `json:"path"`
+			Files      int                `json:"files"`
+			Source     sourceRef          `json:"source"`
+			Catalog    catalogRef         `json:"catalog"`
+			Selection  manifest.Selection `json:"selection"`
+			Recorded   manifest.Selection `json:"recorded"`
+			Components any                `json:"components"`
+			Names      map[string]string  `json:"names"`
+			Ports      manifest.Ports     `json:"ports"`
+			Added      []moduleAdded      `json:"added"`
+			Notes      []string           `json:"notes"`
+			Warnings   []Warning          `json:"warnings"`
 		}{documentSchema, true, true, name, filepath.ToSlash(d.path), len(d.project.Files), d.source, d.catalog,
-			d.resolvedSelection(), d.recorded, list(lock.Components), lock.Names, manifest.Ports{Band: d.plan.Ports.Band}, list(d.added), list(ctx.Notes), ctx.warnings()}
+			d.resolvedSelection(), d.recorded, d.componentsDocument(lock), lock.Names, manifest.Ports{Band: d.plan.Ports.Band}, list(d.added), list(ctx.Notes), ctx.warnings()}
 		return emitDocument(ctx, ctx.Stdout, doc, exitOK)
 	}
 
 	var text strings.Builder
 	fmt.Fprintf(&text, "Project %s in %s (dry run, nothing written)\n", name, displayPath(d.path))
+	if d.plan.Multi() {
+		d.writeMultiTable(&text)
+		fmt.Fprintf(&text, "%d %s\n", len(d.project.Files), plural(len(d.project.Files), "file"))
+		return emitText(ctx, text.String())
+	}
 	rows := [][]string{{"COMPONENT", "STACK", "FOLDER", "MODULES"}}
 	for _, component := range d.plan.Components {
 		rows = append(rows, []string{component.Name, component.Stack, component.Name + "/", d.modulesText(component.Stack)})
@@ -145,7 +154,7 @@ func (d dryRun) modulesText(stack string) string {
 		}
 	}
 	var names []string
-	for _, planned := range d.plan.Stacks {
+	for _, planned := range d.plan.Components {
 		if planned.Stack != stack {
 			continue
 		}
@@ -193,4 +202,106 @@ func serviceNames(services map[string]string) []string {
 		ordered = append(ordered, services[key])
 	}
 	return ordered
+}
+
+// dryRunComponent is one entry of the components member of a multi project's
+// dry-run document: the multi fields of the lock that the plan fills. Ports and
+// origin are left out until the ports are computed per component.
+type dryRunComponent struct {
+	Stack    string             `json:"stack"`
+	Name     string             `json:"name"`
+	Index    int                `json:"index"`
+	GoModule string             `json:"goModule,omitempty"`
+	Database *manifest.Database `json:"database,omitempty"`
+	Modules  []string           `json:"modules"`
+	TCK      *dryRunTCK         `json:"tck,omitempty"`
+	Backend  string             `json:"backend,omitempty"`
+	Names    map[string]string  `json:"names"`
+}
+
+// dryRunTCK is the tck member of a backend entry.
+type dryRunTCK struct {
+	Tags       []string          `json:"tags"`
+	Grep       string            `json:"grep"`
+	GrepInvert string            `json:"grepInvert,omitempty"`
+	Env        map[string]string `json:"env"`
+}
+
+// componentsDocument returns the components member: the lock's entries in a
+// single project, the multi entries in a multi project.
+func (d dryRun) componentsDocument(lock lockfile.Lock) any {
+	if !d.plan.Multi() {
+		return list(lock.Components)
+	}
+	entries := make([]dryRunComponent, 0, len(d.plan.Components))
+	for _, component := range d.plan.Components {
+		entry := dryRunComponent{
+			Stack: component.Stack, Name: component.Name, Index: component.Index, GoModule: component.GoModule,
+			Modules: moduleIDsOf(component), Names: componentNames(component),
+		}
+		if component.Role == manifest.RoleFrontend {
+			entry.Backend = component.Partner
+		}
+		if component.Database != (manifest.Database{}) {
+			database := component.Database
+			entry.Database = &database
+		}
+		if tck := component.TCK; tck != nil {
+			entry.TCK = &dryRunTCK{Tags: list(tck.Tags), Grep: tck.Grep, GrepInvert: tck.GrepInvert, Env: tck.Env}
+			if entry.TCK.Env == nil {
+				entry.TCK.Env = map[string]string{}
+			}
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+// moduleIDsOf returns the installed module ids of a component in plan order.
+func moduleIDsOf(component plan.ComponentPlan) []string {
+	ids := make([]string, 0, len(component.Modules))
+	for _, module := range component.Modules {
+		ids = append(ids, module.Module)
+	}
+	return ids
+}
+
+// componentNames returns the live slots of one component: its own component
+// slot and, for a backend, its database, user and service names.
+func componentNames(component plan.ComponentPlan) map[string]string {
+	found := map[string]string{names.ComponentSlot(component.Stack): component.Name}
+	if component.Database.Name != "" {
+		found[names.SlotDatabase] = component.Database.Name
+	}
+	if component.Database.User != "" {
+		found[names.SlotDBUser] = component.Database.User
+	}
+	for key, value := range component.Services {
+		found[names.ServiceSlot(key)] = value
+	}
+	return found
+}
+
+// writeMultiTable writes the component table of a multi project, one row per
+// component in lock order, then one line per derived default.
+func (d dryRun) writeMultiTable(text *strings.Builder) {
+	rows := [][]string{{"COMPONENT", "STACK", "INDEX", "BACKEND", "GO MODULE", "DATABASE", "MODULES"}}
+	for _, component := range d.plan.Components {
+		backend := ""
+		if component.Role == manifest.RoleFrontend {
+			backend = component.Partner
+		}
+		database := ""
+		if component.Database.Name != "" {
+			database = component.Database.Name + "/" + component.Database.User
+		}
+		rows = append(rows, []string{
+			component.Name, component.Stack, strconv.Itoa(component.Index), backend, component.GoModule, database,
+			strings.Join(moduleIDsOf(component), ", "),
+		})
+	}
+	writeTable(text, rows)
+	for _, note := range d.notes {
+		fmt.Fprintf(text, "note: %s\n", note)
+	}
 }

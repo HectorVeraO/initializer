@@ -53,7 +53,9 @@ func ResolveDefaults(in Input, dir, wd string, backendStacks []string) (resolved
 
 	if !s.Has.GoModule && !entryGivesGoModule(s.Components) && names.ValidLabel(name) && selectsGoStack(s.Stacks) {
 		s.Project.GoModule = "example.com/" + name
-		notes = append(notes, fmt.Sprintf("Go module defaults to %s; pass --go-module to set yours", s.Project.GoModule))
+		if !hasSeveralGoComponents(s.Components) {
+			notes = append(notes, fmt.Sprintf("Go module defaults to %s; pass --go-module to set yours", s.Project.GoModule))
+		}
 		resolved.Origins[patternGoModule] = Origin{Source: DefaultSource, Pointer: patternGoModule}
 	}
 	s.Has.GoModule = s.Project.GoModule != ""
@@ -155,4 +157,16 @@ func entryGivesGoModule(components []Component) bool {
 		}
 	}
 	return false
+}
+
+// hasSeveralGoComponents reports two or more entries of a stack with a Go
+// module: the plan derives their module paths and says so itself.
+func hasSeveralGoComponents(components []Component) bool {
+	count := 0
+	for _, component := range components {
+		if info, known := LookupStack(component.Stack); known && info.GoModule {
+			count++
+		}
+	}
+	return count > 1
 }

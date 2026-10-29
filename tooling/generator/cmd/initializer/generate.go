@@ -284,19 +284,20 @@ func generateProject(ctx *Context, in generateInput) int {
 	componentIssues := plan.ResolveComponents(built, resolvedInput)
 	componentIssues = relocate(addNameHints(ctx.Args, resolvedInput, componentIssues), resolvedInput)
 	issues = append(issues, componentIssues...)
-	if len(issues) == 0 {
-		issues = append(issues, relocate(multiComponentIssues(resolvedInput), resolvedInput)...)
+	if !hasSeveralBackends(resolvedInput.Selection) {
+		resolvedInput = manifest.ApplyEntryOverrides(resolvedInput)
 	}
-	resolvedInput = manifest.ApplyEntryOverrides(resolvedInput)
 	selection := resolvedInput.Selection
 
 	root := found.Root.FS
 	var resolved plan.Plan
-	skipsPlan := hasSeveralOfStack(selection) || hasCode(issues, planBlockingCodes...)
-	if !skipsPlan {
+	if !hasCode(issues, planBlockingCodes...) {
 		var planIssues []issue.Issue
 		resolved, planIssues = plan.Resolve(built, selection)
-		issues = append(issues, planIssues...)
+		issues = append(issues, withoutUndetermined(planIssues, len(issues) > 0)...)
+		if len(issues) == 0 && resolved.Multi() {
+			issues = append(issues, multiComponentIssue())
+		}
 		if len(issues) == 0 {
 			sourceIssues, err := plan.CheckSources(root, resolved)
 			if err != nil {
@@ -317,6 +318,11 @@ func generateProject(ctx *Context, in generateInput) int {
 		outputIssues[i].Path = filepath.ToSlash(displayDir)
 	}
 	issues = append(issues, outputIssues...)
+	// The dry-run table of a multi project prints the derived-default notes itself.
+	isTableNote := in.dryRun && !ctx.isJSON()
+	if len(issues) == 0 && !isTableNote {
+		notes = append(notes, resolved.Notes...)
+	}
 	for _, note := range notes {
 		fmt.Fprintf(ctx.Stderr, "note: %s\n", note)
 	}
@@ -335,11 +341,11 @@ func generateProject(ctx *Context, in generateInput) int {
 			slog.String("module", pull.Module),
 			slog.String("required_by", strings.Join(pull.RequiredBy, ",")),
 			slog.String("stack", pull.Stack))
-		added = append(added, moduleAdded{Module: pull.Module, RequiredBy: pull.RequiredBy, Stack: pull.Stack})
+		added = append(added, moduleAdded{Module: pull.Module, RequiredBy: pull.RequiredBy, Stack: pull.Stack, Component: pull.Component})
 	}
 
 	digest := found.CatalogSHA256
-	recorded := manifest.RecordedSelection(in.run.merged, resolved.Selection.Modules)
+	recorded := manifest.RecordedSelection(in.run.merged, backendModuleLists(resolved)...)
 	project, err := emit.Build(emit.BuildOptions{
 		Root:          root,
 		Plan:          resolved,
@@ -353,7 +359,7 @@ func generateProject(ctx *Context, in generateInput) int {
 	if in.dryRun {
 		return writeDryRun(ctx, dryRun{
 			path: displayDir, project: project, plan: resolved, resolvedInput: resolvedInput, recorded: recorded,
-			source: ref, catalog: catalogOf(found), added: added,
+			source: ref, catalog: catalogOf(found), added: added, notes: resolved.Notes,
 		})
 	}
 	if err := emit.Write(outDir, project); err != nil {
@@ -364,9 +370,9 @@ func generateProject(ctx *Context, in generateInput) int {
 		components = append(components, componentInstalled{Stack: component.Stack, Name: component.Name})
 	}
 	var installed []moduleInstalled
-	for _, stack := range resolved.Stacks {
-		for _, module := range stack.Modules {
-			installed = append(installed, moduleInstalled{Stack: stack.Stack, Module: module.Module, Version: module.Version})
+	for _, component := range resolved.Components {
+		for _, module := range component.Modules {
+			installed = append(installed, moduleInstalled{Stack: component.Stack, Module: module.Module, Version: module.Version})
 		}
 	}
 	code := writeGenerate(ctx, generateResult{
@@ -390,21 +396,57 @@ func generateProject(ctx *Context, in generateInput) int {
 
 // planBlockingCodes are the issue codes after which the plan does not run: the
 // selection has no usable shape or a component check already refused it.
+// A missing name or backend does not block it: the plan skips what those leave
+// open and still reports its own problems.
 var planBlockingCodes = []string{
-	manifest.CodeSelectionInvalid, plan.CodeComponentMultiUnsupported, plan.CodeComponentNameRequired,
-	plan.CodeComponentLimit, plan.CodeComponentFieldNotAllowed, plan.CodeComponentBackendRequired,
-	plan.CodeComponentBackendUnknown, plan.CodeComponentBackendTaken, plan.CodeComponentAmbiguous,
-	plan.CodeModulesUnused,
+	manifest.CodeSelectionInvalid, plan.CodeComponentLimit, plan.CodeComponentFieldNotAllowed,
+	plan.CodeComponentAmbiguous, plan.CodeModulesUnused,
+}
+
+// withoutUndetermined drops the plan's INTERNAL_ERROR about components with no
+// name or backend when other issues already report them.
+func withoutUndetermined(issues []issue.Issue, hasOthers bool) []issue.Issue {
+	if !hasOthers {
+		return issues
+	}
+	kept := make([]issue.Issue, 0, len(issues))
+	for _, found := range issues {
+		if found.Code != plan.CodeInternalError || found.Message != plan.UndeterminedMessage {
+			kept = append(kept, found)
+		}
+	}
+	return kept
+}
+
+// backendModuleLists returns the installed module ids of every backend
+// component of p in index order.
+func backendModuleLists(p plan.Plan) [][]string {
+	var lists [][]string
+	for _, component := range p.Components {
+		if component.Role == roleBackend {
+			lists = append(lists, moduleIDsOf(component))
+		}
+	}
+	return lists
 }
 
 // dedupeIssues drops an issue equal to an earlier one: the component checks and
-// the plan both report a module the catalog lacks.
+// the plan both report a module the catalog lacks. The plan's report of a
+// module from the top-level list in a multi project adds the backend component
+// to the message; that one replaces the earlier report.
 func dedupeIssues(issues []issue.Issue) []issue.Issue {
 	var kept []issue.Issue
 	for _, found := range issues {
 		isRepeat := false
-		for _, earlier := range kept {
-			isRepeat = isRepeat || (earlier.Code == found.Code && earlier.Path == found.Path && earlier.Message == found.Message)
+		for i, earlier := range kept {
+			isSame := earlier.Code == found.Code && earlier.Path == found.Path
+			if isSame && earlier.Message == found.Message {
+				isRepeat = true
+			}
+			if isSame && earlier.Message != found.Message && strings.HasPrefix(found.Message, earlier.Message+" (backend component ") {
+				kept[i].Message = found.Message
+				isRepeat = true
+			}
 		}
 		if !isRepeat {
 			kept = append(kept, found)
