@@ -37,6 +37,7 @@ func commandTable() []*Command {
 type generateOptions struct {
 	root, catalog, out, file, selection, name, goModule, stacks, modules string
 	allModules                                                           bool
+	components                                                           []componentEntry
 }
 
 // filePath returns the selection file, from -f or its hidden alias.
@@ -71,6 +72,9 @@ func generateCommand() *Command {
 				Usage:   "Modules to install; replaces the file's list; required modules are added",
 				Default: "none"})
 			set.boolean(&o.allModules, flagSpec{Name: "all-modules", Usage: "Install every module of the backend stack", Default: "false"})
+			set.components(&o.components, flagSpec{Name: "component", Placeholder: "STACK=NAME",
+				Usage:   "Name the folder of STACK's component (repeatable)",
+				Default: "the stack id"})
 			set.str(&o.root, flagSpec{Name: "root", Placeholder: "DIR", Usage: "Source checkout", Default: "required"})
 			set.str(&o.catalog, flagSpec{Name: "catalog", Placeholder: "FILE",
 				Usage: "Catalog file built by 'initializer catalog build'", Default: "required"})
@@ -96,6 +100,7 @@ func checkGenerate(set *flagSet, opts any, positionals []string) []Problem {
 	o := opts.(*generateOptions)
 	var problems []Problem
 	problems = append(problems, requiredFlags(set, "root", "catalog")...)
+	problems = append(problems, duplicateComponentProblems(o.components)...)
 	if set.given["out"] > 0 && len(positionals) > 0 {
 		problems = append(problems, Problem{Arg: "--out", Message: "pass the folder once"})
 	}
@@ -106,7 +111,7 @@ func checkGenerate(set *flagSet, opts any, positionals []string) []Problem {
 	hasFile := o.filePath() != ""
 	hasModules := set.given["modules"] > 0
 	hasFlags := false
-	for _, name := range []string{"name", "go-module", "stacks", "modules", "all-modules"} {
+	for _, name := range []string{"name", "go-module", "stacks", "modules", "all-modules", "component"} {
 		hasFlags = hasFlags || set.given[name] > 0
 	}
 	fileFlag := "--file"
@@ -116,7 +121,7 @@ func checkGenerate(set *flagSet, opts any, positionals []string) []Problem {
 	switch {
 	case hasFile && hasFlags:
 		problems = append(problems, Problem{Arg: fileFlag,
-			Message: "cannot be combined with --name, --go-module, --stacks, --modules or --all-modules"})
+			Message: "cannot be combined with --name, --go-module, --stacks, --modules, --all-modules or --component"})
 	case !hasFile && !hasFlags:
 		problems = append(problems, Problem{Arg: "generate",
 			Message: "a selection is required: pass -f <file> or --stacks, --modules and --go-module"})

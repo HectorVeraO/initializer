@@ -125,6 +125,10 @@ func (r *resolver) run() Plan {
 		r.add(CodeGeneratorMismatch, catalogSource, "/generator",
 			fmt.Sprintf("catalog was built by generator %q, this is %q", r.cat.Generator, generator.Version))
 	}
+	if r.entryError() {
+		return Plan{}
+	}
+	r.checkNames()
 	selected := r.selectedStacks()
 	if selected == nil {
 		return Plan{}
@@ -151,6 +155,7 @@ func (r *resolver) run() Plan {
 		stackPlans = append(stackPlans, r.planStack(entry, closure))
 	}
 	r.checkFrontendSpecs(selected, stackPlans)
+	r.checkFolders(stackPlans, r.wantedSpecs(backendPlan(stackPlans)))
 	if len(r.issues) > 0 {
 		return Plan{}
 	}
@@ -524,19 +529,10 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 	for _, stack := range stacks {
 		stackNames = append(stackNames, stack.Stack)
 	}
-	components := make([]Component, 0, len(stacks))
-	for _, stack := range stacks {
-		components = append(components, Component{Stack: stack.Stack, Name: stack.Stack})
-	}
 	return Plan{
-		Selection: manifest.Selection{
-			Schema:  r.sel.Schema,
-			Project: r.sel.Project,
-			Stacks:  stackNames,
-			Modules: recorded,
-		},
+		Selection:     r.recordedSelection(stackNames, recorded),
 		Stacks:        stacks,
-		Components:    components,
+		Components:    r.components(stacks),
 		Specs:         specs,
 		TCKTags:       tags,
 		TCKGrep:       Grep(tags),

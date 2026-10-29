@@ -55,3 +55,45 @@ func FuzzValidLabel(f *testing.F) {
 		}
 	})
 }
+
+func TestIsDeviceName(t *testing.T) {
+	devices := []string{"con", "prn", "aux", "nul", "com0", "com9", "lpt0", "lpt5", "lpt9"}
+	others := []string{"", "co", "cons", "com", "comx", "com10", "lpt", "lpt10", "CON", "acme", "con-x", "xcom1", "com1 ", "nul.txt"}
+	for _, s := range devices {
+		if !names.IsDeviceName(s) {
+			t.Errorf("%q should be a device name", s)
+		}
+	}
+	for _, s := range others {
+		if names.IsDeviceName(s) {
+			t.Errorf("%q should not be a device name", s)
+		}
+	}
+}
+
+func TestLabelMessageNamesTheValueAndTheRule(t *testing.T) {
+	message := names.LabelMessage("Acme_API")
+	if !strings.HasPrefix(message, `"Acme_API" must be lowercase letters, digits and inner hyphens, 2-63 characters`) {
+		t.Fatalf("message %q", message)
+	}
+}
+
+func TestClosest(t *testing.T) {
+	stacks := []string{"go-srv", "ng-web"}
+	cases := map[string]string{
+		"ng-wb":    "ng-web",
+		"go-svr":   "go-srv",
+		"ng-webs":  "ng-web",
+		"ng-web":   "",
+		"rust-srv": "",
+		"":         "",
+	}
+	for word, want := range cases {
+		if got := names.Closest(word, stacks); got != want {
+			t.Errorf("Closest(%q) = %q, want %q", word, got, want)
+		}
+	}
+	if got := names.Closest("ng-wb", nil); got != "" {
+		t.Errorf("no candidates: %q", got)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 )
 
 // FlagsSource is the issue path source of a selection built from flags.
@@ -16,12 +17,21 @@ type Project struct {
 	GoModule string `json:"goModule,omitempty"`
 }
 
+// Component is one components[] entry as given. Name is empty when the entry
+// does not name the component.
+type Component struct {
+	Stack string `json:"stack"`
+	Name  string `json:"name,omitempty"`
+}
+
 // Selection is the recorded choice of stacks and modules.
 type Selection struct {
 	Schema  int      `json:"schema"`
 	Project Project  `json:"project"`
 	Stacks  []string `json:"stacks"`
 	Modules []string `json:"modules"`
+	// Components holds the component entries as given; schema 2 only.
+	Components []Component `json:"components,omitempty"`
 	// AllModules selects every module of the backend stack; the plan expands
 	// it and it is never written to a recorded selection.
 	AllModules bool `json:"-"`
@@ -34,11 +44,13 @@ type SelectionFlags struct {
 	Stacks     []string
 	Modules    []string
 	AllModules bool
+	Components []Component
 }
 
 var (
-	selectionKeys = []string{"schema", "project", "stacks", "modules"}
+	selectionKeys = []string{"schema", "project", "stacks", "modules", "components"}
 	projectKeys   = []string{"name", "goModule"}
+	componentKeys = []string{"stack", "name"}
 )
 
 // DecodeSelection decodes and validates an initializer.selection.json file.
@@ -53,8 +65,17 @@ func DecodeSelection(path string, data []byte) (Selection, []issue.Issue) {
 	if !ok {
 		return selection, d.result()
 	}
-	d.schema(members)
-	selection.Schema = 1
+	selection.Schema = d.selectionSchema(members)
+	if selection.Schema == 0 {
+		selection.Schema = 1
+	}
+	if raw, found := members["components"]; found {
+		if selection.Schema == 1 {
+			d.add("/components", "components needs schema 2")
+		} else {
+			selection.Components = d.components(raw)
+		}
+	}
 	projectOK := false
 	if raw, ok := d.required(members, "", "project"); ok {
 		selection.Project, projectOK = d.project(raw)
@@ -86,6 +107,16 @@ func SelectionFromFlags(f SelectionFlags) (Selection, []issue.Issue) {
 		Stacks:     f.Stacks,
 		Modules:    f.Modules,
 		AllModules: f.AllModules,
+		Components: f.Components,
+	}
+	if len(f.Components) > 0 {
+		selection.Schema = 2
+	}
+	for i, component := range f.Components {
+		hasName := component.Name != ""
+		if hasName && !names.ValidLabel(component.Name) {
+			d.addCode(CodeNameInvalid, fmt.Sprintf("/components/%d", i), names.LabelMessage(component.Name))
+		}
 	}
 	valid := make([]bool, len(f.Modules))
 	for i := range valid {
@@ -119,12 +150,43 @@ func (d *decoder) project(raw json.RawMessage) (Project, bool) {
 	return project, ok
 }
 
+// components decodes the components member: an array of objects with the keys
+// stack (required) and name (optional). A name that fails the label grammar is
+// NAME_INVALID at the name.
+func (d *decoder) components(raw json.RawMessage) []Component {
+	items, ok := d.array(raw, "/components")
+	if !ok {
+		return nil
+	}
+	found := make([]Component, 0, len(items))
+	for i, item := range items {
+		pointer := fmt.Sprintf("/components/%d", i)
+		members, ok := d.object(item, pointer, componentKeys)
+		if !ok {
+			continue
+		}
+		var component Component
+		if rawStack, present := d.required(members, pointer, "stack"); present {
+			component.Stack, _ = d.str(rawStack, pointer+"/stack")
+		}
+		if rawName, present := members["name"]; present {
+			name, isString := d.str(rawName, pointer+"/name")
+			component.Name = name
+			if isString && !names.ValidLabel(name) {
+				d.addCode(CodeNameInvalid, pointer+"/name", names.LabelMessage(name))
+			}
+		}
+		found = append(found, component)
+	}
+	return found
+}
+
 func (d *decoder) checkProject(selection Selection, projectOK, stacksOK bool) {
 	if !projectOK {
 		return
 	}
-	if !projectNamePattern.MatchString(selection.Project.Name) {
-		d.add("/project/name", "must match ^[a-z][a-z0-9-]{1,62}$")
+	if !names.ValidLabel(selection.Project.Name) {
+		d.addCode(CodeNameInvalid, "/project/name", names.LabelMessage(selection.Project.Name))
 	}
 	selectsGo := false
 	for _, stack := range selection.Stacks {

@@ -21,12 +21,17 @@ var (
 	folderPattern   = regexp.MustCompile(`^[a-z][a-z0-9]*$`)
 )
 
-func parse(name string) (*template.Template, error) {
+func parse(name string, extra ...template.FuncMap) (*template.Template, error) {
 	text, err := templateFS.ReadFile("templates/" + name)
 	if err != nil {
 		return nil, fmt.Errorf("read template %s: %w", name, err)
 	}
 	funcs := template.FuncMap{"join": strings.Join}
+	for _, more := range extra {
+		for key, fn := range more {
+			funcs[key] = fn
+		}
+	}
 	parsed, err := template.New(name).Funcs(funcs).Option("missingkey=error").Parse(string(text))
 	if err != nil {
 		return nil, fmt.Errorf("parse template %s: %w", name, err)
@@ -34,8 +39,8 @@ func parse(name string) (*template.Template, error) {
 	return parsed, nil
 }
 
-func execute(name string, data any) ([]byte, error) {
-	parsed, err := parse(name)
+func execute(name string, data any, extra ...template.FuncMap) ([]byte, error) {
+	parsed, err := parse(name, extra...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,20 +117,42 @@ func goSrvEnv(pairs []EnvPair) []EnvPair {
 	return out
 }
 
+// Component is one delivered component as the README names it.
+type Component struct {
+	Stack string
+	Name  string
+}
+
 // ReadmeInput is the data of the project README. The caller sorts every list;
 // the template does not.
 type ReadmeInput struct {
 	Name             string
 	GeneratorVersion string
-	Modules          []ReadmeModule
-	TCKTags          []string
-	TCKEnv           []EnvPair
+	// Components has one entry per selected stack, sorted by Stack.
+	Components []Component
+	Modules    []ReadmeModule
+	TCKTags    []string
+	TCKEnv     []EnvPair
+}
+
+// componentName returns the name of the component of stack, or "" when the
+// project has none.
+func (in ReadmeInput) componentName(stack string) string {
+	for _, component := range in.Components {
+		if component.Stack == stack {
+			return component.Name
+		}
+	}
+	return ""
 }
 
 // Readme renders the project README.md.
 func Readme(in ReadmeInput) ([]byte, error) {
 	var fields []string
 	fields = append(fields, in.Name, in.GeneratorVersion)
+	for _, component := range in.Components {
+		fields = append(fields, component.Stack, component.Name)
+	}
 	for _, module := range in.Modules {
 		fields = append(fields, module.Stack, module.Module, module.Version)
 	}
@@ -144,7 +171,7 @@ func Readme(in ReadmeInput) ([]byte, error) {
 		}
 	}
 	in.TCKEnv = goSrvEnv(in.TCKEnv)
-	return execute("README.md.tmpl", in)
+	return execute("README.md.tmpl", in, template.FuncMap{"component": in.componentName})
 }
 
 // moduleIDPattern is the module id grammar shared by both stacks.

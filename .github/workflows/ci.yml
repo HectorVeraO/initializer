@@ -173,20 +173,29 @@ jobs:
             --catalog "${RUNNER_TEMP}/catalog.lock.json" \
             --out "${ref}" \
             --all-modules --stacks go-srv,ng-web --name initializer \
-            --go-module "$(head -1 go-srv/go.mod | cut -d' ' -f2)"
+            --go-module "$(head -1 go-srv/go.mod | cut -d' ' -f2)" \
+            --component go-srv=go-srv --component ng-web=ng-web
+          jq -e '(.components | length) == 2 and (.components | all(.name == .stack))' "${ref}/initializer.lock.json" > /dev/null || { echo "the reference generation did not keep the repo folders" >&2; exit 1; }
           # Rendered files and target-delivered files differ from the repository by design.
           status=0
+          compared=0
           while IFS= read -r file; do
             path="${file#"${ref}/"}"
             case "${path}" in
               README.md|initializer.selection.json|initializer.lock.json|flags.yaml) continue ;;
             esac
+            compared=$((compared + 1))
             if ! cmp -s "${file}" "${GITHUB_WORKSPACE}/${path}"; then
               echo "round-trip difference: ${path}" >&2
               status=1
             fi
           done < <(find "${ref}" -type f | sort)
-          for excluded in ng-web/AGENTS.md ng-web/cookbooks ng-web/.vscode; do
+          if [ "${compared}" -eq 0 ]; then
+            echo "the round-trip compared no file" >&2
+            status=1
+          fi
+          web="$(jq -r '.components[] | select(.stack == "ng-web") | .name' "${ref}/initializer.lock.json")"
+          for excluded in "${web}/AGENTS.md" "${web}/cookbooks" "${web}/.vscode"; do
             if [ -e "${ref}/${excluded}" ]; then
               echo "excluded path delivered: ${excluded}" >&2
               status=1
@@ -311,6 +320,34 @@ jobs:
           done
           diff -r "${RUNNER_TEMP}/gen-a" "${RUNNER_TEMP}/gen-b"
           "${RUNNER_TEMP}/initializer" verify --project "${RUNNER_TEMP}/gen-a"
+      - name: Read the project layout from the lock
+        id: layout
+        env:
+          WEB: ${{ matrix.web }}
+        run: |
+          set -euo pipefail
+          lock="${RUNNER_TEMP}/gen-a/initializer.lock.json"
+          one() {
+            jq -r --arg stack "$1" '[.components[] | select(.stack == $stack) | .name] | if length == 1 then .[0] else empty end' "${lock}"
+          }
+          srv="$(one go-srv)"
+          web="$(one ng-web)"
+          if [ -z "${srv}" ]; then
+            echo "the lock names no single go-srv component" >&2
+            exit 1
+          fi
+          if [ "${WEB}" = "true" ] && [ -z "${web}" ]; then
+            echo "the leg selects ng-web but the lock names no single ng-web component" >&2
+            exit 1
+          fi
+          if [ "${WEB}" != "true" ] && [ -n "${web}" ]; then
+            echo "the lock names an ng-web component the leg does not select" >&2
+            exit 1
+          fi
+          {
+            echo "srv=${srv}"
+            echo "web=${web}"
+          } >> "${GITHUB_OUTPUT}"
       - name: The source module path is gone
         run: |
           set -euo pipefail
@@ -324,13 +361,23 @@ jobs:
           set -euo pipefail
           project="${RUNNER_TEMP}/gen-a"
           catalog="${RUNNER_TEMP}/catalog.lock.json"
-          installed="$(jq -c '[.modules[] | "\(.stack)/\(.module)"]' "${project}/initializer.lock.json")"
-          specs="$(jq -c '[.specs[].spec]' "${project}/initializer.lock.json")"
-          absent="$(jq -r --argjson installed "${installed}" --argjson specs "${specs}" '
+          lock="${project}/initializer.lock.json"
+          installed="$(jq -c '[.modules[] | "\(.stack)/\(.module)"]' "${lock}")"
+          specs="$(jq -c '[.specs[].spec]' "${lock}")"
+          folders="$(jq -c '[.components[] | {key: .stack, value: .name}] | from_entries' "${lock}")"
+          mapping='
+            def project_path: . as $p
+              | ([$folders | to_entries[] | select(. as $e | $p | startswith($e.key + "/"))] | first) as $f
+              | if $f == null then $p else $f.value + "/" + ($p | ltrimstr($f.key + "/")) end;'
+          absent="$(jq -r --argjson installed "${installed}" --argjson specs "${specs}" --argjson folders "${folders}" "${mapping}"'
             (.stacks[] | .stack as $stack | .modules[]
                | select(("\($stack)/\(.module)") as $key | $installed | index($key) | not)
-               | .files[] | (.target // .path)),
+               | .files[] | (.target // .path) | project_path),
             (.specs[] | select(.spec as $s | $specs | index($s) | not) | .files[] | (.target // .path))' "${catalog}")"
+          present="$(jq -r --argjson installed "${installed}" --argjson folders "${folders}" "${mapping}"'
+            .stacks[] | .stack as $stack | .modules[]
+              | select(("\($stack)/\(.module)") as $key | $installed | index($key))
+              | .files[] | (.target // .path) | project_path' "${catalog}")"
           status=0
           while IFS= read -r path; do
             if [ -n "${path}" ] && [ -e "${project}/${path}" ]; then
@@ -338,6 +385,20 @@ jobs:
               status=1
             fi
           done <<< "${absent}"
+          count=0
+          while IFS= read -r path; do
+            if [ -n "${path}" ]; then
+              count=$((count + 1))
+              if [ ! -e "${project}/${path}" ]; then
+                echo "mapped path of an installed module is missing: ${path}" >&2
+                status=1
+              fi
+            fi
+          done <<< "${present}"
+          if [ "${count}" -eq 0 ]; then
+            echo "no installed module file was mapped" >&2
+            status=1
+          fi
           exit "${status}"
       - name: Start the generated project stack
         run: |
@@ -363,7 +424,7 @@ jobs:
           echo "timeout waiting for the generated project stack" >&2
           exit 1
       - name: Format, vet, build and test the generated go-srv
-        working-directory: ${{ runner.temp }}/gen-a/go-srv
+        working-directory: ${{ runner.temp }}/gen-a/${{ steps.layout.outputs.srv }}
         run: |
           set -euo pipefail
           unformatted="$(gofmt -l .)"
@@ -376,10 +437,12 @@ jobs:
           database_url="$(. ../.deploy/local/.env; printf '%s' "${APP_DATABASE_URL}")"
           APP_TEST_DATABASE_URL="${database_url}" APP_TEST_PUBLIC_BASE_URL="${APP_PUBLIC_BASE_URL}" go test ./...
       - name: Build and start the generated go-srv
+        env:
+          SRV: ${{ steps.layout.outputs.srv }}
         run: |
           set -euo pipefail
           project="${RUNNER_TEMP}/gen-a"
-          go -C "${project}/go-srv" build -o "${RUNNER_TEMP}/go-srv-bin" ./cmd/server
+          go -C "${project}/${SRV}" build -o "${RUNNER_TEMP}/go-srv-bin" ./cmd/server
           cd "${project}"
           set -a; . .deploy/local/.env; set +a
           while IFS= read -r pair; do
@@ -399,7 +462,7 @@ jobs:
           exit 1
       - name: Lint, build and test the generated ng-web
         if: matrix.web
-        working-directory: ${{ runner.temp }}/gen-a/ng-web
+        working-directory: ${{ runner.temp }}/gen-a/${{ steps.layout.outputs.web }}
         run: |
           set -euo pipefail
           npm ci
@@ -408,7 +471,7 @@ jobs:
           npm test -- --watch=false
       - name: Start the generated ng-web dev server
         if: matrix.web
-        working-directory: ${{ runner.temp }}/gen-a/ng-web
+        working-directory: ${{ runner.temp }}/gen-a/${{ steps.layout.outputs.web }}
         run: |
           set -euo pipefail
           npm start > "${RUNNER_TEMP}/ng-web.log" 2>&1 &

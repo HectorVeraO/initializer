@@ -280,15 +280,16 @@ func runGenerate(ctx *Context, opts any, positionals []string) int {
 	var selection manifest.Selection
 	var issues []issue.Issue
 	var notes []string
+	fromFolder := false
 	if filePath := o.filePath(); filePath != "" {
 		data, err := readInput(filePath)
 		if err != nil {
 			return fail(ctx, "input_unreadable", codeInputUnreadable, err)
 		}
 		selection, issues = manifest.DecodeSelection(filepath.ToSlash(filePath), data)
+		issues = append(issues, multiComponentIssues(selection.Components, filepath.ToSlash(filePath))...)
 	} else {
 		name := o.name
-		fromFolder := false
 		switch {
 		case name != "":
 		case dir != "":
@@ -304,13 +305,15 @@ func runGenerate(ctx *Context, opts any, positionals []string) int {
 			Stacks:     splitList(o.stacks),
 			Modules:    splitList(o.modules),
 			AllModules: o.allModules,
+			Components: componentSelection(o.components),
 		})
+		issues = append(issues, multiComponentIssues(selection.Components, "")...)
 		if fromFolder {
 			issues = folderNameIssues(issues, name, dir)
 		}
 	}
 	if len(issues) > 0 {
-		return reportIssues(ctx, issues, issueView{dir: dir, selectionFile: o.filePath()})
+		return reportIssues(ctx, issues, issueView{dir: dir, selectionFile: o.filePath(), components: typedComponents(o.components)})
 	}
 	for _, note := range notes {
 		fmt.Fprintf(ctx.Stderr, "note: %s\n", note)
@@ -325,6 +328,7 @@ func runGenerate(ctx *Context, opts any, positionals []string) int {
 		slog.Bool("all_modules", selection.AllModules))
 	return generateProject(ctx, generateInput{
 		root: o.root, catalogPath: o.catalog, out: dir, selection: selection, selectionFile: o.filePath(),
+		typedComponents: typedComponents(o.components), nameFromFolder: fromFolder,
 	})
 }
 
@@ -344,14 +348,22 @@ func folderName(dir string) string {
 // folderNameIssues rewrites the issue about a name taken from a folder so it
 // points at the DIR argument instead of a flag the person never typed.
 func folderNameIssues(issues []issue.Issue, name, dir string) []issue.Issue {
-	nameIssue := issue.Path(manifest.FlagsSource, issue.Pointer("project", "name"))
+	pointer := issue.Pointer("project", "name")
+	nameIssues := map[string]bool{
+		issue.Path(manifest.FlagsSource, pointer): true,
+		issue.Path("selection", pointer):          true,
+	}
 	rewritten := make([]issue.Issue, 0, len(issues))
 	for _, found := range issues {
-		if found.Path == nameIssue {
+		if nameIssues[found.Path] {
+			message := fmt.Sprintf("name %q comes from the folder %q and is not a project name", name, dir)
+			if found.Code == plan.CodeNameReserved {
+				message = fmt.Sprintf("name %q comes from the folder %q and is a reserved device name on Windows", name, dir)
+			}
 			found = issue.Issue{
-				Code:    manifest.CodeSelectionInvalid,
+				Code:    found.Code,
 				Path:    issue.Path("args", issue.Pointer("dir")),
-				Message: fmt.Sprintf("name %q comes from the folder %q and is not a project name", name, dir),
+				Message: message,
 			}
 		}
 		rewritten = append(rewritten, found)
@@ -362,6 +374,10 @@ func folderNameIssues(issues []issue.Issue, name, dir string) []issue.Issue {
 type generateInput struct {
 	root, catalogPath, out, selectionFile string
 	selection                             manifest.Selection
+	// typedComponents are the --component values as typed, in flag order.
+	typedComponents []string
+	// nameFromFolder reports that the project name is the base name of out.
+	nameFromFolder bool
 }
 
 // moduleIDs returns the sorted, distinct module ids of every stack of c.
@@ -413,7 +429,15 @@ func generateProject(ctx *Context, in generateInput) int {
 	}
 	issues = append(issues, outputIssues...)
 	if len(issues) > 0 {
-		return reportIssues(ctx, issues, issueView{dir: in.out, moduleIDs: moduleIDs(built), selectionFile: in.selectionFile})
+		if in.nameFromFolder {
+			issues = folderNameIssues(issues, in.selection.Project.Name, in.out)
+		}
+		if in.selectionFile == "" {
+			issues = flagOrigin(issues)
+		}
+		return reportIssues(ctx, issues, issueView{
+			dir: in.out, moduleIDs: moduleIDs(built), selectionFile: in.selectionFile, components: in.typedComponents,
+		})
 	}
 
 	var added []moduleAdded
@@ -434,6 +458,10 @@ func generateProject(ctx *Context, in generateInput) int {
 	if err := emit.Write(in.out, project); err != nil {
 		return fail(ctx, "project_write_failed", codeOutputUnwritable, err)
 	}
+	components := make([]componentInstalled, 0, len(resolved.Components))
+	for _, component := range resolved.Components {
+		components = append(components, componentInstalled{Stack: component.Stack, Name: component.Name})
+	}
 	var installed []moduleInstalled
 	for _, stack := range resolved.Stacks {
 		for _, module := range stack.Modules {
@@ -441,12 +469,13 @@ func generateProject(ctx *Context, in generateInput) int {
 		}
 	}
 	code := writeGenerate(ctx, generateResult{
-		project: resolved.Selection.Project.Name,
-		path:    in.out,
-		files:   len(project.Files),
-		catalog: catalogRef{SHA256: digest, File: filepath.ToSlash(in.catalogPath)},
-		modules: installed,
-		added:   added,
+		project:    resolved.Selection.Project.Name,
+		path:       in.out,
+		files:      len(project.Files),
+		catalog:    catalogRef{SHA256: digest, File: filepath.ToSlash(in.catalogPath)},
+		components: components,
+		modules:    installed,
+		added:      added,
 	})
 	if code != exitOK {
 		return code
