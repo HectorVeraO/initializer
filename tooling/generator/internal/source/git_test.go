@@ -378,6 +378,29 @@ func TestCheckStaleAcceptsATwelveHexBuildCommit(t *testing.T) {
 	}
 }
 
+func TestCheckStaleAcceptsTheSevenAndFortyHexBounds(t *testing.T) {
+	dir, built := staleRepo(t)
+	writeRepoFile(t, dir, "tooling/generator/main.go", "package main\n// changed\n")
+	commitAll(t, dir, "generator change")
+	for _, length := range []int{7, 40} {
+		if warnings, _ := staleCheck(t, dir, built[:length]); len(warnings) != 1 {
+			t.Fatalf("%d hex digits: warnings = %q", length, warnings)
+		}
+	}
+}
+
+func TestCheckStaleIgnoresABuildCommitOutsideTheSevenToFortyHexRange(t *testing.T) {
+	dir, built := staleRepo(t)
+	writeRepoFile(t, dir, "tooling/generator/main.go", "package main\n// changed\n")
+	commitAll(t, dir, "generator change")
+	for _, commit := range []string{built[:6], built + "0"} {
+		warnings, notes := staleCheck(t, dir, commit)
+		if len(warnings) != 0 || len(notes) != 0 {
+			t.Fatalf("%d hex digits: warnings = %q notes = %q", len(commit), warnings, notes)
+		}
+	}
+}
+
 func TestCheckStaleIsQuietWhenOnlyOtherFoldersChanged(t *testing.T) {
 	dir, built := staleRepo(t)
 	writeRepoFile(t, dir, "go-srv/main.go", "package main\n// changed\n")

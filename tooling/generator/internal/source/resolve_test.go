@@ -247,12 +247,36 @@ func TestResolveSourceMatchesTheGoldenCatalogInBothForms(t *testing.T) {
 	}
 }
 
-func TestDefaultHostIsComplete(t *testing.T) {
+func TestDefaultHostReportsTheRealProcess(t *testing.T) {
 	host := DefaultHost()
-	if host.Getwd == nil || host.Executable == nil || host.Getenv == nil || host.Git == nil || host.MainModule == "" {
-		t.Fatalf("host = %+v", host)
+	wantDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := host.Git(background(), t.TempDir(), "--version"); err != nil {
+	gotDir, err := host.Getwd()
+	if err != nil || gotDir != wantDir {
+		t.Fatalf("Getwd = %q, %v; want %q", gotDir, err, wantDir)
+	}
+	wantExe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotExe, err := host.Executable()
+	if err != nil || gotExe != wantExe {
+		t.Fatalf("Executable = %q, %v; want %q", gotExe, err, wantExe)
+	}
+	t.Setenv("INITIALIZER_DEFAULT_HOST_PROBE", "probe-value")
+	if got := host.Getenv("INITIALIZER_DEFAULT_HOST_PROBE"); got != "probe-value" {
+		t.Fatalf("Getenv = %q", got)
+	}
+	if host.MainModule == "" {
+		t.Fatal("MainModule is empty")
+	}
+	out, err := host.Git(background(), t.TempDir(), "--version")
+	if err != nil {
 		t.Skipf("git is not available: %v", err)
+	}
+	if !strings.HasPrefix(string(out), "git version") {
+		t.Fatalf("git --version = %q", out)
 	}
 }

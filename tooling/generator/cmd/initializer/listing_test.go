@@ -34,11 +34,13 @@ func TestModuleLsFiltersByStack(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit %d", code)
 	}
-	var ids []string
+	var rows []string
 	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n")[1:] {
-		ids = append(ids, strings.Fields(line)[0])
+		fields := strings.Fields(line)
+		rows = append(rows, fields[0]+"="+fields[1])
 	}
-	if got := strings.Join(ids, ","); got != "core,feature-flags,identity,parameters" {
+	want := "core=go-srv,ng-web;feature-flags=go-srv,ng-web;identity=go-srv,ng-web;parameters=go-srv,ng-web"
+	if got := strings.Join(rows, ";"); got != want {
 		t.Fatalf("modules of ng-web = %s", got)
 	}
 }
