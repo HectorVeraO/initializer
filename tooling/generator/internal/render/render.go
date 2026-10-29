@@ -117,10 +117,52 @@ func goSrvEnv(pairs []EnvPair) []EnvPair {
 	return out
 }
 
-// Component is one delivered component as the README names it.
-type Component struct {
-	Stack string
-	Name  string
+// ReadmeRun is the data of the Run, host-dev and TCK sections of the project README.
+type ReadmeRun struct {
+	// PortLow and PortHigh are the first and last host port of the band (10100, 10199).
+	PortLow, PortHigh int
+	// Instances holds one entry per backend component in lock order; exactly one
+	// until multiple backend components are supported.
+	Instances []ReadmeInstance
+}
+
+// ReadmeInstance is one backend component and its bound frontend.
+type ReadmeInstance struct {
+	// Backend is the backend component name: its folder and its compose service.
+	Backend string
+	// Web is the bound frontend component name; "" when there is none.
+	Web string
+	// OriginURL is the public origin, "http://localhost:10120".
+	OriginURL string
+	// HasIdentity reports whether the backend installs identity (cookie sentence).
+	HasIdentity bool
+	// DevSrvTask, DevWebTask and TCKTask are the mise task names ("dev:srv",
+	// "dev:web", "tck"); DevWebTask is "" when Web is "".
+	DevSrvTask, DevWebTask, TCKTask string
+}
+
+// validate returns an error unless the run can be rendered.
+func (run ReadmeRun) validate() error {
+	if run.PortLow >= run.PortHigh {
+		return fmt.Errorf("port range %d-%d must have PortLow below PortHigh", run.PortLow, run.PortHigh)
+	}
+	if len(run.Instances) == 0 {
+		return errors.New("the README needs at least one backend instance")
+	}
+	for position, instance := range run.Instances {
+		if instance.Backend == "" {
+			return fmt.Errorf("instance %d has no backend name", position)
+		}
+		hasNoWeb := instance.Web == ""
+		hasNoWebTask := instance.DevWebTask == ""
+		if hasNoWeb != hasNoWebTask {
+			return fmt.Errorf("instance %d: DevWebTask must be empty exactly when Web is empty", position)
+		}
+		if instance.OriginURL == "" || instance.DevSrvTask == "" || instance.TCKTask == "" {
+			return fmt.Errorf("instance %d: OriginURL, DevSrvTask and TCKTask must not be empty", position)
+		}
+	}
+	return nil
 }
 
 // ReadmeInput is the data of the project README. The caller sorts every list;
@@ -128,37 +170,29 @@ type Component struct {
 type ReadmeInput struct {
 	Name             string
 	GeneratorVersion string
-	// Components has one entry per selected stack, sorted by Stack.
-	Components []Component
-	Modules    []ReadmeModule
-	TCKTags    []string
-	TCKEnv     []EnvPair
-}
-
-// componentName returns the name of the component of stack, or "" when the
-// project has none.
-func (in ReadmeInput) componentName(stack string) string {
-	for _, component := range in.Components {
-		if component.Stack == stack {
-			return component.Name
-		}
-	}
-	return ""
+	Modules          []ReadmeModule
+	TCKTags          []string
+	TCKEnv           []EnvPair
+	Run              ReadmeRun
 }
 
 // Readme renders the project README.md.
 func Readme(in ReadmeInput) ([]byte, error) {
+	if err := in.Run.validate(); err != nil {
+		return nil, err
+	}
 	var fields []string
 	fields = append(fields, in.Name, in.GeneratorVersion)
-	for _, component := range in.Components {
-		fields = append(fields, component.Stack, component.Name)
-	}
 	for _, module := range in.Modules {
 		fields = append(fields, module.Stack, module.Module, module.Version)
 	}
 	fields = append(fields, in.TCKTags...)
 	for _, pair := range in.TCKEnv {
 		fields = append(fields, pair.Key, pair.Value)
+	}
+	for _, instance := range in.Run.Instances {
+		fields = append(fields, instance.Backend, instance.Web, instance.OriginURL,
+			instance.DevSrvTask, instance.DevWebTask, instance.TCKTask)
 	}
 	for _, field := range fields {
 		if strings.ContainsAny(field, "\r\n\x00") {
@@ -171,7 +205,7 @@ func Readme(in ReadmeInput) ([]byte, error) {
 		}
 	}
 	in.TCKEnv = goSrvEnv(in.TCKEnv)
-	return execute("README.md.tmpl", in, template.FuncMap{"component": in.componentName})
+	return execute("README.md.tmpl", in)
 }
 
 // moduleIDPattern is the module id grammar shared by both stacks.

@@ -93,88 +93,180 @@ func TestModulesGoRefusesBadInput(t *testing.T) {
 	}
 }
 
-func TestReadmeGoldens(t *testing.T) {
-	coreParams := render.ReadmeInput{
-		Name:             "acme-backend",
+// readmeRun returns the run data of project name: a backend, and a console
+// when withWeb is set.
+func readmeRun(name string, withWeb, withIdentity bool) render.ReadmeRun {
+	instance := render.ReadmeInstance{
+		Backend:     name + "-srv",
+		OriginURL:   "http://localhost:10100",
+		HasIdentity: withIdentity,
+		DevSrvTask:  "dev:srv",
+		TCKTask:     "tck",
+	}
+	if withWeb {
+		instance.Web = name + "-web"
+		instance.OriginURL = "http://localhost:10120"
+		instance.DevWebTask = "dev:web"
+	}
+	return render.ReadmeRun{PortLow: 10100, PortHigh: 10199, Instances: []render.ReadmeInstance{instance}}
+}
+
+// readmeInput returns the README data of an acme project with the identity
+// and feature-flags modules.
+func readmeInput(withWeb, withIdentity, withTCKEnv bool) render.ReadmeInput {
+	in := render.ReadmeInput{
+		Name:             "acme",
 		GeneratorVersion: "0.1.0",
-		Components:       []render.Component{{Stack: "go-srv", Name: "go-srv"}},
 		Modules: []render.ReadmeModule{
 			{Stack: "go-srv", Module: "core", Version: "0.1.0"},
 			{Stack: "go-srv", Module: "identity", Version: "0.1.0"},
-			{Stack: "go-srv", Module: "parameters", Version: "0.1.0"},
+			{Stack: "go-srv", Module: "feature-flags", Version: "0.1.0"},
 		},
-		TCKTags: []string{"@core", "@identity", "@otel", "@parameters"},
+		TCKTags: []string{"@core", "@feature-flags", "@identity", "@otel"},
+		Run:     readmeRun("acme", withWeb, withIdentity),
 	}
-	all := coreParams
-	all.Modules = []render.ReadmeModule{
-		{Stack: "go-srv", Module: "core", Version: "0.1.0"},
-		{Stack: "go-srv", Module: "identity", Version: "0.1.0"},
-		{Stack: "go-srv", Module: "feature-flags", Version: "0.1.0"},
-		{Stack: "go-srv", Module: "parameters", Version: "0.1.0"},
+	if withTCKEnv {
+		in.TCKEnv = []render.EnvPair{{Key: "APP_FLAGS_FILE", Value: "specs/feature-flags/tck/fixtures/flags.yaml"}}
 	}
-	all.TCKTags = []string{"@core", "@identity", "@feature-flags", "@otel", "@parameters"}
-	all.TCKEnv = []render.EnvPair{{Key: "APP_FLAGS_FILE", Value: "specs/feature-flags/tck/fixtures/flags.yaml"}}
-	cases := map[string]render.ReadmeInput{
-		"README.core-parameters.md.golden": coreParams,
-		"README.all.md.golden":             all,
+	return in
+}
+
+func TestReadmeGoldens(t *testing.T) {
+	cases := []struct {
+		golden string
+		in     render.ReadmeInput
+	}{
+		{"README.all.md.golden", readmeInput(true, true, true)},
+		{"README.backend-only.md.golden", readmeInput(false, true, true)},
+		{"README.no-identity.md.golden", readmeInput(true, false, false)},
 	}
-	for golden, in := range cases {
-		t.Run(golden, func(t *testing.T) {
-			got, err := render.Readme(in)
+	for _, tc := range cases {
+		t.Run(tc.golden, func(t *testing.T) {
+			got, err := render.Readme(tc.in)
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertGolden(t, golden, got)
-			if !bytes.HasSuffix(got, []byte("run tck\n")) || bytes.HasSuffix(got, []byte("\n\n")) {
+			assertGolden(t, tc.golden, got)
+			if !bytes.HasSuffix(got, []byte("mise run tck\n")) || bytes.HasSuffix(got, []byte("\n\n")) {
 				t.Fatal("README must end with exactly one newline")
 			}
 		})
 	}
 }
 
+func TestReadmeVariantsOmitWhatTheProjectLacks(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      render.ReadmeInput
+		want    []string
+		missing []string
+	}{
+		{
+			name: "console, identity and tckEnv",
+			in:   readmeInput(true, true, true),
+			want: []string{
+				"The console opens on http://localhost:10120; the API is behind it at `/api`. Host ports 10100-10199, bound to `127.0.0.1`.",
+				"cookies are per host, not per port.",
+				"stop acme-web\n    mise run dev:web",
+				"stop acme-srv acme-web\n    mise run dev:srv\n    mise run dev:web",
+				"Once per clone: `npm --prefix acme-web ci`.",
+				"Add `APP_FLAGS_FILE=../specs/feature-flags/tck/fixtures/flags.yaml` to `.deploy/local/.env` (acme-srv reads it in both modes)",
+			},
+		},
+		{
+			name: "no console",
+			in:   readmeInput(false, true, true),
+			want: []string{"The API opens on http://localhost:10100. Host ports 10100-10199", "stop acme-srv\n    mise run dev:srv\n\n## TCK"},
+			missing: []string{
+				"console", "acme-web", "dev:web", "npm --prefix acme-web",
+			},
+		},
+		{
+			name:    "no identity",
+			in:      readmeInput(true, false, true),
+			missing: []string{"cookies are per host"},
+		},
+		{
+			name:    "no tckEnv",
+			in:      readmeInput(true, true, false),
+			want:    []string{"@otel\n\nOnce per clone: `npm --prefix specs ci`. Then:\n\n    mise run tck\n"},
+			missing: []string{"Add `", "APP_FLAGS_FILE"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := render.Readme(tc.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := string(got)
+			for _, want := range tc.want {
+				if !strings.Contains(text, want) {
+					t.Errorf("README lacks %q:\n%s", want, text)
+				}
+			}
+			for _, banned := range tc.missing {
+				if strings.Contains(text, banned) {
+					t.Errorf("README holds %q:\n%s", banned, text)
+				}
+			}
+		})
+	}
+}
+
+func TestReadmeNamesTheComponentsOfTheRun(t *testing.T) {
+	in := readmeInput(true, true, true)
+	in.Run.Instances[0].Backend = "ledger-api"
+	in.Run.Instances[0].Web = "ledger-console"
+	got, err := render.Readme(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"stop ledger-console\n", "stop ledger-api ledger-console\n", "`npm --prefix ledger-console ci`", "(ledger-api reads it in both modes)", "Editing ledger-api runs the console"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("README lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestReadmeRefusesAnInvalidRun(t *testing.T) {
+	cases := map[string]func(run *render.ReadmeRun){
+		"port range reversed":     func(run *render.ReadmeRun) { run.PortLow, run.PortHigh = 10199, 10100 },
+		"port range empty":        func(run *render.ReadmeRun) { run.PortHigh = run.PortLow },
+		"no instance":             func(run *render.ReadmeRun) { run.Instances = nil },
+		"empty backend":           func(run *render.ReadmeRun) { run.Instances[0].Backend = "" },
+		"web without a web task":  func(run *render.ReadmeRun) { run.Instances[0].DevWebTask = "" },
+		"web task without a web":  func(run *render.ReadmeRun) { run.Instances[0].Web = "" },
+		"empty origin":            func(run *render.ReadmeRun) { run.Instances[0].OriginURL = "" },
+		"empty dev task":          func(run *render.ReadmeRun) { run.Instances[0].DevSrvTask = "" },
+		"empty tck task":          func(run *render.ReadmeRun) { run.Instances[0].TCKTask = "" },
+		"line break in a backend": func(run *render.ReadmeRun) { run.Instances[0].Backend = "acme\n# injected" },
+		"line break in the web":   func(run *render.ReadmeRun) { run.Instances[0].Web = "acme\r" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			in := readmeInput(true, true, true)
+			mutate(&in.Run)
+			if out, err := render.Readme(in); err == nil {
+				t.Fatalf("want an error, got:\n%s", out)
+			}
+		})
+	}
+}
+
 func TestReadmeRefusesUnsafeFields(t *testing.T) {
-	base := render.ReadmeInput{Name: "acme-backend", GeneratorVersion: "0.1.0"}
-	bad := []render.ReadmeInput{base, base, base, base, base, base}
+	bad := []render.ReadmeInput{}
+	for i := 0; i < 5; i++ {
+		bad = append(bad, readmeInput(true, true, false))
+	}
 	bad[0].Name = "x\n# injected"
 	bad[1].TCKEnv = []render.EnvPair{{Key: "K", Value: "a`b"}}
 	bad[2].Modules = []render.ReadmeModule{{Stack: "go-srv", Module: "a\r", Version: "0.1.0"}}
 	bad[3].TCKTags = []string{"@core\n# injected"}
 	bad[4].TCKEnv = []render.EnvPair{{Key: "K`", Value: "v"}}
-	bad[5].Components = []render.Component{{Stack: "go-srv", Name: "acme\n# injected"}}
 	for i, in := range bad {
 		if out, err := render.Readme(in); err == nil {
 			t.Fatalf("case %d: want an error, got:\n%s", i, out)
 		}
-	}
-}
-
-func TestReadmeNamesTheFolderOfTheGoComponent(t *testing.T) {
-	in := render.ReadmeInput{
-		Name:             "acme-backend",
-		GeneratorVersion: "0.1.0",
-		Components:       []render.Component{{Stack: "go-srv", Name: "acme-srv"}, {Stack: "ng-web", Name: "acme-web"}},
-		TCKTags:          []string{"@core"},
-		TCKEnv:           []render.EnvPair{{Key: "APP_FLAGS_FILE", Value: "specs/feature-flags/tck/fixtures/flags.yaml"}},
-	}
-	got, err := render.Readme(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(got)
-	for _, want := range []string{"(from `acme-srv/`, so relative paths resolve against `acme-srv/`)", "`APP_FLAGS_FILE=../specs/feature-flags/tck/fixtures/flags.yaml`"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("README lacks %q:\n%s", want, text)
-		}
-	}
-}
-
-func TestReadmeOmitsTheStartSentenceWithoutAGoComponent(t *testing.T) {
-	in := render.ReadmeInput{Name: "acme-web", GeneratorVersion: "0.1.0", Components: []render.Component{{Stack: "ng-web", Name: "acme-web"}}}
-	got, err := render.Readme(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(got), "Start the stack") {
-		t.Errorf("the go-srv sentence must be omitted:\n%s", got)
 	}
 }

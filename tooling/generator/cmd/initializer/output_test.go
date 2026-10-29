@@ -42,7 +42,7 @@ func TestGenerateTextResultNamesPulledModulesAndTheNextStep(t *testing.T) {
 	files := len(tree(t, filepath.Join(dir, "acme")))
 	want := "Added identity (required by parameters).\n" +
 		"Project acme generated in ./acme (" + itoa(files) + " files).\n" +
-		"Next: cd acme, then read README.md\n"
+		"Next: cd acme && mise run up\n"
 	if stdout != want {
 		t.Fatalf("stdout\n%q\nwant\n%q", stdout, want)
 	}

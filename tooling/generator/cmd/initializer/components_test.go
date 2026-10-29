@@ -151,8 +151,10 @@ func TestGenerateDeliversTheStackUnderItsComponentFolder(t *testing.T) {
 	if !strings.HasPrefix(files["acme-srv/go.mod"], "module example.com/acme/backend\n") {
 		t.Errorf("go.mod module line not rewritten: %q", files["acme-srv/go.mod"])
 	}
-	if !strings.Contains(files["README.md"], "(from `acme-srv/`, so relative paths resolve against `acme-srv/`)") {
-		t.Errorf("README does not name the component folder:\n%s", files["README.md"])
+	for _, want := range []string{"stop acme-srv acme-web\n", "Editing acme-srv runs the console", "`npm --prefix acme-web ci`"} {
+		if !strings.Contains(files["README.md"], want) {
+			t.Errorf("README lacks %q:\n%s", want, files["README.md"])
+		}
 	}
 }
 
@@ -243,7 +245,7 @@ func TestWithoutComponentsTheFoldersFollowTheProjectName(t *testing.T) {
 			t.Errorf("%s stayed under a stack id", path)
 		}
 	}
-	if !strings.Contains(files["README.md"], "`acme-backend-srv/`") {
+	if !strings.Contains(files["README.md"], "stop acme-backend-srv acme-backend-web\n") {
 		t.Errorf("README does not name the default folder:\n%s", files["README.md"])
 	}
 	var recorded map[string]any

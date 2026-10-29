@@ -206,6 +206,13 @@ jobs:
             fi
           done
           exit "${status}"
+      - name: Build the component images
+        run: |
+          set -euo pipefail
+          compose="docker compose -f .deploy/local/docker-compose.yml"
+          ${compose} config -q
+          ${compose} --profile app config -q
+          ${compose} --profile app build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: catalog-lock

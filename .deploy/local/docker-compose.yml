@@ -1,14 +1,15 @@
 name: initializer
 
 services:
+  # initializer:stack go-srv
   postgres:
     image: postgres:18
     environment:
       POSTGRES_DB: initializer
       POSTGRES_USER: initializer
-      POSTGRES_PASSWORD: ${INITIALIZER_PG_PASSWORD:?set INITIALIZER_PG_PASSWORD in .deploy/local/.env}
+      POSTGRES_PASSWORD: ${INITIALIZER_PG_PASSWORD:-change-me-local-only}
     ports:
-      - "10132:5432"
+      - "127.0.0.1:10132:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -16,7 +17,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
+  # initializer:end go-srv
   # initializer:module identity
   # One-shot, idempotent: creates or updates role and database `kratos` (L11).
   postgres-init:
@@ -29,8 +30,8 @@ services:
       PGPORT: "5432"
       PGUSER: initializer
       PGDATABASE: initializer
-      PGPASSWORD: ${INITIALIZER_PG_PASSWORD:?set INITIALIZER_PG_PASSWORD in .deploy/local/.env}
-      KRATOS_PG_PASSWORD: ${KRATOS_PG_PASSWORD:?set KRATOS_PG_PASSWORD in .deploy/local/.env}
+      PGPASSWORD: ${INITIALIZER_PG_PASSWORD:-change-me-local-only}
+      KRATOS_PG_PASSWORD: ${KRATOS_PG_PASSWORD:-change-me-local-only-kratos}
     volumes:
       - ./postgres-init:/postgres-init:ro
     entrypoint: ["bash", "/postgres-init/10-kratos-database.sh"]
@@ -42,7 +43,7 @@ services:
       postgres-init:
         condition: service_completed_successfully
     environment:
-      DSN: postgres://kratos:${KRATOS_PG_PASSWORD}@postgres:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+      DSN: postgres://kratos:${KRATOS_PG_PASSWORD:-change-me-local-only-kratos}@postgres:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
     volumes:
       - ./kratos:/etc/config/kratos:ro
     command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
@@ -54,7 +55,7 @@ services:
       kratos-migrate:
         condition: service_completed_successfully
     environment:
-      DSN: postgres://kratos:${KRATOS_PG_PASSWORD}@postgres:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
+      DSN: postgres://kratos:${KRATOS_PG_PASSWORD:-change-me-local-only-kratos}@postgres:5432/kratos?sslmode=disable&max_conns=20&max_idle_conns=4
       SERVE_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:10120}/kratos/
       SELFSERVICE_DEFAULT_BROWSER_RETURN_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:10120}/
     ports:
@@ -66,6 +67,59 @@ services:
     command: serve -c /etc/config/kratos/kratos.yml --dev --sqa-opt-out
     restart: unless-stopped
   # initializer:end identity
+  # initializer:stack go-srv
+  # Built from its component folder, behind profile app: `up -d` alone starts infrastructure only.
+  # The project root is mounted read-only so relative config paths resolve as in host-dev.
+  go-srv:
+    build: ../../go-srv
+    profiles: [app]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  # initializer:end go-srv
+  # initializer:module identity
+      kratos:
+        condition: service_started
+  # initializer:end identity
+  # initializer:stack go-srv
+    working_dir: /project/go-srv
+    volumes:
+      - ../..:/project:ro
+    env_file:
+      - path: ./.example.env
+      - path: ./.env
+        required: false
+    environment:
+      GO_SRV_ADDR: ":10100"
+      APP_DATABASE_URL: postgres://initializer:${INITIALIZER_PG_PASSWORD:-change-me-local-only}@postgres:5432/initializer?sslmode=disable
+  # initializer:end go-srv
+  # initializer:module identity
+      APP_KRATOS_PUBLIC_URL: http://kratos:4433
+      APP_KRATOS_ADMIN_URL: http://kratos:4434
+  # initializer:end identity
+  # initializer:stack go-srv
+    ports:
+      - "127.0.0.1:10100:10100"
+  # initializer:end go-srv
+
+  # initializer:stack ng-web
+  ng-web:
+    build: ../../ng-web
+    profiles: [app]
+  # initializer:end ng-web
+  # initializer:stack go-srv
+    depends_on:
+      go-srv:
+        condition: service_started
+    environment:
+      GO_SRV_HOST: go-srv:10100
+  # initializer:end go-srv
+  # initializer:stack ng-web
+    ports:
+      - "127.0.0.1:10120:80"
+  # initializer:end ng-web
 
 volumes:
+  # initializer:stack go-srv
   postgres-data:
+  # initializer:end go-srv

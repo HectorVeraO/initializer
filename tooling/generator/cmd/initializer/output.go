@@ -429,7 +429,7 @@ func writeGenerate(ctx *Context, result generateResult) int {
 	}
 	shown := displayPath(result.path)
 	fmt.Fprintf(&text, "Project %s generated in %s (%d files).\n", result.project, shown, result.files)
-	fmt.Fprintf(&text, "Next: cd %s, then read README.md\n", strings.TrimPrefix(shown, "./"))
+	fmt.Fprintf(&text, "Next: cd %s && mise run up\n", strings.TrimPrefix(shown, "./"))
 	return emitText(ctx, text.String())
 }
 

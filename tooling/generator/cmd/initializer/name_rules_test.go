@@ -31,7 +31,7 @@ func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
 	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
-		"--name", "acme", "--go-module", "example.com/acme", "--stacks", "go-srv", "--all-modules")
+		"--name", "acme", "--go-module", "example.com/acme", "--stacks", "go-srv,ng-web", "--all-modules")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
 	}
@@ -42,7 +42,11 @@ func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 	text := string(delivered)
 	for _, want := range []string{
 		"name: acme\n", "\n  acme-postgres:\n", "\n  acme-postgres-init:\n", "\n  acme-kratos-migrate:\n", "\n  acme-kratos:\n",
-		"POSTGRES_DB: acme\n", "POSTGRES_USER: acme\n", "${ACME_PG_PASSWORD:?set ACME_PG_PASSWORD in", "@acme-postgres:5432/kratos",
+		"POSTGRES_DB: acme\n", "POSTGRES_USER: acme\n", "${ACME_PG_PASSWORD:-change-me-local-only}", "@acme-postgres:5432/kratos",
+		"\n  acme-srv:\n", "\n  acme-web:\n", "build: ../../acme-srv\n", "build: ../../acme-web\n",
+		"working_dir: /project/acme-srv\n", "GO_SRV_HOST: acme-srv:10100\n", "\n  acme-postgres-data:\n", "- acme-postgres-data:/var/lib/postgresql\n",
+		"APP_DATABASE_URL: postgres://acme:${ACME_PG_PASSWORD:-change-me-local-only}@acme-postgres:5432/acme?sslmode=disable\n",
+		"APP_KRATOS_PUBLIC_URL: http://acme-kratos:4433\n", "APP_KRATOS_ADMIN_URL: http://acme-kratos:4434\n",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the compose file lacks %q", want)
@@ -68,7 +72,7 @@ func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 		}
 	}
 	// The repo copy names its services bare; the delivered copy prefixes them with the project.
-	unprefixed := strings.NewReplacer("acme-postgres", "postgres", "acme-kratos", "kratos").Replace(text)
+	unprefixed := strings.NewReplacer("acme-postgres", "postgres", "acme-kratos", "kratos", "acme-srv", "go-srv", "acme-web", "ng-web").Replace(text)
 	if unprefixed != strings.Join(sourceLines, "\n") {
 		t.Error("the compose file differs from the repo copy beyond the renamed reference names")
 	}

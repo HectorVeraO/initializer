@@ -88,7 +88,7 @@ func TestGenerateWithoutFeatureFlagsShipsNoFlagsConfig(t *testing.T) {
 	}
 	survivors := map[string][]string{
 		".deploy/local/.example.env": {"ACME_BACKEND_PG_PASSWORD=", "OTEL_SERVICE_NAME=", "APP_SESSION_KEYS=", "APP_KRATOS_ADMIN_URL="},
-		".deploy/local/README.md":    {"## Start and stop", "## Session keys"},
+		".deploy/local/README.md":    {"## Run", "## Session keys"},
 	}
 	for p, wanted := range survivors {
 		data, err := os.ReadFile(filepath.Join(out, filepath.FromSlash(p)))
