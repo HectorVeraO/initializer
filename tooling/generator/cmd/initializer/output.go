@@ -372,6 +372,8 @@ type moduleAdded struct {
 	Module     string   `json:"module"`
 	RequiredBy []string `json:"requiredBy"`
 	Stack      string   `json:"stack"`
+	// Component names the component in a multi project only.
+	Component string `json:"component,omitempty"`
 }
 
 // moduleInstalled is one module of the generated project.
@@ -427,7 +429,11 @@ func writeGenerate(ctx *Context, result generateResult) int {
 	}
 	var text strings.Builder
 	for _, pull := range result.added {
-		fmt.Fprintf(&text, "Added %s (required by %s).\n", pull.Module, strings.Join(pull.RequiredBy, ", "))
+		target := ""
+		if pull.Component != "" {
+			target = " to " + pull.Component
+		}
+		fmt.Fprintf(&text, "Added %s%s (required by %s).\n", pull.Module, target, strings.Join(pull.RequiredBy, ", "))
 	}
 	shown := displayPath(result.path)
 	fmt.Fprintf(&text, "Project %s generated in %s (%d files).\n", result.project, shown, result.files)

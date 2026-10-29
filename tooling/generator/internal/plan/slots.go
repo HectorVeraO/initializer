@@ -18,15 +18,15 @@ func (p Plan) LockNames() map[string]string {
 	return locked
 }
 
-// slots computes Plan.Slots and Plan.Live for the planned stacks. A slot used
-// by a rule whose value no input gives yet is an internal error: the catalog
-// and the generator disagree.
-func (r *resolver) slots(stacks []StackPlan) (values map[string]string, live map[string]bool) {
+// slots computes the slots of one pair: the backend component and its frontend.
+// A slot used by a rule whose value no input gives yet is an internal error:
+// the catalog and the generator disagree.
+func (r *resolver) slots(stacks []ComponentPlan, src infraSource) (values map[string]string, live map[string]bool) {
 	project := r.sel.Project.Name
 	resolved := names.Resolved{Project: project, Components: map[string]string{}}
 	live = map[string]bool{names.SlotProject: true}
 	selected := map[string]bool{}
-	for _, component := range r.components(stacks) {
+	for _, component := range stacks {
 		resolved.Components[component.Stack] = component.Name
 		live[names.ComponentSlot(component.Stack)] = true
 		selected[component.Stack] = true
@@ -47,7 +47,7 @@ func (r *resolver) slots(stacks []StackPlan) (values map[string]string, live map
 				isLive := ruleIsLive(rule, installed, selected)
 				for _, slot := range used {
 					if _, known := values[slot]; !known {
-						value, ok := r.defaultSlot(slot)
+						value, ok := r.defaultSlot(slot, src)
 						if !ok {
 							r.add(CodeInternalError, catalogSource, "/stacks",
 								fmt.Sprintf("module %s: rule %q uses slot %q, which has no value source yet", module.Module, rule.Text, slot))
@@ -84,14 +84,14 @@ func ruleIsLive(rule catalog.NameRule, installed, selected map[string]bool) bool
 
 // defaultSlot returns the value of a slot no input sets: the default
 // component name of a stack that is not selected.
-func (r *resolver) defaultSlot(slot string) (string, bool) {
+func (r *resolver) defaultSlot(slot string, src infraSource) (string, bool) {
 	stack, isComponent := strings.CutPrefix(slot, "component.")
 	if isComponent {
 		if _, known := manifest.LookupStack(stack); known {
 			return defaultComponentName(r.sel.Project.Name, stack), true
 		}
 	}
-	return r.defaultInfraSlot(slot)
+	return r.defaultInfraSlot(slot, src)
 }
 
 // isUnselectedComponentSlot reports whether slot is the component slot of a

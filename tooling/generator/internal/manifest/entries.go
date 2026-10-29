@@ -96,3 +96,17 @@ func recordEntryModules(recorded *Selection, installed []string) bool {
 	recorded.Modules, recorded.Has.Modules = nil, false
 	return true
 }
+
+// recordBackendModules records the installed list of each backend entry, in
+// entry order, and drops the top-level list.
+func recordBackendModules(recorded *Selection, installed [][]string) {
+	next := 0
+	for i, entry := range recorded.Components {
+		if !IsBackendStack(entry.Stack) || next >= len(installed) {
+			continue
+		}
+		recorded.Components[i].Modules, recorded.Components[i].HasModules = append([]string{}, installed[next]...), true
+		next++
+	}
+	recorded.Modules, recorded.Has.Modules = nil, false
+}

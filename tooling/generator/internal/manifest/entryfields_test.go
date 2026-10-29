@@ -352,3 +352,47 @@ func TestRecordedSelectionKeepsTheTopLevelListWhenNoEntryHasOne(t *testing.T) {
 		t.Fatalf("recorded: %+v", recorded)
 	}
 }
+
+func TestRecordedSelectionOfSeveralBackendsHoldsEachInstalledListAndNoTopLevelList(t *testing.T) {
+	in := manifest.Input{Selection: manifest.Selection{
+		Schema: 2, Project: manifest.Project{Name: "acme"}, Stacks: []string{"go-srv", "ng-web"}, Modules: []string{"top"},
+		Has: manifest.Presence{Name: true, Stacks: true, Modules: true},
+		Components: []manifest.Component{
+			{Stack: "go-srv", Name: "acme-srv-first", Modules: []string{"tenancy"}, HasModules: true},
+			{Stack: "go-srv", Name: "acme-srv-second"},
+			{Stack: "ng-web", Name: "acme-web", Backend: "acme-srv-second"},
+		},
+	}}
+	recorded := manifest.RecordedSelection(in, []string{"core", "tenancy"}, []string{"core", "top"})
+	if recorded.Has.Modules || len(recorded.Modules) != 0 {
+		t.Fatalf("top-level list kept: %+v", recorded.Modules)
+	}
+	first, second, web := recorded.Components[0], recorded.Components[1], recorded.Components[2]
+	if !reflect.DeepEqual(first.Modules, []string{"core", "tenancy"}) || !reflect.DeepEqual(second.Modules, []string{"core", "top"}) || !second.HasModules {
+		t.Fatalf("entry lists: %+v %+v", first, second)
+	}
+	if web.HasModules || web.Backend != "acme-srv-second" || second.Name != "acme-srv-second" {
+		t.Fatalf("other fields must stay as given: %+v %+v", second, web)
+	}
+	if in.Selection.Components[1].HasModules || !reflect.DeepEqual(in.Selection.Modules, []string{"top"}) {
+		t.Error("the recording changed the input")
+	}
+}
+
+func TestResolveDefaultsLeavesTheDerivedGoModulesOfSeveralGoComponentsToThePlan(t *testing.T) {
+	two := manifest.Input{Selection: manifest.Selection{
+		Schema: 2, Project: manifest.Project{Name: "acme"}, Stacks: []string{"go-srv"},
+		Has:        manifest.Presence{Name: true, Stacks: true},
+		Components: []manifest.Component{{Stack: "go-srv", Name: "acme-srv-first"}, {Stack: "go-srv", Name: "acme-srv-second"}},
+	}}
+	resolved, notes, _, issues := manifest.ResolveDefaults(two, "", t.TempDir(), []string{"go-srv"})
+	if len(issues) != 0 || len(notes) != 0 || resolved.Selection.Project.GoModule != "example.com/acme" {
+		t.Fatalf("notes %v issues %v go module %q", notes, issues, resolved.Selection.Project.GoModule)
+	}
+	one := two
+	one.Selection.Components = two.Selection.Components[:1]
+	_, notes, _, _ = manifest.ResolveDefaults(one, "", t.TempDir(), []string{"go-srv"})
+	if len(notes) != 1 || !strings.HasPrefix(notes[0], "Go module defaults to example.com/acme") {
+		t.Fatalf("a single component keeps the note: %v", notes)
+	}
+}

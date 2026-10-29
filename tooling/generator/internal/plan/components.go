@@ -17,8 +17,8 @@ const (
 	CodeNameConflict       = "NAME_CONFLICT"
 	CodeNameTooLong        = "NAME_TOO_LONG"
 	CodeNameOverrideUnused = "NAME_OVERRIDE_UNUSED"
-	// CodeComponentMultiUnsupported is raised by the command before Resolve;
-	// Resolve never receives two entries of one stack.
+	// CodeComponentMultiUnsupported is raised by the command after Resolve for
+	// a plan with several backend components; Resolve never raises it.
 	CodeComponentMultiUnsupported = "COMPONENT_MULTI_UNSUPPORTED"
 	// CodeInternalError reports an input that the command should have refused.
 	CodeInternalError = "INTERNAL_ERROR"
@@ -31,9 +31,9 @@ const maxNameLength = 63
 // under the source root of a selected stack moves under that stack's
 // component folder, every other path is returned unchanged.
 func (p Plan) ProjectPath(sourceForm string) string {
-	for _, stack := range p.Stacks {
-		info, known := manifest.LookupStack(stack.Stack)
-		component, hasComponent := p.Component(stack.Stack)
+	for _, planned := range p.Components {
+		info, known := manifest.LookupStack(planned.Stack)
+		component, hasComponent := p.Component(planned.Stack)
 		isUnder := known && strings.HasPrefix(sourceForm, info.Root)
 		if isUnder && hasComponent {
 			return component.Name + "/" + strings.TrimPrefix(sourceForm, info.Root)
@@ -80,65 +80,77 @@ func derivedNameTooLong(source, stack, value string) (issue.Issue, bool) {
 	return found, true
 }
 
-// componentInput is the effective component of one selected stack and the
-// pointer of the input the name comes from.
+// componentInput is one component of the selection: an entry, or the implicit
+// component of a stack no entry names.
 type componentInput struct {
 	stack string
-	name  string
+	role  string
+	// index is the position among the components of the stack; entry is the
+	// index in components, -1 for an implicit component.
+	index, entry int
+	// name is the effective name; empty when the stack has several components
+	// and this one is unnamed.
+	name string
 	// given reports whether an entry named the component.
 	given bool
 	// namePointer is the pointer of the input that holds the name: the name of
 	// the entry, else the entry, else the stack in the stacks list.
 	namePointer string
+	// label names the component in a message.
+	label string
 }
 
-// entryError reports two entries of one stack, which the command refuses first.
-func (r *resolver) entryError() bool {
-	seen := map[string]bool{}
-	failed := false
-	for i, component := range r.sel.Components {
-		if seen[component.Stack] {
-			failed = true
-			r.add(CodeInternalError, selectionSource, fmt.Sprintf("/components/%d", i),
-				fmt.Sprintf("internal error: several components of stack %s reached the planner", component.Stack))
-		}
-		seen[component.Stack] = true
-	}
-	return failed
-}
-
-// componentInputs returns the effective component of every distinct selected
-// stack of the stack table, sorted by stack.
+// componentInputs returns the components of every distinct selected stack of
+// the stack table, sorted by (stack, index).
 func (r *resolver) componentInputs() []componentInput {
-	entries := map[string]int{}
-	for i, component := range r.sel.Components {
-		entries[component.Stack] = i
-	}
 	seen := map[string]bool{}
 	var inputs []componentInput
 	for position, stack := range r.sel.Stacks {
-		if !isKnownStack(stack) || seen[stack] {
+		info, known := manifest.LookupStack(stack)
+		if !known || seen[stack] {
 			continue
 		}
 		seen[stack] = true
-		input := componentInput{stack: stack, name: defaultComponentName(r.sel.Project.Name, stack), namePointer: fmt.Sprintf("/stacks/%d", position)}
-		if index, hasEntry := entries[stack]; hasEntry {
-			input.namePointer = fmt.Sprintf("/components/%d", index)
-			if name := r.sel.Components[index].Name; name != "" {
-				input.name, input.given = name, true
-				input.namePointer += "/name"
+		var entries []int
+		for i, component := range r.sel.Components {
+			if component.Stack == stack {
+				entries = append(entries, i)
 			}
 		}
-		inputs = append(inputs, input)
+		if len(entries) == 0 {
+			inputs = append(inputs, componentInput{
+				stack: stack, role: info.Role, entry: -1, name: defaultComponentName(r.sel.Project.Name, stack),
+				namePointer: fmt.Sprintf("/stacks/%d", position), label: "component " + stack,
+			})
+			continue
+		}
+		for index, entry := range entries {
+			input := componentInput{
+				stack: stack, role: info.Role, index: index, entry: entry,
+				namePointer: fmt.Sprintf("/components/%d", entry), label: "component " + stack,
+			}
+			if len(entries) > 1 {
+				input.label = fmt.Sprintf("component %s #%d", stack, index+1)
+			}
+			switch given := r.sel.Components[entry].Name; {
+			case given != "":
+				input.name, input.given = given, true
+				input.namePointer += "/name"
+			case len(entries) == 1:
+				input.name = defaultComponentName(r.sel.Project.Name, stack)
+			}
+			inputs = append(inputs, input)
+		}
 	}
-	sort.Slice(inputs, func(i, j int) bool { return inputs[i].stack < inputs[j].stack })
+	sort.SliceStable(inputs, func(i, j int) bool { return inputs[i].stack < inputs[j].stack })
 	return inputs
 }
 
 // checkNames reports the name problems that need only the selection:
 // NAME_OVERRIDE_UNUSED, NAME_RESERVED for device names, NAME_CONFLICT and
 // NAME_TOO_LONG. A value that fails the label grammar was reported by the
-// decoder and is skipped here.
+// decoder and is skipped here, and so is a component with no name. In a multi
+// project a conflict between given names of one stack is reported by the component checks.
 func (r *resolver) checkNames() {
 	project := r.sel.Project.Name
 	if names.ValidLabel(project) && names.IsDeviceName(project) {
@@ -148,7 +160,7 @@ func (r *resolver) checkNames() {
 
 	byName := map[string][]componentInput{}
 	for _, input := range r.componentInputs() {
-		if input.given && !names.ValidLabel(input.name) {
+		if input.name == "" || (input.given && !names.ValidLabel(input.name)) {
 			continue
 		}
 		if input.given && names.IsDeviceName(input.name) {
@@ -174,9 +186,15 @@ func (r *resolver) checkNames() {
 		if len(group) < 2 {
 			continue
 		}
+		allGiven, sameStack := true, true
 		labels := make([]string, 0, len(group))
 		for _, input := range group {
-			labels = append(labels, "component "+input.stack)
+			allGiven = allGiven && input.given
+			sameStack = sameStack && input.stack == group[0].stack
+			labels = append(labels, input.label)
+		}
+		if r.multi && allGiven && sameStack {
+			continue
 		}
 		joiner := " and "
 		if len(group) > 2 {
@@ -223,7 +241,7 @@ func deviceMessage(name string) string {
 // projectScopeFolders returns the first segment of every delivered path that
 // stays outside the component folders: the paths of the specs and modules that
 // are not under the source root of a selected stack.
-func projectScopeFolders(stacks []StackPlan, specs []catalog.SpecEntry) map[string]bool {
+func projectScopeFolders(stacks []ComponentPlan, specs []catalog.SpecEntry) map[string]bool {
 	var roots []string
 	var files []catalog.File
 	for _, stack := range stacks {
@@ -255,12 +273,15 @@ func projectScopeFolders(stacks []StackPlan, specs []catalog.SpecEntry) map[stri
 	return folders
 }
 
-// wantedSpecs returns the catalog specs that a module of the backend plan
+// wantedSpecs returns the catalog specs that a module of a backend component
 // implements.
-func (r *resolver) wantedSpecs(backend StackPlan) []catalog.SpecEntry {
+func (r *resolver) wantedSpecs(components []ComponentPlan) []catalog.SpecEntry {
 	wanted := map[string]bool{}
-	for _, module := range backend.Modules {
-		for spec := range module.ImplementsSpec {
+	for _, component := range components {
+		if component.Role != roleBackend {
+			continue
+		}
+		for spec := range specsOf(component.Modules) {
 			wanted[spec] = true
 		}
 	}
@@ -275,8 +296,8 @@ func (r *resolver) wantedSpecs(backend StackPlan) []catalog.SpecEntry {
 
 // checkFolders reports NAME_RESERVED for a component name that equals the first
 // segment of a path delivered outside the component folders.
-func (r *resolver) checkFolders(stacks []StackPlan, specs []catalog.SpecEntry) {
-	folders := projectScopeFolders(stacks, specs)
+func (r *resolver) checkFolders(components []ComponentPlan, specs []catalog.SpecEntry) {
+	folders := projectScopeFolders(components, specs)
 	for _, input := range r.componentInputs() {
 		isChecked := input.given && names.ValidLabel(input.name)
 		if isChecked && folders[input.name] {
@@ -286,34 +307,18 @@ func (r *resolver) checkFolders(stacks []StackPlan, specs []catalog.SpecEntry) {
 	}
 }
 
-// components returns the plan's components: the given name or the default name,
-// one per stack, sorted by stack.
-func (r *resolver) components(stacks []StackPlan) []Component {
-	given := map[string]string{}
-	for _, component := range r.sel.Components {
-		given[component.Stack] = component.Name
-	}
-	components := make([]Component, 0, len(stacks))
-	for _, stack := range stacks {
-		name := given[stack.Stack]
-		if name == "" {
-			name = defaultComponentName(r.sel.Project.Name, stack.Stack)
-		}
-		components = append(components, Component{Stack: stack.Stack, Name: name})
-	}
-	return components
-}
-
 // recordedSelection builds the resolved selection the plan carries: the
-// effective project, the sorted stacks, the installed backend modules and the
-// components as given. Every list is present; schema 2 only when components
-// are given. The recorded document of a run is built by the caller.
-func (r *resolver) recordedSelection(stackNames, modules []string) manifest.Selection {
+// effective project, the sorted stacks, the installed modules of the index-0
+// backend and the components as given. Every list is present; schema 2 only
+// when components are given. A multi project records each backend's installed
+// list on its entry and no top-level list. The recorded document of a run is
+// built by the caller.
+func (r *resolver) recordedSelection(stackNames []string, installed [][]string) manifest.Selection {
 	recorded := manifest.Selection{
 		Schema:  1,
 		Project: r.sel.Project,
 		Stacks:  stackNames,
-		Modules: modules,
+		Modules: installed[0],
 		Has: manifest.Presence{
 			Name:     true,
 			GoModule: r.sel.Project.GoModule != "",
@@ -324,6 +329,16 @@ func (r *resolver) recordedSelection(stackNames, modules []string) manifest.Sele
 	if len(r.sel.Components) > 0 {
 		recorded.Schema = 2
 		recorded.Components = append([]manifest.Component(nil), r.sel.Components...)
+	}
+	if r.multi {
+		recorded.Modules, recorded.Has.Modules = nil, false
+		k := 0
+		for i, entry := range recorded.Components {
+			if manifest.IsBackendStack(entry.Stack) && k < len(installed) {
+				recorded.Components[i].Modules, recorded.Components[i].HasModules = installed[k], true
+				k++
+			}
+		}
 	}
 	if database := r.sel.Database; database != nil {
 		copied := *database

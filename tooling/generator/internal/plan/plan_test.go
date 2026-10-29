@@ -50,7 +50,7 @@ func mustResolve(t *testing.T, cat catalog.Catalog, sel manifest.Selection) plan
 	return p
 }
 
-func ids(stack plan.StackPlan) []string {
+func ids(stack plan.ComponentPlan) []string {
 	out := make([]string, len(stack.Modules))
 	for i, module := range stack.Modules {
 		out[i] = module.Module
@@ -58,7 +58,7 @@ func ids(stack plan.StackPlan) []string {
 	return out
 }
 
-func wantIDs(t *testing.T, stack plan.StackPlan, want ...string) {
+func wantIDs(t *testing.T, stack plan.ComponentPlan, want ...string) {
 	t.Helper()
 	if got := ids(stack); !reflect.DeepEqual(got, want) {
 		t.Fatalf("modules = %v, want %v", got, want)
@@ -97,7 +97,7 @@ func backendModule(t *testing.T, cat *catalog.Catalog, id string) *catalog.Modul
 
 func TestEmptySelectionResolvesCore(t *testing.T) {
 	p := mustResolve(t, load(t, "backend.json"), selection())
-	wantIDs(t, p.Stacks[0], "core")
+	wantIDs(t, p.Components[0], "core")
 	if !reflect.DeepEqual(p.Selection.Modules, []string{"core"}) {
 		t.Fatalf("recorded modules = %v", p.Selection.Modules)
 	}
@@ -117,7 +117,7 @@ func TestMilestoneOrderForBothSelectionForms(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p := mustResolve(t, cat, sel)
 			want := []string{"core", "identity", "feature-flags", "parameters"}
-			wantIDs(t, p.Stacks[0], want...)
+			wantIDs(t, p.Components[0], want...)
 			if !reflect.DeepEqual(p.Selection.Modules, want) || p.Selection.AllModules {
 				t.Fatalf("recorded selection = %+v", p.Selection)
 			}
@@ -163,16 +163,16 @@ func TestTCKGrepIsAnchored(t *testing.T) {
 func TestRequiresChainPullsAndOrdersDependencies(t *testing.T) {
 	cat := load(t, "chain.json")
 	p := mustResolve(t, cat, selection("b"))
-	wantIDs(t, p.Stacks[0], "core", "a", "b")
+	wantIDs(t, p.Components[0], "core", "a", "b")
 	// Diamond: d needs b and c, both need a. Ready ties break by id.
 	p = mustResolve(t, cat, selection("d"))
-	wantIDs(t, p.Stacks[0], "core", "a", "b", "c", "d")
+	wantIDs(t, p.Components[0], "core", "a", "b", "c", "d")
 }
 
 func TestImpliedModulesComeFirstAmongReady(t *testing.T) {
 	// "a" sorts before "core" bytewise; the implied module still wins.
 	p := mustResolve(t, load(t, "chain.json"), selection("a"))
-	wantIDs(t, p.Stacks[0], "core", "a")
+	wantIDs(t, p.Components[0], "core", "a")
 }
 
 func TestDuplicatesAndImpliedIdsListedExplicitly(t *testing.T) {
@@ -228,11 +228,11 @@ func TestFrontendStackMissingModuleIsNotCopied(t *testing.T) {
 	sel := selection("parameters")
 	sel.Stacks = []string{"ng-web", "go-srv"}
 	p := mustResolve(t, cat, sel)
-	if p.Stacks[0].Stack != "go-srv" || p.Stacks[1].Stack != "ng-web" {
-		t.Fatalf("stacks not sorted: %s %s", p.Stacks[0].Stack, p.Stacks[1].Stack)
+	if p.Components[0].Stack != "go-srv" || p.Components[1].Stack != "ng-web" {
+		t.Fatalf("stacks not sorted: %s %s", p.Components[0].Stack, p.Components[1].Stack)
 	}
-	wantIDs(t, p.Stacks[0], "core", "identity", "parameters")
-	wantIDs(t, p.Stacks[1], "core", "parameters")
+	wantIDs(t, p.Components[0], "core", "identity", "parameters")
+	wantIDs(t, p.Components[1], "core", "parameters")
 	if !reflect.DeepEqual(p.Selection.Stacks, []string{"go-srv", "ng-web"}) {
 		t.Fatalf("recorded stacks = %v", p.Selection.Stacks)
 	}
@@ -410,7 +410,7 @@ func TestCoreIsPlannedWhenNotImplied(t *testing.T) {
 	cat := load(t, "backend.json")
 	backendModule(t, &cat, "core").Implied = false
 	p := mustResolve(t, cat, selection())
-	wantIDs(t, p.Stacks[0], "core")
+	wantIDs(t, p.Components[0], "core")
 }
 
 func TestSpecUnknown(t *testing.T) {
@@ -675,7 +675,7 @@ func TestSelectionOrderDoesNotChangeTheModuleOrder(t *testing.T) {
 	backendModule(t, &cat, "tenancy").RequiresModules = []catalog.Requirement{{Module: "identity", Range: "^0.1.0"}}
 	first := mustResolve(t, cat, selection("tenancy", "parameters"))
 	second := mustResolve(t, cat, selection("parameters", "tenancy"))
-	wantIDs(t, first.Stacks[0], "core", "identity", "parameters", "tenancy")
+	wantIDs(t, first.Components[0], "core", "identity", "parameters", "tenancy")
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("plans differ:\n%+v\n%+v", first, second)
 	}
@@ -747,8 +747,8 @@ func TestComponentsAreOnePerSelectedStackNamedAfterTheProject(t *testing.T) {
 	both := selection()
 	both.Stacks = []string{"ng-web", "go-srv"}
 	p := mustResolve(t, cat, both)
-	want := []plan.Component{{Stack: "go-srv", Name: "acme-backend-srv"}, {Stack: "ng-web", Name: "acme-backend-web"}}
-	if !reflect.DeepEqual(p.Components, want) {
+	want := []plan.ComponentPlan{{Stack: "go-srv", Name: "acme-backend-srv"}, {Stack: "ng-web", Name: "acme-backend-web"}}
+	if !reflect.DeepEqual(nameOnly(p), want) {
 		t.Fatalf("components = %+v", p.Components)
 	}
 	if component, ok := p.Component("ng-web"); !ok || component.Name != "acme-backend-web" {
@@ -758,8 +758,17 @@ func TestComponentsAreOnePerSelectedStackNamedAfterTheProject(t *testing.T) {
 	if _, ok := backendOnly.Component("ng-web"); ok {
 		t.Error("an unselected stack has no component")
 	}
-	several := plan.Plan{Components: []plan.Component{{Stack: "ng-web", Name: "a-web"}, {Stack: "ng-web", Name: "b-web"}}}
+	several := plan.Plan{Components: []plan.ComponentPlan{{Stack: "ng-web", Name: "a-web"}, {Stack: "ng-web", Name: "b-web"}}}
 	if _, ok := several.Component("ng-web"); ok {
 		t.Error("a stack with several components has no single component")
 	}
+}
+
+// nameOnly returns the stack and name of every component of p.
+func nameOnly(p plan.Plan) []plan.ComponentPlan {
+	found := make([]plan.ComponentPlan, 0, len(p.Components))
+	for _, component := range p.Components {
+		found = append(found, plan.ComponentPlan{Stack: component.Stack, Name: component.Name})
+	}
+	return found
 }

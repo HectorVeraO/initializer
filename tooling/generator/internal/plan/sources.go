@@ -22,7 +22,7 @@ func CheckSources(root fs.FS, p Plan) ([]issue.Issue, error) {
 		return nil, errors.New("source file system is nil")
 	}
 	var files []catalog.File
-	for _, stack := range p.Stacks {
+	for _, stack := range p.Components {
 		for _, module := range stack.Modules {
 			files = append(files, module.Files...)
 		}
