@@ -32,13 +32,27 @@ func (b *builder) markerChecks(p string, data []byte, owner *moduleDoc) {
 	for _, found := range issues {
 		b.addPlain(found.Code, p, found.Message)
 	}
-	known := b.moduleIDs()
+	knownModules := b.moduleIDs()
+	knownStacks := stackNames()
 	for _, block := range blocks {
-		if !known[block.Module] {
+		switch {
+		case block.Kind == markers.KindStack && !knownStacks[block.ID]:
+			b.addPlain(markers.CodeMarkerStackUnknown, p,
+				fmt.Sprintf("marker names stack %q (line %d), which is not a stack of the stack table", block.ID, block.Start+1))
+		case block.Kind == markers.KindModule && !knownModules[block.ID]:
 			b.addPlain(markers.CodeMarkerModuleUnknown, p,
-				fmt.Sprintf("marker names %s, which has no module manifest (line %d)", block.Module, block.Start+1))
+				fmt.Sprintf("marker names %s, which has no module manifest (line %d)", block.ID, block.Start+1))
 		}
 	}
+}
+
+// stackNames returns the names of the stack table.
+func stackNames() map[string]bool {
+	names := map[string]bool{}
+	for _, info := range stackTable {
+		names[info.name] = true
+	}
+	return names
 }
 
 // moduleIDs returns every decoded manifest module id of every stack.

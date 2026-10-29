@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	generator "github.com/HectorVeraO/initializer/tooling/generator"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/emit"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/fixture"
@@ -638,5 +639,65 @@ func TestWebProxyKeepsKratosOnlyWithIdentity(t *testing.T) {
 		if strings.Contains(p, "ng-web/src/app/platform/identity/") {
 			t.Errorf("core-web project ships %s", p)
 		}
+	}
+}
+
+// stackBlockFixture copies the fixture repository, appends an ng-web stack block to the
+// compose file and returns the root with a catalog built from the changed tree.
+func stackBlockFixture(t *testing.T) (string, catalog.Catalog, []byte, string) {
+	t.Helper()
+	repo := fixture.Load(t)
+	root := t.TempDir()
+	copyTree(t, repo.Root, root)
+	composePath := filepath.Join(root, ".deploy", "local", "docker-compose.yml")
+	compose, err := os.ReadFile(composePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := "\n# initializer:stack ng-web\n# web-only-line\n# initializer:end ng-web\n"
+	if err := os.WriteFile(composePath, append(compose, block...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	list, err := os.ReadFile(filepath.Join(fixture.Dir(t), "files.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, issues, err := catalog.Build(catalog.BuildOptions{Root: os.DirFS(root), Files: strings.Fields(string(list)), Generator: generator.Version})
+	if err != nil || len(issues) > 0 {
+		t.Fatalf("catalog build: %v %v", err, issues)
+	}
+	encoded, err := catalog.Encode(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root, built, encoded, string(compose)
+}
+
+func TestStackBlockIsKeptOnlyWhenTheStackIsSelected(t *testing.T) {
+	root, cat, encoded, original := stackBlockFixture(t)
+	cases := []struct {
+		name string
+		sel  manifest.Selection
+		want bool
+	}{
+		{"go-srv only drops it", selection(targetModule, "parameters"), false},
+		{"go-srv and ng-web keeps it", webSelection("parameters"), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			project, err := build(t, os.DirFS(root), cat, encoded, tc.sel)
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			text := projectFile(t, project, ".deploy/local/docker-compose.yml")
+			hasBlock := strings.Contains(text, "# web-only-line")
+			if hasBlock != tc.want {
+				t.Errorf("block present = %v, want %v:\n%s", hasBlock, tc.want, text)
+			}
+			wantDropped := strings.Replace(original, "name: fixture", "name: acme-backend", 1)
+			if !tc.want && text != wantDropped {
+				t.Errorf("dropped block did not restore the original compose file:\n%s", text)
+			}
+		})
 	}
 }

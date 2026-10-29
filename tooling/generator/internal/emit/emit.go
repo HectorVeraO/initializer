@@ -210,7 +210,7 @@ func (b *builder) copyFile(file catalog.File, owner string) (lockfile.File, erro
 // transform applies the copy rule of the source path.
 func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byte, error) {
 	if _, hasMarkers := markers.SyntaxFor(sourcePath); hasMarkers && owner == manifest.CoreModule {
-		dropped, err := markers.Drop(sourcePath, data, b.hasModule)
+		dropped, err := markers.Drop(sourcePath, data, markers.Keep{Module: b.hasModule, Stack: b.hasStack})
 		if err != nil {
 			return nil, err
 		}
@@ -242,6 +242,16 @@ func (b *builder) hasModule(id string) bool {
 			if module.Module == id {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// hasStack reports whether the plan selects the stack.
+func (b *builder) hasStack(id string) bool {
+	for _, stack := range b.opts.Plan.Stacks {
+		if stack.Stack == id {
+			return true
 		}
 	}
 	return false
