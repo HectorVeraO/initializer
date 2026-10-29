@@ -50,7 +50,6 @@ func TestGenerateNamesTheComponentsInMiseAndTheDeployReadme(t *testing.T) {
 		"| 10100 | `acme-srv` HTTP API (`GO_SRV_ADDR`) | Docker or host |\n",
 		"| 10120 | `acme-web` console, the public origin: nginx in Docker, or the dev server on the host | Docker or host |\n",
 		"| 10132 | `acme-postgres` | Docker |\n",
-		"- acme-srv applies its own migrations at startup.\n",
 		"- Both modes run acme-srv from `acme-srv/` (the container's working directory is `/project/acme-srv`), so relative path values resolve against `acme-srv/`.\n",
 		"yml stop acme-srv\nmise run dev:srv\n",
 		"stop `acme-srv acme-web`, then run `mise run dev:srv` and `mise run dev:web`",
