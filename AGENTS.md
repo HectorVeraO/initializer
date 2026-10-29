@@ -249,6 +249,7 @@ Format: see `.claude/references/code-path-parity-format.md`. Root keeps a one-li
 - **Envelope schemas**: `ApiMeta`, `ApiIssue`, `ApiError`, `ApiEnvelopeError` and `XTraceId` are byte-identical in `specs/core/openapi.yaml`, `specs/identity/openapi.yaml`, `specs/tenancy/openapi.yaml`, `specs/api-keys/openapi.yaml`, `specs/parameters/openapi.yaml` and `specs/feature-flags/openapi.yaml`. Full row: `.claude/references/code-path-parity.md`.
 - **Session tenant schemas**: `Role`, `TenantStatus`, `MembershipStatus`, `TenantSummary` and `MembershipView` are byte-identical in `specs/identity/openapi.yaml` and `specs/tenancy/openapi.yaml`. Full row: `.claude/references/code-path-parity.md`.
 - **Flag key rule**: `^[a-z][a-z0-9_]*$`, at most 64 characters, is the same in the `CHECK` of both `flg_*` migrations, `go-srv/internal/platform/featureflags/manifest.go` and `tooling/gates/internal/flagscheck/flagscheck.go`. Full row: `.claude/references/code-path-parity.md`.
+- **yaml pin**: `go-srv/go.mod`, `tooling/gates/go.mod` and `tooling/generator/go.mod` require the same `go.yaml.in/yaml/v3` version. Full row: `.claude/references/code-path-parity.md`.
 
 ## Anti-degradation governance
 

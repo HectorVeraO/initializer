@@ -24,7 +24,7 @@ func TestAddHintsKeepsAProducerHintAndFillsTheRest(t *testing.T) {
 		"rebuild the catalog: initializer catalog build",
 		"rebuild the catalog: initializer catalog build",
 		"",
-		"use .json",
+		"use .yaml, .yml or .json",
 		"To add, remove or rename a component, edit the input file",
 	}
 	for i, hint := range want {

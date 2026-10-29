@@ -74,7 +74,17 @@ func (o *generateOptions) readSelection(ctx *Context, dir string) (inputRun, *re
 		if err != nil {
 			return run, &readFailure{err}
 		}
-		tree, parseIssues := manifest.ParseJSON(source, data)
+		format, _ := pathFormat(path)
+		if path == stdinPath {
+			format = sniffFormat(data)
+		}
+		var tree *manifest.Node
+		var parseIssues []issue.Issue
+		if format == manifest.FormatYAML {
+			tree, parseIssues = manifest.ParseYAML(source, data)
+		} else {
+			tree, parseIssues = manifest.ParseJSON(source, data)
+		}
 		run.issues = append(run.issues, parseIssues...)
 		if tree != nil {
 			decoded, decodeIssues := manifest.DecodeInput(source, tree)
@@ -135,7 +145,7 @@ func generateIssues(ctx *Context, opts any, positionals []string) ([]issue.Issue
 	if o.given == nil {
 		o.given = map[string]int{}
 	}
-	if path := o.filePath(); path != "" && !isJSONPath(path) {
+	if path := o.filePath(); path != "" && !isKnownPath(path) {
 		o.file, o.selection = "", ""
 	}
 	run, failure := o.readSelection(ctx, dir)

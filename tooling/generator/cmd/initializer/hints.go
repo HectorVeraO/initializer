@@ -36,7 +36,7 @@ func hintFor(found issue.Issue, moduleIDs []string) string {
 	case plan.CodeGeneratorMismatch, plan.CodeFileMismatch:
 		return rebuildCatalogHint
 	case codeInputFormatUnknown:
-		return "use .json"
+		return "use .yaml, .yml or .json"
 	case manifest.CodeComponentMergeAmbiguous:
 		return "To add, remove or rename a component, edit the input file"
 	case manifest.CodeNameInvalid:

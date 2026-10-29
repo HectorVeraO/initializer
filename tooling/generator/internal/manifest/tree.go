@@ -37,6 +37,9 @@ type Node struct {
 	Value string
 	// Line is the 1-based source line; 0 when unknown (JSON).
 	Line int
+	// Format is the source format of a root node returned by ParseYAML;
+	// FormatNone elsewhere.
+	Format Format
 	// Items holds the elements of a KindSeq.
 	Items []*Node
 	// Members holds the keys of a KindMap in source order; duplicates are
