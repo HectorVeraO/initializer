@@ -51,7 +51,7 @@ type generateOptions struct {
 	root, catalog, out, file, selection, name, goModule, stacks, modules string
 	allModules, dryRun                                                   bool
 	components                                                           []componentEntry
-	dbName, dbUser, displayName                                          string
+	dbName, dbUser, displayName, portBand                                string
 	services                                                             []serviceEntry
 	// given counts how many times the scan saw each flag, by long name.
 	given map[string]int
@@ -100,6 +100,8 @@ func generateCommand() *Command {
 				Default: "<name> with - replaced by _"})
 			set.services(&o.services, flagSpec{Name: "service", Placeholder: "KEY=NAME",
 				Usage: "Rename one compose service, repeatable", Default: "<name>-<key>"})
+			set.str(&o.portBand, flagSpec{Name: "port-band", Placeholder: "NNN",
+				Usage: "Host port band 1NNxx, from 100 to 654", Default: "101"})
 			set.boolean(&o.dryRun, flagSpec{Name: "dry-run", Usage: "Print what would be generated and write nothing", Default: "false"})
 			registerSourceFlags(set, &o.root, &o.catalog)
 			set.str(&o.out, flagSpec{Name: "out", Placeholder: "DIR", Hidden: true,
@@ -120,6 +122,8 @@ func generateCommand() *Command {
 				"initializer generate -f acme.yaml --name acme-shop"},
 			{"set the brand text the web console shows",
 				"initializer generate acme --stacks go-srv,ng-web --display-name \"Acme Shop\""},
+			{"run a second project beside the first on another port band",
+				"initializer generate acme --port-band 103"},
 			{"see the resolved values without writing anything",
 				"initializer generate acme --modules tenancy --dry-run"},
 		},

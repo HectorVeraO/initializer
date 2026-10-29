@@ -7,6 +7,16 @@
   "implementsSpec": { "core": "0.1.0" },
   "requiresModules": [],
   "tablePrefixes": ["cor"],
+  "ports": [
+    { "name": "srv", "offset": 0, "origin": true },
+    { "name": "postgres", "offset": 32 }
+  ],
+  "portFiles": [
+    ".deploy/local/.example.env",
+    ".deploy/local/README.md",
+    ".deploy/local/docker-compose.yml",
+    "mise.toml"
+  ],
   "files": [
     ".deploy/local/",
     ".gitattributes",

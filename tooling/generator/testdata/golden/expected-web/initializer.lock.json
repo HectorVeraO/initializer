@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "generator": "0.1.0",
-  "catalogSha256": "8fb7088c1f75baddfbeb66d075fd6b99b91af45370fde6fa7ae38290dc7bdd00",
+  "catalogSha256": "e114882eaca0d76ff4041d4805505edb1ae41d4ac176d9ad0b877e717f814219",
   "selection": {
     "schema": 1,
     "project": {
@@ -32,6 +32,9 @@
     "component.go-srv": "acme-backend-srv",
     "component.ng-web": "acme-backend-web",
     "project": "acme-backend"
+  },
+  "ports": {
+    "band": 101
   },
   "tckTags": [
     "@core",
@@ -99,8 +102,8 @@
       "files": [
         {
           "path": ".deploy/local/.example.env",
-          "sha256": "20ca4ef1d3d415344a32e65f01fb6a61cd42f4df518ee44d0055c3db2b45be17",
-          "sourceSha256": "33454f3ea0ce48f98aac859e2f2d64941564c865b56a01a8b014999d6fa69d85"
+          "sha256": "a90902abe0d576cc52b1c0e1f36cc290cc8621fe89ead2ba0c7d6a33741941da",
+          "sourceSha256": "0a5067ea7a99503bbcdc5543b1bcab9418685e49c3963f97c3eb4d6b5c7c9d50"
         },
         {
           "path": ".deploy/local/README.md",
@@ -139,7 +142,7 @@
         },
         {
           "path": "acme-backend-srv/internal/platform/core/module.manifest.json",
-          "sha256": "8f6305fead0ab0712d5e55be5385b434c568bbad2de32d638dde9fe2e87b1223",
+          "sha256": "0423e83f06053f848c18a9f3af88bbc83c6c6d03eb80424c48f111e72113cc26",
           "sourcePath": "go-srv/internal/platform/core/module.manifest.json"
         },
         {
@@ -181,7 +184,7 @@
         },
         {
           "path": "acme-backend-srv/internal/platform/identity/module.manifest.json",
-          "sha256": "5daed183df7d61787d855b3fe1730f3d1f0b8771d77b106633da466192ea1102",
+          "sha256": "5860c0cf6cafe5d2d834aeaf438924b2fc42246f0dc98f20d33cb5058d7f4485",
           "sourcePath": "go-srv/internal/platform/identity/module.manifest.json"
         },
         {
@@ -247,7 +250,7 @@
         },
         {
           "path": "acme-backend-web/src/app/platform/core/module.manifest.json",
-          "sha256": "717b84626a565180ae800e1b689eb142c1d3cb4b100dad167ea31371e7c7d50d",
+          "sha256": "8ac00b02d4c19d60eb19c02c1855dec1b4ca77ee9858018249f1a88eca8a3561",
           "sourcePath": "ng-web/src/app/platform/core/module.manifest.json"
         },
         {

@@ -277,6 +277,7 @@ var flagPointers = map[string]string{
 	"/database/name":    "--db-name",
 	"/database/user":    "--db-user",
 	"/services":         "--service",
+	"/ports":            "--port-band",
 	"/stack":            "--stack",
 }
 

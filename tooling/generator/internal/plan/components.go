@@ -359,5 +359,10 @@ func (r *resolver) recordedSelection(stackNames, modules []string) manifest.Sele
 		}
 		recorded.Schema = 2
 	}
+	if r.sel.Ports != nil {
+		copied := *r.sel.Ports
+		recorded.Ports = &copied
+		recorded.Schema = 2
+	}
 	return recorded
 }

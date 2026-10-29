@@ -8,6 +8,11 @@
   "requiresCore": "^0.1.0",
   "requiresModules": [],
   "tablePrefixes": ["iam"],
+  "ports": [
+    { "name": "kratos-public", "offset": 33 },
+    { "name": "kratos-admin", "offset": 34 }
+  ],
+  "portFiles": [".deploy/local/kratos/kratos.yml"],
   "files": [
     ".deploy/local/kratos/",
     ".deploy/local/postgres-init/",

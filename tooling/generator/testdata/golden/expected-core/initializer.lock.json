@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "generator": "0.1.0",
-  "catalogSha256": "8fb7088c1f75baddfbeb66d075fd6b99b91af45370fde6fa7ae38290dc7bdd00",
+  "catalogSha256": "e114882eaca0d76ff4041d4805505edb1ae41d4ac176d9ad0b877e717f814219",
   "selection": {
     "schema": 1,
     "project": {
@@ -24,6 +24,9 @@
   "names": {
     "component.go-srv": "acme-backend-srv",
     "project": "acme-backend"
+  },
+  "ports": {
+    "band": 101
   },
   "tckTags": [
     "@core",
@@ -58,8 +61,8 @@
       "files": [
         {
           "path": ".deploy/local/.example.env",
-          "sha256": "e8781f1ac0450083f378b67e7a5b793d2f2776c863c6e074ecf3cf649f2a4424",
-          "sourceSha256": "33454f3ea0ce48f98aac859e2f2d64941564c865b56a01a8b014999d6fa69d85"
+          "sha256": "301b148af7435232eff41e08c0a4aa382d3c97a80b57ac20832385459fc5cdd4",
+          "sourceSha256": "0a5067ea7a99503bbcdc5543b1bcab9418685e49c3963f97c3eb4d6b5c7c9d50"
         },
         {
           "path": ".deploy/local/README.md",
@@ -98,7 +101,7 @@
         },
         {
           "path": "acme-backend-srv/internal/platform/core/module.manifest.json",
-          "sha256": "8f6305fead0ab0712d5e55be5385b434c568bbad2de32d638dde9fe2e87b1223",
+          "sha256": "0423e83f06053f848c18a9f3af88bbc83c6c6d03eb80424c48f111e72113cc26",
           "sourcePath": "go-srv/internal/platform/core/module.manifest.json"
         },
         {

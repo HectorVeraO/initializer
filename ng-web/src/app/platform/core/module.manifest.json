@@ -6,6 +6,8 @@
   "implied": true,
   "implementsSpec": { "core": "0.1.0" },
   "requiresModules": [],
+  "ports": [{ "name": "web", "offset": 20, "origin": true }],
+  "portFiles": ["ng-web/angular.json", "ng-web/package.json", "ng-web/proxy.conf.json"],
   "files": ["ng-web/"],
   "exclude": ["ng-web/.vscode/", "ng-web/AGENTS.md", "ng-web/cookbooks/"],
   "names": [
