@@ -294,14 +294,22 @@ func (r *resolver) components(stacks []StackPlan) []Component {
 	return components
 }
 
-// recordedSelection builds the selection the project records: the inputs as
-// given, schema 2 only when a schema 2 key is present.
+// recordedSelection builds the resolved selection the plan carries: the
+// effective project, the sorted stacks, the installed backend modules and the
+// components as given. Every list is present; schema 2 only when components
+// are given. The recorded document of a run is built by the caller.
 func (r *resolver) recordedSelection(stackNames, modules []string) manifest.Selection {
 	recorded := manifest.Selection{
 		Schema:  1,
 		Project: r.sel.Project,
 		Stacks:  stackNames,
 		Modules: modules,
+		Has: manifest.Presence{
+			Name:     true,
+			GoModule: r.sel.Project.GoModule != "",
+			Stacks:   true,
+			Modules:  true,
+		},
 	}
 	if len(r.sel.Components) > 0 {
 		recorded.Schema = 2

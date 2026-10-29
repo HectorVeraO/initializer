@@ -40,8 +40,8 @@ var (
 
 // Plan is the resolved selection: what to copy and how to certify it.
 type Plan struct {
-	// Selection is the recorded form: stacks sorted, modules in backend
-	// catalog order with implied modules included.
+	// Selection is the resolved selection: the effective project, stacks
+	// sorted, modules in backend catalog order with implied modules included.
 	Selection manifest.Selection
 	// Stacks are the selected stacks, sorted by stack name.
 	Stacks []StackPlan

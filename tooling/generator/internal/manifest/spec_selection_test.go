@@ -101,7 +101,7 @@ func TestDecodeSpecAcceptsAnyWellFormedTagAndCooperation(t *testing.T) {
 }
 
 func TestDecodeSelectionValidFixture(t *testing.T) {
-	selection, issues := manifest.DecodeSelection(selectionPath, readFixture(t, "selection.valid.json"))
+	selection, issues := decodeFile(t, selectionPath, readFixture(t, "selection.valid.json"))
 	if len(issues) != 0 {
 		t.Fatalf("unexpected issues: %v", issues)
 	}
@@ -111,7 +111,7 @@ func TestDecodeSelectionValidFixture(t *testing.T) {
 }
 
 func TestDecodeSelectionReportsEveryProblem(t *testing.T) {
-	_, issues := manifest.DecodeSelection(selectionPath, readFixture(t, "selection.invalid.json"))
+	_, issues := decodeFile(t, selectionPath, readFixture(t, "selection.invalid.json"))
 	for _, path := range []string{"#/project/goModule", "#/stacks", "#/modules/0"} {
 		if !hasIssue(issues, manifest.CodeSelectionInvalid, selectionPath+path) {
 			t.Errorf("missing SELECTION_INVALID at %s: %v", path, issues)
@@ -133,7 +133,6 @@ func TestDecodeSelectionRules(t *testing.T) {
 		{"name 64 chars", func(m map[string]any) { m["project"].(map[string]any)["name"] = "a" + strings.Repeat("b", 63) }, "#/project/name", manifest.CodeNameInvalid},
 		{"name uppercase", func(m map[string]any) { m["project"].(map[string]any)["name"] = "Acme" }, "#/project/name", manifest.CodeNameInvalid},
 		{"name starts with digit", func(m map[string]any) { m["project"].(map[string]any)["name"] = "1ab" }, "#/project/name", manifest.CodeNameInvalid},
-		{"goModule missing with go-srv", func(m map[string]any) { delete(m["project"].(map[string]any), "goModule") }, "#/project/goModule", manifest.CodeSelectionInvalid},
 		{"goModule uppercase first segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "Example.com/acme" }, "#/project/goModule", manifest.CodeSelectionInvalid},
 		{"goModule dotdot segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/../x" }, "#/project/goModule", manifest.CodeSelectionInvalid},
 		{"goModule dot segment", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/./x" }, "#/project/goModule", manifest.CodeSelectionInvalid},
@@ -155,7 +154,7 @@ func TestDecodeSelectionRules(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			data := mutateFixture(t, "selection.valid.json", tc.change)
-			_, issues := manifest.DecodeSelection(selectionPath, data)
+			_, issues := decodeFile(t, selectionPath, data)
 			if !hasIssue(issues, tc.code, selectionPath+tc.path) {
 				t.Fatalf("want %s at %s, got %v", tc.code, tc.path, issues)
 			}
@@ -171,10 +170,11 @@ func TestDecodeSelectionAcceptsBoundariesAndIgnoresOrder(t *testing.T) {
 		"frontend first":    func(m map[string]any) { m["stacks"] = []any{"ng-web", "go-srv"} },
 		"empty modules":     func(m map[string]any) { m["modules"] = []any{} },
 		"nested module":     func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "github.com/acme/back_end.v2~x" },
+		"goModule absent":   func(m map[string]any) { delete(m["project"].(map[string]any), "goModule") },
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, issues := manifest.DecodeSelection(selectionPath, mutateFixture(t, "selection.valid.json", change))
+			_, issues := decodeFile(t, selectionPath, mutateFixture(t, "selection.valid.json", change))
 			if len(issues) != 0 {
 				t.Fatalf("unexpected issues: %v", issues)
 			}
@@ -183,37 +183,8 @@ func TestDecodeSelectionAcceptsBoundariesAndIgnoresOrder(t *testing.T) {
 }
 
 func TestDecodeSelectionSyntaxError(t *testing.T) {
-	_, issues := manifest.DecodeSelection(selectionPath, []byte(`{`))
+	_, issues := decodeFile(t, selectionPath, []byte(`{`))
 	if len(issues) != 1 || issues[0].Code != manifest.CodeSelectionInvalid || issues[0].Path != selectionPath+"#" {
 		t.Fatalf("want one whole-file SELECTION_INVALID, got %v", issues)
-	}
-}
-
-func TestSelectionFromFlags(t *testing.T) {
-	valid := manifest.SelectionFlags{
-		Name: "acme-backend", GoModule: "example.com/acme/backend",
-		Stacks: []string{"go-srv", "ng-web"}, Modules: []string{"parameters"},
-	}
-	selection, issues := manifest.SelectionFromFlags(valid)
-	if len(issues) != 0 || selection.Project.Name != "acme-backend" {
-		t.Fatalf("valid flags rejected: %v", issues)
-	}
-
-	all := valid
-	all.Modules, all.AllModules = nil, true
-	selection, issues = manifest.SelectionFromFlags(all)
-	if len(issues) != 0 || !selection.AllModules {
-		t.Fatalf("all-modules rejected: %v %+v", issues, selection)
-	}
-
-	bad := manifest.SelectionFlags{Name: "A", Stacks: []string{"go-srv"}, Modules: []string{"Bad"}}
-	_, issues = manifest.SelectionFromFlags(bad)
-	for _, path := range []string{"flags#/project/goModule", "flags#/modules/0"} {
-		if !hasIssue(issues, manifest.CodeSelectionInvalid, path) {
-			t.Errorf("missing issue at %s: %v", path, issues)
-		}
-	}
-	if !hasIssue(issues, manifest.CodeNameInvalid, "flags#/project/name") {
-		t.Errorf("missing NAME_INVALID at flags#/project/name: %v", issues)
 	}
 }

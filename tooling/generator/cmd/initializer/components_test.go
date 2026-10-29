@@ -110,14 +110,6 @@ func TestComponentFlagWithoutAValueIsAProblem(t *testing.T) {
 	}
 }
 
-func TestComponentFlagCannotBeCombinedWithAFile(t *testing.T) {
-	e := newEnv(t)
-	code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection), "--component", "go-srv=acme-srv")...)
-	if code != exitUsage || !strings.Contains(stderr, "cannot be combined with --name, --go-module, --stacks, --modules, --all-modules or --component") {
-		t.Fatalf("exit %d: %s", code, stderr)
-	}
-}
-
 // fullstackArgs selects both stacks of the fixture with every module.
 func (e env) fullstackArgs(extra ...string) []string {
 	base := e.args("--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv,ng-web", "--all-modules")

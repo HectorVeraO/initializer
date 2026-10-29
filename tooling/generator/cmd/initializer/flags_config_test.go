@@ -323,11 +323,15 @@ func TestCISelectionsAreTheCoveringSet(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		selection, issues := manifest.DecodeSelection(filepath.Base(path), data)
+		tree, issues := manifest.ParseJSON(filepath.Base(path), data)
 		if len(issues) > 0 {
 			t.Fatalf("%s: %v", path, issues)
 		}
-		files[filepath.Base(path)] = selection
+		input, issues := manifest.DecodeInput(filepath.Base(path), tree)
+		if len(issues) > 0 {
+			t.Fatalf("%s: %v", path, issues)
+		}
+		files[filepath.Base(path)] = input.Selection
 	}
 	for _, found := range legs.Check(decodeRealCatalog(t, catalogPath), files) {
 		t.Errorf("%s %s: %s", found.Code, found.Path, found.Message)

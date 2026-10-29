@@ -121,21 +121,31 @@ func duplicateComponentProblems(entries []componentEntry) []Problem {
 	return problems
 }
 
+// componentFlags returns the --component values as flag inputs, in flag order.
+func componentFlags(entries []componentEntry) []manifest.ComponentFlag {
+	flags := make([]manifest.ComponentFlag, 0, len(entries))
+	for i, entry := range entries {
+		flags = append(flags, manifest.ComponentFlag{Index: i, Arg: entry.raw, Entry: entry.Component})
+	}
+	return flags
+}
+
 // multiComponentIssues reports COMPONENT_MULTI_UNSUPPORTED for every entry
-// after the first of a stack. source is the selection file as typed, or "" when
-// the entries come from flags.
-func multiComponentIssues(components []manifest.Component, source string) []issue.Issue {
+// after the first of a stack. An entry from a flag is reported at its flag; the
+// entries of a file once per stack, at the file's components.
+func multiComponentIssues(in manifest.Input) []issue.Issue {
 	var issues []issue.Issue
 	seen := map[string]bool{}
 	reportedFile := map[string]bool{}
-	for i, component := range components {
+	for i, component := range in.Selection.Components {
 		if !seen[component.Stack] {
 			seen[component.Stack] = true
 			continue
 		}
-		path := issue.Path(manifest.FlagsSource, "/components/"+strconv.Itoa(i))
-		if source != "" {
-			path = issue.Path(source, "/components")
+		origin := in.Origins["/components/"+strconv.Itoa(i)]
+		path := issue.Path(origin.Source, origin.Pointer)
+		if origin.Source != manifest.FlagsSource {
+			path = issue.Path(origin.Source, "/components")
 			if reportedFile[component.Stack] {
 				continue
 			}
@@ -144,36 +154,9 @@ func multiComponentIssues(components []manifest.Component, source string) []issu
 		issues = append(issues, issue.Issue{
 			Code:    plan.CodeComponentMultiUnsupported,
 			Path:    path,
+			Line:    origin.Line,
 			Message: fmt.Sprintf("several components of stack %s are not supported by this generator yet", component.Stack),
 		})
 	}
 	return issues
-}
-
-// componentSelection returns the entries as selection components.
-func componentSelection(entries []componentEntry) []manifest.Component {
-	if len(entries) == 0 {
-		return nil
-	}
-	components := make([]manifest.Component, 0, len(entries))
-	for _, entry := range entries {
-		components = append(components, entry.Component)
-	}
-	return components
-}
-
-// flagOrigin rewrites the plan issues about component entries so they point at
-// the flag that gave the entry: selection#/components/1/name becomes
-// flags#/components/1.
-func flagOrigin(issues []issue.Issue) []issue.Issue {
-	const prefix = "selection#/components/"
-	rewritten := make([]issue.Issue, len(issues))
-	for i, found := range issues {
-		if strings.HasPrefix(found.Path, prefix) {
-			index, _, _ := strings.Cut(strings.TrimPrefix(found.Path, prefix), "/")
-			found.Path = issue.Path(manifest.FlagsSource, "/components/"+index)
-		}
-		rewritten[i] = found
-	}
-	return rewritten
 }

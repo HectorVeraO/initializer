@@ -14,6 +14,10 @@ type Problem struct {
 	// Arg is the argument as typed; empty when the problem is not about one argument.
 	Arg     string `json:"arg"`
 	Message string `json:"message"`
+	// Code names the problem when it has a code, such as INPUT_FORMAT_UNKNOWN.
+	Code string `json:"code,omitempty"`
+	// Hint is what to do next, from the hint table of Code.
+	Hint string `json:"hint,omitempty"`
 	// Suggestion is a close flag, command or key, or "".
 	Suggestion string `json:"suggestion,omitempty"`
 }

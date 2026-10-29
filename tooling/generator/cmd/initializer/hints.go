@@ -35,6 +35,10 @@ func hintFor(found issue.Issue, moduleIDs []string) string {
 		return "choose another folder: initializer generate <dir>"
 	case plan.CodeGeneratorMismatch, plan.CodeFileMismatch:
 		return rebuildCatalogHint
+	case codeInputFormatUnknown:
+		return "use .json"
+	case manifest.CodeComponentMergeAmbiguous:
+		return "To add, remove or rename a component, edit the input file"
 	case manifest.CodeNameInvalid:
 		return "example: acme-api"
 	case plan.CodeNameReserved:

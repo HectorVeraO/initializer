@@ -1,6 +1,11 @@
 package main
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
+)
 
 // Command is one entry of the command table; help, parsing and dispatch read it.
 type Command struct {
@@ -20,7 +25,12 @@ type Command struct {
 	Flags func(set *flagSet) any
 	// Check returns the command-line problems that need the whole line: required
 	// flags, exclusive flags and aliases given with their new spelling.
-	Check    func(set *flagSet, opts any, positionals []string) []Problem
+	Check func(set *flagSet, opts any, positionals []string) []Problem
+	// Bind copies what the scan saw (which flags were given) into the options.
+	Bind func(set *flagSet, opts any)
+	// Issues returns the value problems found in the same run when the line has
+	// command-line problems, so one report holds both.
+	Issues   func(ctx *Context, opts any, positionals []string) ([]issue.Issue, issueView)
 	Examples []Example
 	Run      func(ctx *Context, opts any, positionals []string) int
 }
@@ -38,6 +48,8 @@ type generateOptions struct {
 	root, catalog, out, file, selection, name, goModule, stacks, modules string
 	allModules                                                           bool
 	components                                                           []componentEntry
+	// given counts how many times the scan saw each flag, by long name.
+	given map[string]int
 }
 
 // filePath returns the selection file, from -f or its hidden alias.
@@ -60,7 +72,7 @@ func generateCommand() *Command {
 		MaxArgs: 1,
 		Flags: func(set *flagSet) any {
 			o := &generateOptions{}
-			set.str(&o.file, flagSpec{Name: "file", Short: "f", Placeholder: "PATH", Usage: "Input file: .json", Default: "none"})
+			set.str(&o.file, flagSpec{Name: "file", Short: "f", Placeholder: "PATH", Usage: "Input file: .json; - reads stdin", Default: "none"})
 			set.str(&o.name, flagSpec{Name: "name", Placeholder: "NAME", Usage: "Project name",
 				Default: `the folder's name, else "demo"`})
 			set.str(&o.goModule, flagSpec{Name: "go-module", Placeholder: "PATH", Usage: "Go module path",
@@ -84,7 +96,9 @@ func generateCommand() *Command {
 				Deprecated: "use -f <file>"})
 			return o
 		},
-		Check: checkGenerate,
+		Check:  checkGenerate,
+		Bind:   bindGenerate,
+		Issues: generateIssues,
 		Examples: []Example{
 			{"a backend with identity, in ./acme",
 				"initializer generate acme --root . --catalog catalog.lock.json --go-module example.com/acme --stacks go-srv --modules identity"},
@@ -93,6 +107,21 @@ func generateCommand() *Command {
 		},
 		Run: runGenerate,
 	}
+}
+
+// bindGenerate keeps which flags the scan saw, for the merge.
+func bindGenerate(set *flagSet, opts any) {
+	opts.(*generateOptions).given = set.given
+}
+
+// codeInputFormatUnknown is the code of an input file whose extension no
+// decoder reads.
+const codeInputFormatUnknown = "INPUT_FORMAT_UNKNOWN"
+
+// isJSONPath reports whether path names a JSON input: a .json extension in any
+// case, or "-" for stdin.
+func isJSONPath(path string) bool {
+	return path == "-" || strings.HasSuffix(strings.ToLower(path), ".json")
 }
 
 // checkGenerate reports the problems of a generate line that need more than one flag.
@@ -107,30 +136,14 @@ func checkGenerate(set *flagSet, opts any, positionals []string) []Problem {
 	if set.given["selection"] > 0 && set.given["file"] > 0 {
 		problems = append(problems, Problem{Arg: "--selection", Message: "pass the file once"})
 	}
-
-	hasFile := o.filePath() != ""
-	hasModules := set.given["modules"] > 0
-	hasFlags := false
-	for _, name := range []string{"name", "go-module", "stacks", "modules", "all-modules", "component"} {
-		hasFlags = hasFlags || set.given[name] > 0
+	for _, input := range []struct{ flag, path string }{{"--file", o.file}, {"--selection", o.selection}} {
+		if input.path != "" && !isJSONPath(input.path) {
+			problems = append(problems, Problem{Arg: input.flag,
+				Message: fmt.Sprintf("%q has an unsupported input format", input.path), Code: codeInputFormatUnknown})
+		}
 	}
-	fileFlag := "--file"
-	if set.given["file"] == 0 {
-		fileFlag = "--selection"
-	}
-	switch {
-	case hasFile && hasFlags:
-		problems = append(problems, Problem{Arg: fileFlag,
-			Message: "cannot be combined with --name, --go-module, --stacks, --modules, --all-modules or --component"})
-	case !hasFile && !hasFlags:
-		problems = append(problems, Problem{Arg: "generate",
-			Message: "a selection is required: pass -f <file> or --stacks, --modules and --go-module"})
-	}
-	switch {
-	case o.allModules && hasModules:
+	if o.allModules && set.given["modules"] > 0 {
 		problems = append(problems, Problem{Arg: "--all-modules", Message: "cannot be combined with --modules"})
-	case !hasFile && hasFlags && !o.allModules && !hasModules:
-		problems = append(problems, Problem{Arg: "--modules", Message: "flag selection requires --modules or --all-modules"})
 	}
 	return problems
 }
