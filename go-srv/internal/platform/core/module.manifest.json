@@ -77,6 +77,11 @@
     { "path": ".deploy/local/README.md", "text": "stop `%{component.ng-web}`, then" },
     { "path": ".deploy/local/README.md", "text": "npm --prefix %{component.ng-web} ci" },
     { "path": "mise.toml", "text": "dir = \"{{config_root}}/%{component.go-srv}\"" },
-    { "path": "mise.toml", "text": "dir = \"{{config_root}}/%{component.ng-web}\"" }
+    { "path": "mise.toml", "text": "dir = \"{{config_root}}/%{component.ng-web}\"" },
+    { "path": ".deploy/local/.example.env", "text": "OTEL_SERVICE_NAME=%{component.go-srv}" },
+    { "path": ".deploy/local/.example.env", "text": "and the %{component.go-srv} session" },
+    { "path": ".deploy/local/.example.env", "text": "host-dev runs from %{component.go-srv}/." },
+    { "path": ".deploy/local/README.md", "text": "`%{component.go-srv}` on 10100 also proxies" },
+    { "path": "go-srv/internal/platform/core/core.go", "text": "defaultService    = \"%{component.go-srv}\"" }
   ]
 }

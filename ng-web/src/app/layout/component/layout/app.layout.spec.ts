@@ -7,6 +7,7 @@ import { ConfirmationService, MessageService } from '@openng/optimus-ui/api';
 import { coreModule, providePlatform } from '@/platform/core';
 import { provideOptimus } from '@openng/optimus-ui/config';
 import es from '../../../../assets/i18n/es.json';
+import { BRAND } from '@/core/config/brand';
 import { ConfirmDeleteService } from '@/core/ui/confirm-delete/confirm-delete.service';
 import { byTestId, deleteConfirmAccept, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import { AppLayout } from './app.layout';
@@ -37,7 +38,7 @@ describe('AppLayout', () => {
 
     const root = fixture.nativeElement as HTMLElement;
 
-    expect(textOf(byTestId(root, 'topbar-logo'))).toBe('initializer');
+    expect(textOf(byTestId(root, 'topbar-logo'))).toBe(BRAND);
     expect(root.querySelector('.layout-sidebar .layout-menu')).not.toBeNull();
     expect(textOf(byTestId(root, 'menu-main'))).toContain('Inicio');
     expect(root.querySelector('.layout-footer')).not.toBeNull();

@@ -148,3 +148,57 @@ func TestSnakeOfALabelIsAPGIdent(t *testing.T) {
 		}
 	}
 }
+
+func TestValidDisplay(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"one byte", "A", true},
+		{"64 bytes", strings.Repeat("a", 64), true},
+		{"65 bytes", strings.Repeat("a", 65), false},
+		{"leading space", " Acme", false},
+		{"trailing space", "Acme ", false},
+		{"inner space", "Acme Shop", true},
+		{"digits", "Shop 12345", true},
+		{"dots underscores hyphens", "a.b_c-d", true},
+		{"trailing dot", "Acme.", true},
+		{"quote", "Acme's", false},
+		{"placeholder", "%{x}", false},
+		{"angle bracket", "a<b", false},
+		{"ampersand", "a&b", false},
+		{"backslash", `a\b`, false},
+		{"empty", "", false},
+		{"non ASCII", "Café", false},
+	}
+	for _, c := range cases {
+		if got := names.ValidDisplay(c.value); got != c.want {
+			t.Errorf("%s: names.ValidDisplay(%q) = %v, want %v", c.name, c.value, got, c.want)
+		}
+	}
+}
+
+func FuzzValidDisplay(f *testing.F) {
+	for _, seed := range []string{"", "A", "Acme Shop", " x", "x ", "%{x}", "a\x00b", strings.Repeat("z", 70)} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, value string) {
+		if !names.ValidDisplay(value) {
+			return
+		}
+		// An accepted value is plain ASCII text that needs no escaping and
+		// has no edge whitespace.
+		if len(value) < 1 || len(value) > 64 || strings.TrimSpace(value) != value {
+			t.Fatalf("accepted %q", value)
+		}
+		if strings.ContainsAny(value, "\"'<>&%{}\\n\t\x00") {
+			t.Fatalf("accepted %q with a character that needs escaping", value)
+		}
+		for i := 0; i < len(value); i++ {
+			if value[i] > 127 {
+				t.Fatalf("accepted non-ASCII %q", value)
+			}
+		}
+	})
+}

@@ -10,7 +10,9 @@ import (
 
 // Flags are the selection values given on the command line.
 type Flags struct {
-	Name, GoModule  string
+	Name, GoModule string
+	// DisplayName is the --display-name value.
+	DisplayName     string
 	Has             FlagPresence
 	Stacks, Modules []string
 	AllModules      bool
@@ -25,6 +27,7 @@ type Flags struct {
 type FlagPresence struct {
 	Name, GoModule, Stacks, Modules bool
 	DBName, DBUser                  bool
+	DisplayName                     bool
 }
 
 // KeyValue is one parsed KEY=NAME flag value.
@@ -64,6 +67,11 @@ func FlagsInput(f Flags) (Input, []issue.Issue) {
 		s.Project.GoModule, s.Has.GoModule = f.GoModule, true
 		origin(patternGoModule, "--go-module")
 		checkValue(d, patternGoModule, patternGoModule, f.GoModule)
+	}
+	if f.Has.DisplayName {
+		s.DisplayName, s.Schema = f.DisplayName, MaxSchema
+		origin(patternDisplay, "--display-name")
+		checkValue(d, patternDisplay, patternDisplay, f.DisplayName)
 	}
 	if f.Has.Stacks {
 		s.Stacks, s.Has.Stacks = nonNil(f.Stacks), true
@@ -201,6 +209,7 @@ func RecordedSelection(in Input, installedModules []string) Selection {
 	if given.Has.GoModule {
 		recorded.Project.GoModule, recorded.Has.GoModule = given.Project.GoModule, true
 	}
+	recorded.DisplayName = given.DisplayName
 	if given.Has.Stacks {
 		recorded.Stacks = append([]string{}, given.Stacks...)
 		sort.Strings(recorded.Stacks)
@@ -213,7 +222,7 @@ func RecordedSelection(in Input, installedModules []string) Selection {
 	}
 	recorded.Services = copyServices(given.Services)
 	hasInfra := recorded.Database != nil || len(recorded.Services) > 0
-	isFirstSchema := recorded.Has.Name && recorded.Has.Stacks && len(recorded.Components) == 0 && !hasInfra
+	isFirstSchema := recorded.Has.Name && recorded.Has.Stacks && len(recorded.Components) == 0 && !hasInfra && recorded.DisplayName == ""
 	recorded.Schema = MaxSchema
 	if isFirstSchema {
 		recorded.Schema = 1

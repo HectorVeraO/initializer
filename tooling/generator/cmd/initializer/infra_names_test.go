@@ -36,7 +36,7 @@ func infraDryRunJSON(t *testing.T, extra ...string) dryRunDocument {
 func TestTheProjectNamesTheDatabaseAndServices(t *testing.T) {
 	doc := infraDryRunJSON(t, "--name", "acme", "--stacks", "go-srv,ng-web", "--all-modules")
 	want := map[string]string{
-		"database": "acme", "dbUser": "acme", "envPrefix": "ACME", "project": "acme",
+		"database": "acme", "dbUser": "acme", "envPrefix": "ACME", "project": "acme", "displayName": "acme",
 		"service.postgres": "acme-postgres", "service.postgres-init": "acme-postgres-init",
 		"service.kratos-migrate": "acme-kratos-migrate", "service.kratos": "acme-kratos",
 		"component.go-srv": "acme-srv", "component.ng-web": "acme-web",

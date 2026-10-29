@@ -38,6 +38,8 @@ Flags:
         Input file: .yaml, .yml or .json; - reads stdin (default: none)
   --name NAME
         Project name (default: the folder's name, else "demo")
+  --display-name TEXT
+        Brand text of the web console (default: the project name)
   --go-module PATH
         Go module path (default: example.com/<name> when a stack needs one)
   --stacks ID[,ID...]
@@ -72,6 +74,8 @@ Examples:
   initializer generate acme --stacks go-srv,ng-web --all-modules
   # from a file, overriding one value
   initializer generate -f acme.yaml --name acme-shop
+  # set the brand text the web console shows
+  initializer generate acme --stacks go-srv,ng-web --display-name "Acme Shop"
   # see the resolved values without writing anything
   initializer generate acme --modules tenancy --dry-run
 `

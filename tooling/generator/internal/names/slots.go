@@ -169,6 +169,9 @@ func Reference(r Resolved) (map[string]string, []issue.Issue) {
 	if !ValidLabel(r.Project) {
 		add("/project/name", LabelMessage(r.Project))
 	}
+	if r.DisplayName != "" && !ValidDisplay(r.DisplayName) {
+		add("/displayName", DisplayMessage(r.DisplayName))
+	}
 	if r.Database != "" && !ValidPGIdent(r.Database) {
 		add("/database/name", PGIdentMessage(r.Database))
 	}

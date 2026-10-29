@@ -132,6 +132,40 @@ func ValidPGIdent(s string) bool {
 	return true
 }
 
+// maxDisplayLength is the longest display name in bytes.
+const maxDisplayLength = 64
+
+// ValidDisplay reports whether s is a display name:
+// ^[A-Za-z0-9]([A-Za-z0-9 ._-]{0,62}[A-Za-z0-9._-])?$, 1-64 bytes. It admits no
+// quote, angle bracket, ampersand, percent sign, brace or backslash, so a
+// display name needs no escaping in source, HTML or JSON text.
+func ValidDisplay(s string) bool {
+	if len(s) < 1 || len(s) > maxDisplayLength {
+		return false
+	}
+	isAlnum := func(c byte) bool {
+		return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+	}
+	if !isAlnum(s[0]) {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		isInner := isAlnum(c) || c == '.' || c == '_' || c == '-'
+		isSpace := c == ' ' && i < len(s)-1
+		if !isInner && !isSpace {
+			return false
+		}
+	}
+	return true
+}
+
+// DisplayMessage returns the NAME_INVALID message for a value that fails the
+// display grammar.
+func DisplayMessage(s string) string {
+	return fmt.Sprintf("%q must be letters, digits, spaces, dots, underscores and hyphens, 1-64 characters, starting with a letter or digit", s)
+}
+
 // PGIdentMessage returns the NAME_INVALID message for a value that fails the
 // pgident grammar.
 func PGIdentMessage(s string) string {

@@ -270,6 +270,7 @@ func writeIssueLines(ctx *Context, sorted []issue.Issue, view issueView) {
 var flagPointers = map[string]string{
 	"/project/name":     "--name",
 	"/project/goModule": "--go-module",
+	"/displayName":      "--display-name",
 	"/stacks":           "--stacks",
 	"/modules":          "--modules",
 	"/components":       "--component",

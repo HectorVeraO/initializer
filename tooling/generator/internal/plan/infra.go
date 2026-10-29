@@ -113,6 +113,9 @@ func (r *resolver) checkInfraNames() {
 // or service that no live rule uses, and for a service key the catalog does
 // not know.
 func (r *resolver) checkInfraOverrides() {
+	if r.sel.DisplayName != "" && !r.live[names.SlotDisplayName] {
+		r.addUnused("/displayName", r.notLiveMessage("/displayName", "a display name", names.SlotDisplayName), "")
+	}
 	if database := r.sel.Database; database != nil {
 		if database.Name != "" && !r.live[names.SlotDatabase] {
 			r.addUnused("/database/name", r.notLiveMessage("/database/name", "a database name", names.SlotDatabase), "")
@@ -259,6 +262,11 @@ func (r *resolver) checkServiceConflicts() {
 func (r *resolver) defaultInfraSlot(slot string) (string, bool) {
 	project := r.sel.Project.Name
 	switch slot {
+	case names.SlotDisplayName:
+		if r.sel.DisplayName != "" {
+			return r.sel.DisplayName, true
+		}
+		return project, true
 	case names.SlotDatabase:
 		if database := r.sel.Database; database != nil && database.Name != "" {
 			return database.Name, true

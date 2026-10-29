@@ -42,7 +42,7 @@ func Merge(file *Input, flags Input) (Input, []issue.Issue) {
 	if hasInfra {
 		merged.Selection.Schema = MaxSchema
 	}
-	if len(merged.Selection.Components) > 0 {
+	if len(merged.Selection.Components) > 0 || merged.Selection.DisplayName != "" {
 		merged.Selection.Schema = MaxSchema
 	}
 	issue.Sort(issues)
@@ -50,6 +50,10 @@ func Merge(file *Input, flags Input) (Input, []issue.Issue) {
 }
 
 func mergeScalars(merged *Input, flags Input) {
+	if flags.Selection.DisplayName != "" {
+		merged.Selection.DisplayName = flags.Selection.DisplayName
+		merged.Origins[patternDisplay] = flags.Origins[patternDisplay]
+	}
 	if flags.Selection.Has.Name {
 		merged.Selection.Project.Name, merged.Selection.Has.Name = flags.Selection.Project.Name, true
 		merged.Origins[patternName] = flags.Origins[patternName]

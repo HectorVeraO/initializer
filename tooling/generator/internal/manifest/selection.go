@@ -37,10 +37,12 @@ type Presence struct {
 // FlagsInput, Merge), the recorded document (RecordedSelection) or the
 // resolved document (ResolveDefaults), by context.
 type Selection struct {
-	Schema  int      `json:"schema"`
-	Project Project  `json:"project"`
-	Stacks  []string `json:"stacks"`
-	Modules []string `json:"modules"`
+	Schema  int     `json:"schema"`
+	Project Project `json:"project"`
+	// DisplayName is the brand text as given; schema 2 only.
+	DisplayName string   `json:"displayName,omitempty"`
+	Stacks      []string `json:"stacks"`
+	Modules     []string `json:"modules"`
 	// Components holds the component entries as given; schema 2 only.
 	Components []Component `json:"components,omitempty"`
 	// Database names the database and its user; schema 2 only.
@@ -54,21 +56,22 @@ type Selection struct {
 	Has Presence `json:"-"`
 }
 
-// MarshalJSON writes the selection in key order schema, project, stacks,
+// MarshalJSON writes the selection in key order schema, project, displayName, stacks,
 // modules, components, database, services. A schema 1 document always writes
 // stacks and modules. A schema 2 document writes each when Has says it was given or when it holds
 // values (a decoded lock carries no Has); an absent list is omitted.
 func (s Selection) MarshalJSON() ([]byte, error) {
 	type document struct {
-		Schema     int               `json:"schema"`
-		Project    Project           `json:"project"`
-		Stacks     *[]string         `json:"stacks,omitempty"`
-		Modules    *[]string         `json:"modules,omitempty"`
-		Components []Component       `json:"components,omitempty"`
-		Database   *Database         `json:"database,omitempty"`
-		Services   map[string]string `json:"services,omitempty"`
+		Schema      int               `json:"schema"`
+		Project     Project           `json:"project"`
+		DisplayName string            `json:"displayName,omitempty"`
+		Stacks      *[]string         `json:"stacks,omitempty"`
+		Modules     *[]string         `json:"modules,omitempty"`
+		Components  []Component       `json:"components,omitempty"`
+		Database    *Database         `json:"database,omitempty"`
+		Services    map[string]string `json:"services,omitempty"`
 	}
-	out := document{Schema: s.Schema, Project: s.Project, Components: s.Components, Database: s.Database, Services: s.Services}
+	out := document{Schema: s.Schema, Project: s.Project, DisplayName: s.DisplayName, Components: s.Components, Database: s.Database, Services: s.Services}
 	isFirstSchema := s.Schema == 1
 	if isFirstSchema || s.Has.Stacks || len(s.Stacks) > 0 {
 		stacks := nonNil(s.Stacks)

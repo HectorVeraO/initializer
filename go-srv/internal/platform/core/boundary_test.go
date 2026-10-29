@@ -51,7 +51,7 @@ func (p listedPackage) sourceFiles() []string {
 	return files
 }
 
-// loadPackages runs `go list -json ./...` from the go-srv module root.
+// loadPackages runs `go list -json ./...` from the module root.
 func loadPackages(t *testing.T) []listedPackage {
 	t.Helper()
 	return listPackagesIn(t, moduleRoot(t))

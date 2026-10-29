@@ -1,5 +1,5 @@
 // Package session issues and verifies the stateless BFF session token.
-// The token format is internal to go-srv and is not part of the wire contract.
+// The token format is internal to the backend and is not part of the wire contract.
 package session
 
 import (

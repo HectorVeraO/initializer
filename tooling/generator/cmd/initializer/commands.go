@@ -51,7 +51,7 @@ type generateOptions struct {
 	root, catalog, out, file, selection, name, goModule, stacks, modules string
 	allModules, dryRun                                                   bool
 	components                                                           []componentEntry
-	dbName, dbUser                                                       string
+	dbName, dbUser, displayName                                          string
 	services                                                             []serviceEntry
 	// given counts how many times the scan saw each flag, by long name.
 	given map[string]int
@@ -80,6 +80,8 @@ func generateCommand() *Command {
 			set.str(&o.file, flagSpec{Name: "file", Short: "f", Placeholder: "PATH", Usage: "Input file: .yaml, .yml or .json; - reads stdin", Default: "none"})
 			set.str(&o.name, flagSpec{Name: "name", Placeholder: "NAME", Usage: "Project name",
 				Default: `the folder's name, else "demo"`})
+			set.str(&o.displayName, flagSpec{Name: "display-name", Placeholder: "TEXT", Usage: "Brand text of the web console",
+				Default: "the project name"})
 			set.str(&o.goModule, flagSpec{Name: "go-module", Placeholder: "PATH", Usage: "Go module path",
 				Default: "example.com/<name> when a stack needs one"})
 			set.str(&o.stacks, flagSpec{Name: "stacks", Placeholder: "ID[,ID...]",
@@ -116,6 +118,8 @@ func generateCommand() *Command {
 				"initializer generate acme --stacks go-srv,ng-web --all-modules"},
 			{"from a file, overriding one value",
 				"initializer generate -f acme.yaml --name acme-shop"},
+			{"set the brand text the web console shows",
+				"initializer generate acme --stacks go-srv,ng-web --display-name \"Acme Shop\""},
 			{"see the resolved values without writing anything",
 				"initializer generate acme --modules tenancy --dry-run"},
 		},
