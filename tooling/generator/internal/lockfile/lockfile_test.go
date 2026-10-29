@@ -90,6 +90,8 @@ func TestDecodeRefusals(t *testing.T) {
 		"component unknown stack": {func(l *lockfile.Lock) { l.Components[0].Stack = "rust-srv" }, "components"},
 		"component stack twice":   {func(l *lockfile.Lock) { l.Components = append(l.Components, l.Components[0]) }, "listed twice"},
 		"component bad name":      {func(l *lockfile.Lock) { l.Components[0].Name = "Acme_Srv" }, "not a label"},
+		"component parent path":   {func(l *lockfile.Lock) { l.Components[0].Name = "../x" }, "not a label"},
+		"component nested path":   {func(l *lockfile.Lock) { l.Components[0].Name = "a/b" }, "not a label"},
 		"component five digits":   {func(l *lockfile.Lock) { l.Components[0].Name = "app10132" }, "not a label"},
 		"component name twice": {func(l *lockfile.Lock) {
 			l.Components = append(l.Components, lockfile.Component{Stack: "ng-web", Name: "go-srv"})
@@ -145,6 +147,26 @@ func TestDecodeAcceptsSourceAndPorts(t *testing.T) {
 	}
 	if decoded.Source.Commit != lock.Source.Commit || decoded.Source.Modified != lock.Source.Modified {
 		t.Fatalf("source = %+v, want %+v", *decoded.Source, *lock.Source)
+	}
+}
+
+func TestDecodeAcceptsEveryNamesSlot(t *testing.T) {
+	lock := validLock()
+	lock.Names = map[string]string{
+		"project":          "acme",
+		"displayName":      "Acme",
+		"database":         "acme",
+		"dbUser":           "acme",
+		"envPrefix":        "ACME",
+		"service.postgres": "acme-postgres",
+		"component.go-srv": "go-srv",
+	}
+	encoded, err := lockfile.Encode(lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lockfile.Decode(encoded); err != nil {
+		t.Fatalf("a lock with every names slot kind: %v", err)
 	}
 }
 
