@@ -48,6 +48,12 @@ Flags:
         Install every module of the backend stack (default: false)
   --component STACK=NAME
         Name the folder of STACK's component (repeatable) (default: <name>-<suffix>)
+  --db-name NAME
+        Database name (default: <name> with - replaced by _)
+  --db-user NAME
+        Database user (default: <name> with - replaced by _)
+  --service KEY=NAME
+        Rename one compose service, repeatable (default: <name>-<key>)
   --dry-run
         Print what would be generated and write nothing (default: false)
   --root DIR

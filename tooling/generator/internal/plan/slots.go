@@ -91,7 +91,7 @@ func (r *resolver) defaultSlot(slot string) (string, bool) {
 			return defaultComponentName(r.sel.Project.Name, stack), true
 		}
 	}
-	return "", false
+	return r.defaultInfraSlot(slot)
 }
 
 // isUnselectedComponentSlot reports whether slot is the component slot of a

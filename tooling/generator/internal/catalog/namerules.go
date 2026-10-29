@@ -44,6 +44,12 @@ func (b *builder) readReference() error {
 		return nil
 	}
 	resolved := names.Resolved{Project: selection.Project.Name, Components: map[string]string{}}
+	if selection.Database != nil {
+		resolved.Database, resolved.DBUser = selection.Database.Name, selection.Database.User
+	}
+	if len(selection.Services) > 0 {
+		resolved.Services = selection.Services
+	}
 	entries := map[string]bool{}
 	before := len(b.issues)
 	for i, component := range selection.Components {

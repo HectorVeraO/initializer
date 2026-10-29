@@ -172,10 +172,14 @@ jobs:
             --root "${GITHUB_WORKSPACE}" \
             --catalog "${RUNNER_TEMP}/catalog.lock.json" \
             --out "${ref}" \
-            --all-modules --stacks go-srv,ng-web --name initializer \
-            --go-module "$(head -1 go-srv/go.mod | cut -d' ' -f2)" \
-            --component go-srv=go-srv --component ng-web=ng-web
-          jq -e '(.components | length) == 2 and (.components | all(.name == .stack))' "${ref}/initializer.lock.json" > /dev/null || { echo "the reference generation did not keep the repo folders" >&2; exit 1; }
+            -f "${GITHUB_WORKSPACE}/.initializer/reference.json" --all-modules \
+            --go-module "$(head -1 go-srv/go.mod | cut -d' ' -f2)"
+          jq -e --slurpfile catalog "${RUNNER_TEMP}/catalog.lock.json" '
+            (.components | length) == 2
+            and (.components | all(.name == .stack))
+            and (.names | has("service.postgres"))
+            and (.names | to_entries | all(.value == $catalog[0].reference[.key]))' "${ref}/initializer.lock.json" > /dev/null \
+            || { echo "the reference generation did not use the reference names" >&2; exit 1; }
           # Rendered files and target-delivered files differ from the repository by design.
           status=0
           compared=0
@@ -352,9 +356,15 @@ jobs:
             echo "the lock names an ng-web component the leg does not select" >&2
             exit 1
           fi
+          postgres="$(jq -r '.names["service.postgres"] // empty' "${lock}")"
+          if [ -z "${postgres}" ]; then
+            echo "the lock names no postgres service" >&2
+            exit 1
+          fi
           {
             echo "srv=${srv}"
             echo "web=${web}"
+            echo "postgres=${postgres}"
           } >> "${GITHUB_OUTPUT}"
       - name: The source module path is gone
         run: |
@@ -409,6 +419,8 @@ jobs:
           fi
           exit "${status}"
       - name: Start the generated project stack
+        env:
+          POSTGRES: ${{ steps.layout.outputs.postgres }}
         run: |
           set -euo pipefail
           project="${RUNNER_TEMP}/gen-a"
@@ -421,7 +433,7 @@ jobs:
             wait_kratos=true
           fi
           for _ in $(seq 1 60); do
-            state="$(${compose} ps --format json postgres | jq -rs 'flatten | .[0].Health // empty')"
+            state="$(${compose} ps --format json "${POSTGRES}" | jq -rs 'flatten | .[0].Health // empty')"
             if [ "${state}" = "healthy" ]; then
               if [ "${wait_kratos}" = false ] || curl -fsS http://127.0.0.1:10133/health/ready > /dev/null; then
                 exit 0

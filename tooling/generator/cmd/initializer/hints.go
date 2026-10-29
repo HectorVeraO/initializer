@@ -50,6 +50,9 @@ func hintFor(found issue.Issue, moduleIDs []string) string {
 	case manifest.CodeComponentMergeAmbiguous:
 		return "To add, remove or rename a component, edit the input file"
 	case manifest.CodeNameInvalid:
+		if strings.Contains(found.Message, "underscores") {
+			return "example: acme_api"
+		}
 		return "example: acme-api"
 	case plan.CodeNameReserved:
 		return "choose another name"

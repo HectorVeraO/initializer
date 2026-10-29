@@ -347,5 +347,17 @@ func (r *resolver) recordedSelection(stackNames, modules []string) manifest.Sele
 		recorded.Schema = 2
 		recorded.Components = append([]manifest.Component(nil), r.sel.Components...)
 	}
+	if database := r.sel.Database; database != nil {
+		copied := *database
+		recorded.Database = &copied
+		recorded.Schema = 2
+	}
+	if len(r.sel.Services) > 0 {
+		recorded.Services = make(map[string]string, len(r.sel.Services))
+		for key, value := range r.sel.Services {
+			recorded.Services[key] = value
+		}
+		recorded.Schema = 2
+	}
 	return recorded
 }

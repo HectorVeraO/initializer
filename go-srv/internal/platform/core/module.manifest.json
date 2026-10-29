@@ -26,6 +26,29 @@
     "go-srv/cookbooks/"
   ],
   "names": [
-    { "path": ".deploy/local/docker-compose.yml", "text": "name: %{project}" }
+    { "path": ".deploy/local/docker-compose.yml", "text": "name: %{project}" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "POSTGRES_DB: %{database}" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "POSTGRES_USER: %{dbUser}" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "${%{envPrefix}_PG_PASSWORD" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "?set %{envPrefix}_PG_PASSWORD in" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "pg_isready -U %{dbUser} -d %{database}" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "\n  %{service.postgres}:\n" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "\n      %{service.postgres}:\n" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "PGHOST: %{service.postgres}" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "PGUSER: %{dbUser}" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "PGDATABASE: %{database}" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "@%{service.postgres}:5432" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "\n  %{service.postgres-init}:\n" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "\n      %{service.postgres-init}:\n" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "\n  %{service.kratos-migrate}:\n" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "\n      %{service.kratos-migrate}:\n" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "\n  %{service.kratos}:\n" },
+    { "path": ".deploy/local/.example.env", "text": "%{envPrefix}_PG_PASSWORD=" },
+    { "path": ".deploy/local/.example.env", "text": "postgres://%{dbUser}:${%{envPrefix}_PG_PASSWORD}@localhost:10132/%{database}?" },
+    { "path": ".deploy/local/README.md", "text": "`%{service.postgres}`" },
+    { "path": ".deploy/local/README.md", "text": "`%{service.kratos}` public API" },
+    { "path": ".deploy/local/README.md", "text": "`%{service.kratos}` admin API" },
+    { "path": ".deploy/local/README.md", "text": "`%{service.postgres-init}` runs on every" },
+    { "path": ".deploy/local/README.md", "text": "`%{service.kratos-migrate}` applies the Kratos migrations before `%{service.kratos}` starts" }
   ]
 }

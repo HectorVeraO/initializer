@@ -21,6 +21,12 @@ type Component struct {
 	Name  string `json:"name,omitempty"`
 }
 
+// Database names the database and its owner role, as given.
+type Database struct {
+	Name string `json:"name,omitempty"`
+	User string `json:"user,omitempty"`
+}
+
 // Presence records which optional top-level values an input gave, so "absent"
 // and "empty" differ.
 type Presence struct {
@@ -37,6 +43,10 @@ type Selection struct {
 	Modules []string `json:"modules"`
 	// Components holds the component entries as given; schema 2 only.
 	Components []Component `json:"components,omitempty"`
+	// Database names the database and its user; schema 2 only.
+	Database *Database `json:"database,omitempty"`
+	// Services maps a service key to its compose service name; schema 2 only.
+	Services map[string]string `json:"services,omitempty"`
 	// AllModules is the --all-modules flag; the plan expands it and it is
 	// never encoded.
 	AllModules bool `json:"-"`
@@ -45,18 +55,20 @@ type Selection struct {
 }
 
 // MarshalJSON writes the selection in key order schema, project, stacks,
-// modules, components. A schema 1 document always writes stacks and modules.
-// A schema 2 document writes each when Has says it was given or when it holds
+// modules, components, database, services. A schema 1 document always writes
+// stacks and modules. A schema 2 document writes each when Has says it was given or when it holds
 // values (a decoded lock carries no Has); an absent list is omitted.
 func (s Selection) MarshalJSON() ([]byte, error) {
 	type document struct {
-		Schema     int         `json:"schema"`
-		Project    Project     `json:"project"`
-		Stacks     *[]string   `json:"stacks,omitempty"`
-		Modules    *[]string   `json:"modules,omitempty"`
-		Components []Component `json:"components,omitempty"`
+		Schema     int               `json:"schema"`
+		Project    Project           `json:"project"`
+		Stacks     *[]string         `json:"stacks,omitempty"`
+		Modules    *[]string         `json:"modules,omitempty"`
+		Components []Component       `json:"components,omitempty"`
+		Database   *Database         `json:"database,omitempty"`
+		Services   map[string]string `json:"services,omitempty"`
 	}
-	out := document{Schema: s.Schema, Project: s.Project, Components: s.Components}
+	out := document{Schema: s.Schema, Project: s.Project, Components: s.Components, Database: s.Database, Services: s.Services}
 	isFirstSchema := s.Schema == 1
 	if isFirstSchema || s.Has.Stacks || len(s.Stacks) > 0 {
 		stacks := nonNil(s.Stacks)

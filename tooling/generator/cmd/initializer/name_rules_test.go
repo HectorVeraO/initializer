@@ -27,7 +27,7 @@ func repoGoModule(t *testing.T, root string) string {
 	return module
 }
 
-func TestGenerateRenamesTheComposeProjectOnly(t *testing.T) {
+func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
 	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
@@ -39,17 +39,28 @@ func TestGenerateRenamesTheComposeProjectOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := os.ReadFile(filepath.Join(root, ".deploy", "local", "docker-compose.yml"))
-	if err != nil {
-		t.Fatal(err)
+	text := string(delivered)
+	for _, want := range []string{
+		"name: acme\n", "\n  acme-postgres:\n", "\n  acme-postgres-init:\n", "\n  acme-kratos-migrate:\n", "\n  acme-kratos:\n",
+		"POSTGRES_DB: acme\n", "POSTGRES_USER: acme\n", "${ACME_PG_PASSWORD:?set ACME_PG_PASSWORD in", "@acme-postgres:5432/kratos",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the compose file lacks %q", want)
+		}
 	}
-	deliveredLine, deliveredRest, _ := bytes.Cut(delivered, []byte("\n"))
-	_, sourceRest, _ := bytes.Cut(source, []byte("\n"))
-	if string(deliveredLine) != "name: acme" {
-		t.Fatalf("compose line 1 = %q, want %q", deliveredLine, "name: acme")
+	for _, banned := range []string{"INITIALIZER", "initializer"} {
+		for _, line := range strings.Split(text, "\n") {
+			isMarker := strings.HasPrefix(strings.TrimSpace(line), "# initializer:")
+			if strings.Contains(line, banned) && !isMarker {
+				t.Errorf("the compose file keeps the reference name on %q", line)
+			}
+		}
 	}
-	if !bytes.Equal(deliveredRest, sourceRest) {
-		t.Fatal("the compose file differs from the repo copy beyond line 1")
+	// The Kratos role and database and the init folder keep their fixed names.
+	for _, kept := range []string{"postgres://kratos:", "./postgres-init:/postgres-init:ro", "./kratos:/etc/config/kratos:ro"} {
+		if !strings.Contains(text, kept) {
+			t.Errorf("the compose file lost %q", kept)
+		}
 	}
 }
 

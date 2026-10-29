@@ -51,6 +51,8 @@ type generateOptions struct {
 	root, catalog, out, file, selection, name, goModule, stacks, modules string
 	allModules, dryRun                                                   bool
 	components                                                           []componentEntry
+	dbName, dbUser                                                       string
+	services                                                             []serviceEntry
 	// given counts how many times the scan saw each flag, by long name.
 	given map[string]int
 }
@@ -90,6 +92,12 @@ func generateCommand() *Command {
 			set.components(&o.components, flagSpec{Name: "component", Placeholder: "STACK=NAME",
 				Usage:   "Name the folder of STACK's component (repeatable)",
 				Default: "<name>-<suffix>"})
+			set.str(&o.dbName, flagSpec{Name: "db-name", Placeholder: "NAME", Usage: "Database name",
+				Default: "<name> with - replaced by _"})
+			set.str(&o.dbUser, flagSpec{Name: "db-user", Placeholder: "NAME", Usage: "Database user",
+				Default: "<name> with - replaced by _"})
+			set.services(&o.services, flagSpec{Name: "service", Placeholder: "KEY=NAME",
+				Usage: "Rename one compose service, repeatable", Default: "<name>-<key>"})
 			set.boolean(&o.dryRun, flagSpec{Name: "dry-run", Usage: "Print what would be generated and write nothing", Default: "false"})
 			registerSourceFlags(set, &o.root, &o.catalog)
 			set.str(&o.out, flagSpec{Name: "out", Placeholder: "DIR", Hidden: true,
@@ -155,6 +163,7 @@ func checkGenerate(set *flagSet, opts any, positionals []string) []Problem {
 	o := opts.(*generateOptions)
 	var problems []Problem
 	problems = append(problems, duplicateComponentProblems(o.components)...)
+	problems = append(problems, duplicateServiceProblems(o.services)...)
 	if set.given["out"] > 0 && len(positionals) > 0 {
 		problems = append(problems, Problem{Arg: "--out", Message: "pass the folder once"})
 	}
