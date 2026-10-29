@@ -96,8 +96,9 @@ func TestScanAcceptsEveryFlagSpelling(t *testing.T) {
 
 func TestScanShortNameAndEmptyValue(t *testing.T) {
 	set, target := newScanSet()
+	target.name = "preset"
 	_, problems := scan(set, []string{"-f", "in.json", "--name="})
-	if len(problems) != 0 || target.file != "in.json" || set.given["name"] != 1 {
+	if len(problems) != 0 || target.file != "in.json" || target.name != "" {
 		t.Fatalf("problems %v, target %+v", problems, target)
 	}
 }
