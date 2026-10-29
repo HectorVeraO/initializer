@@ -110,6 +110,10 @@ type resolver struct {
 	cat    catalog.Catalog
 	sel    manifest.Selection
 	issues []issue.Issue
+	// values and live are the slot values and the live slots of the planned
+	// stacks, computed once before the name checks that need liveness.
+	values map[string]string
+	live   map[string]bool
 }
 
 // Resolve returns the modules per stack in catalog order, the specs, TCK tags and TCK env,
@@ -164,10 +168,12 @@ func (r *resolver) run() Plan {
 	}
 	r.checkFrontendSpecs(selected, stackPlans)
 	r.checkFolders(stackPlans, r.wantedSpecs(backendPlan(stackPlans)))
+	sort.Slice(stackPlans, func(i, j int) bool { return stackPlans[i].Stack < stackPlans[j].Stack })
+	r.values, r.live = r.slots(stackPlans)
+	r.checkInfraNames()
 	if len(r.issues) > 0 {
 		return Plan{}
 	}
-	sort.Slice(stackPlans, func(i, j int) bool { return stackPlans[i].Stack < stackPlans[j].Stack })
 	return r.assemble(stackPlans, backendPlan(stackPlans))
 }
 
@@ -537,7 +543,6 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 	for _, stack := range stacks {
 		stackNames = append(stackNames, stack.Stack)
 	}
-	slots, live := r.slots(stacks)
 	return Plan{
 		Selection:     r.recordedSelection(stackNames, recorded),
 		Stacks:        stacks,
@@ -549,8 +554,8 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 		TCKEnv:        env,
 		GoModule:      r.cat.GoModule,
 		Reference:     r.cat.Reference,
-		Slots:         slots,
-		Live:          live,
+		Slots:         r.values,
+		Live:          r.live,
 	}
 }
 

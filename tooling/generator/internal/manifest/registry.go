@@ -38,6 +38,11 @@ var Registry = []FieldSpec{
 	{Pointer: "/components/*", Kind: KindMap, Since: 2},
 	{Pointer: "/components/*/stack", Kind: KindString, Since: 2, Required: true},
 	{Pointer: "/components/*/name", Kind: KindString, Since: 2},
+	{Pointer: "/database", Kind: KindMap, Since: 2},
+	{Pointer: "/database/name", Kind: KindString, Since: 2},
+	{Pointer: "/database/user", Kind: KindString, Since: 2},
+	{Pointer: "/services", Kind: KindMap, Since: 2},
+	{Pointer: "/services/*", Kind: KindString, Since: 2},
 }
 
 // MaxSchema is the highest schema this generator reads and writes.
@@ -50,6 +55,9 @@ const (
 	patternStacksItem = "/stacks/*"
 	patternModuleItem = "/modules/*"
 	patternCompName   = "/components/*/name"
+	patternDBName     = "/database/name"
+	patternDBUser     = "/database/user"
+	patternService    = "/services/*"
 )
 
 const setSchemaHint = `set "schema": 2`
@@ -127,6 +135,14 @@ func kindMessage(row FieldSpec) string {
 func valueProblem(pattern, value string) (code, message string, bad bool) {
 	switch pattern {
 	case patternName, patternCompName:
+		if !names.ValidLabel(value) {
+			return CodeNameInvalid, names.LabelMessage(value), true
+		}
+	case patternDBName, patternDBUser:
+		if !names.ValidPGIdent(value) {
+			return CodeNameInvalid, names.PGIdentMessage(value), true
+		}
+	case patternService:
 		if !names.ValidLabel(value) {
 			return CodeNameInvalid, names.LabelMessage(value), true
 		}
@@ -291,7 +307,50 @@ func (w *inputDecoder) extract(root *Node) Selection {
 			s.Components = append(s.Components, component)
 		}
 	}
+	if w.schema >= 2 {
+		s.Database = extractDatabase(root)
+		s.Services = extractServices(root)
+	}
 	return s
+}
+
+// extractDatabase reads the database map of a walked tree; nil when it holds
+// no string value.
+func extractDatabase(root *Node) *Database {
+	node, found := root.Member("database")
+	if !found || node.Kind != KindMap {
+		return nil
+	}
+	var database Database
+	if name, has := node.Member("name"); has && name.Kind == KindString {
+		database.Name = name.Value
+	}
+	if user, has := node.Member("user"); has && user.Kind == KindString {
+		database.User = user.Value
+	}
+	if database == (Database{}) {
+		return nil
+	}
+	return &database
+}
+
+// extractServices reads the services map of a walked tree: its string
+// members, nil when there are none.
+func extractServices(root *Node) map[string]string {
+	node, found := root.Member("services")
+	if !found || node.Kind != KindMap {
+		return nil
+	}
+	services := map[string]string{}
+	for _, member := range node.Members {
+		if member.Value.Kind == KindString {
+			services[member.Key] = member.Value.Value
+		}
+	}
+	if len(services) == 0 {
+		return nil
+	}
+	return services
 }
 
 // stringList reads the list at key of a map node: its string elements, and

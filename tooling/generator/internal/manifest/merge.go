@@ -22,6 +22,11 @@ func Merge(file *Input, flags Input) (Input, []issue.Issue) {
 		merged.Selection = file.Selection
 		merged.Selection.Components = append([]Component(nil), file.Selection.Components...)
 		merged.Selection.AllModules = false
+		if file.Selection.Database != nil {
+			copied := *file.Selection.Database
+			merged.Selection.Database = &copied
+		}
+		merged.Selection.Services = copyServices(file.Selection.Services)
 		for pointer, origin := range file.Origins {
 			merged.Origins[pointer] = origin
 		}
@@ -31,7 +36,12 @@ func Merge(file *Input, flags Input) (Input, []issue.Issue) {
 	}
 	mergeScalars(&merged, flags)
 	mergeLists(&merged, flags)
+	mergeInfra(&merged, flags)
 	issues := mergeComponents(&merged, file, flags)
+	hasInfra := merged.Selection.Database != nil || len(merged.Selection.Services) > 0
+	if hasInfra {
+		merged.Selection.Schema = MaxSchema
+	}
 	if len(merged.Selection.Components) > 0 {
 		merged.Selection.Schema = MaxSchema
 	}
@@ -47,6 +57,47 @@ func mergeScalars(merged *Input, flags Input) {
 	if flags.Selection.Has.GoModule {
 		merged.Selection.Project.GoModule, merged.Selection.Has.GoModule = flags.Selection.Project.GoModule, true
 		merged.Origins[patternGoModule] = flags.Origins[patternGoModule]
+	}
+}
+
+// copyServices returns a copy of services, nil when it is empty.
+func copyServices(services map[string]string) map[string]string {
+	if len(services) == 0 {
+		return nil
+	}
+	copied := make(map[string]string, len(services))
+	for key, value := range services {
+		copied[key] = value
+	}
+	return copied
+}
+
+// mergeInfra applies the database and services flags per key: a flag replaces
+// its own key and the other keys keep the file values.
+func mergeInfra(merged *Input, flags Input) {
+	if database := flags.Selection.Database; database != nil {
+		if merged.Selection.Database == nil {
+			merged.Selection.Database = &Database{}
+		}
+		if _, has := flags.Origins[patternDBName]; has {
+			merged.Selection.Database.Name = database.Name
+			merged.Origins[patternDBName] = flags.Origins[patternDBName]
+		}
+		if _, has := flags.Origins[patternDBUser]; has {
+			merged.Selection.Database.User = database.User
+			merged.Origins[patternDBUser] = flags.Origins[patternDBUser]
+		}
+	}
+	if len(flags.Selection.Services) == 0 {
+		return
+	}
+	if merged.Selection.Services == nil {
+		merged.Selection.Services = map[string]string{}
+	}
+	for key, value := range flags.Selection.Services {
+		pointer := "/services" + issue.Pointer(key)
+		merged.Selection.Services[key] = value
+		merged.Origins[pointer] = flags.Origins[pointer]
 	}
 }
 

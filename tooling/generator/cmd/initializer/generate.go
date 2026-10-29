@@ -54,11 +54,15 @@ func (o *generateOptions) flagsOf() manifest.Flags {
 		GoModule: o.goModule,
 		Has: manifest.FlagPresence{
 			Name: given("name"), GoModule: given("go-module"), Stacks: given("stacks"), Modules: given("modules"),
+			DBName: given("db-name"), DBUser: given("db-user"),
 		},
 		Stacks:     splitList(o.stacks),
 		Modules:    splitList(o.modules),
 		AllModules: o.allModules,
 		Components: componentFlags(o.components),
+		DBName:     o.dbName,
+		DBUser:     o.dbUser,
+		Services:   serviceFlags(o.services),
 	}
 }
 

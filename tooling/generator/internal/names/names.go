@@ -102,3 +102,38 @@ func editDistance(a, b string) int {
 	}
 	return previous[len(right)]
 }
+
+// ValidPGIdent reports whether s is a lowercase unquoted SQL identifier of at
+// most 63 bytes: ^[a-z_][a-z0-9_]*$ without five or more digits in a row.
+func ValidPGIdent(s string) bool {
+	if len(s) < 1 || len(s) > maxLabelLength {
+		return false
+	}
+	digitRun := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		isLower := c >= 'a' && c <= 'z'
+		isDigit := c >= '0' && c <= '9'
+		if !isLower && !isDigit && c != '_' {
+			return false
+		}
+		if i == 0 && isDigit {
+			return false
+		}
+		if isDigit {
+			digitRun++
+		} else {
+			digitRun = 0
+		}
+		if digitRun > maxDigitRun {
+			return false
+		}
+	}
+	return true
+}
+
+// PGIdentMessage returns the NAME_INVALID message for a value that fails the
+// pgident grammar.
+func PGIdentMessage(s string) string {
+	return fmt.Sprintf("%q must be lowercase letters, digits and underscores, 1-63 characters, starting with a letter or underscore", s)
+}

@@ -15,11 +15,21 @@ type Flags struct {
 	Stacks, Modules []string
 	AllModules      bool
 	Components      []ComponentFlag
+	// DBName and DBUser are the --db-name and --db-user values.
+	DBName, DBUser string
+	// Services holds the --service values in command-line order.
+	Services []KeyValue
 }
 
 // FlagPresence records which flags were given; an empty --modules= is given.
 type FlagPresence struct {
 	Name, GoModule, Stacks, Modules bool
+	DBName, DBUser                  bool
+}
+
+// KeyValue is one parsed KEY=NAME flag value.
+type KeyValue struct {
+	Key, Value string
 }
 
 // ComponentFlag is one parsed --component value.
@@ -91,7 +101,42 @@ func FlagsInput(f Flags) (Input, []issue.Issue) {
 			checkValue(d, patternCompName, pointer, flag.Entry.Name)
 		}
 	}
+	flagsInputInfra(&in, d, f)
 	return in, d.result()
+}
+
+// flagsInputInfra fills the database and services of the flags input.
+func flagsInputInfra(in *Input, d *decoder, f Flags) {
+	s := &in.Selection
+	origin := func(pointer, arg string) {
+		in.Origins[pointer] = Origin{Source: FlagsSource, Pointer: pointer, Arg: arg}
+	}
+	if f.Has.DBName {
+		s.Database = &Database{Name: f.DBName}
+		origin(patternDBName, "--db-name")
+		checkValue(d, patternDBName, patternDBName, f.DBName)
+	}
+	if f.Has.DBUser {
+		if s.Database == nil {
+			s.Database = &Database{}
+		}
+		s.Database.User = f.DBUser
+		origin(patternDBUser, "--db-user")
+		checkValue(d, patternDBUser, patternDBUser, f.DBUser)
+	}
+	if len(f.Services) > 0 {
+		s.Services = map[string]string{}
+		origin("/services", "--service")
+	}
+	for _, service := range f.Services {
+		pointer := "/services" + issue.Pointer(service.Key)
+		s.Services[service.Key] = service.Value
+		origin(pointer, "--service "+service.Key+"="+service.Value)
+		checkValue(d, patternService, pointer, service.Value)
+	}
+	if s.Database != nil || len(s.Services) > 0 {
+		s.Schema = MaxSchema
+	}
 }
 
 // checkValue reports the grammar problem of the value at pattern as an issue
@@ -162,7 +207,13 @@ func RecordedSelection(in Input, installedModules []string) Selection {
 		recorded.Has.Stacks = true
 	}
 	recorded.Components = append([]Component(nil), given.Components...)
-	isFirstSchema := recorded.Has.Name && recorded.Has.Stacks && len(recorded.Components) == 0
+	if given.Database != nil {
+		copied := *given.Database
+		recorded.Database = &copied
+	}
+	recorded.Services = copyServices(given.Services)
+	hasInfra := recorded.Database != nil || len(recorded.Services) > 0
+	isFirstSchema := recorded.Has.Name && recorded.Has.Stacks && len(recorded.Components) == 0 && !hasInfra
 	recorded.Schema = MaxSchema
 	if isFirstSchema {
 		recorded.Schema = 1

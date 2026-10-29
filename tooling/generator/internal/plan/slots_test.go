@@ -6,6 +6,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
 )
 
 // withRules gives the core and identity modules of the backend a name rule each.
@@ -100,5 +101,20 @@ func TestRuleOutsideBlocksDoesNotMakeAnUnselectedComponentSlotLive(t *testing.T)
 	}
 	if p.Slots["component.ng-web"] != "acme-backend-web" {
 		t.Fatalf("the slot has no default value: %v", p.Slots)
+	}
+}
+
+func TestUnusedOverrideNamesEveryModuleThatWouldDeliverTheSlot(t *testing.T) {
+	core := []catalog.NameRule{
+		{Path: "a", Text: "db: %{database}", Blocks: []string{"module:identity"}},
+		{Path: "b", Text: "db: %{database}", Blocks: []string{"module:tenancy"}},
+	}
+	cat := withRules(t, load(t, "fullstack.json"), core, nil)
+	sel := selection()
+	sel.Database = &manifest.Database{Name: "ledger"}
+	issues := wantCodes(t, cat, sel, plan.CodeNameOverrideUnused)
+	want := "/database/name: no selected module delivers a database name (none of identity, tenancy is selected)"
+	if issues[0].Message != want {
+		t.Fatalf("message = %q, want %q", issues[0].Message, want)
 	}
 }

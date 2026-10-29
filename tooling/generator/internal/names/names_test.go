@@ -97,3 +97,54 @@ func TestClosest(t *testing.T) {
 		t.Errorf("no candidates: %q", got)
 	}
 }
+
+func TestValidPGIdent(t *testing.T) {
+	valid := []string{"a", "_", "acme", "acme_backend", "_x1", "a1234", "a1234b5678", strings.Repeat("a", 63)}
+	invalid := []string{"", "1a", "Acme", "acme-backend", "a b", "a.b", "app10132", "a12345", strings.Repeat("a", 64), "ab\n", "é"}
+	for _, s := range valid {
+		if !names.ValidPGIdent(s) {
+			t.Errorf("%q should be valid", s)
+		}
+	}
+	for _, s := range invalid {
+		if names.ValidPGIdent(s) {
+			t.Errorf("%q should be invalid", s)
+		}
+	}
+}
+
+func TestPGIdentMessageNamesTheValueAndTheRule(t *testing.T) {
+	message := names.PGIdentMessage("Bad-Name")
+	for _, want := range []string{`"Bad-Name"`, "underscores", "1-63"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("message %q lacks %q", message, want)
+		}
+	}
+}
+
+var referencePGIdent = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+
+func FuzzValidPGIdent(f *testing.F) {
+	for _, seed := range []string{"acme", "acme_backend", "_", "1a", "a-b", "", "a12345", "Ab"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		if !names.ValidPGIdent(s) {
+			return
+		}
+		if !referencePGIdent.MatchString(s) || referenceDigitRun.MatchString(s) {
+			t.Fatalf("ValidPGIdent(%q) accepted a value outside the grammar", s)
+		}
+		if len(s) < 1 || len(s) > 63 {
+			t.Fatalf("ValidPGIdent(%q) accepted length %d", s, len(s))
+		}
+	})
+}
+
+func TestSnakeOfALabelIsAPGIdent(t *testing.T) {
+	for _, label := range []string{"ab", "acme-backend", "a-b-c", "app1013"} {
+		if !names.ValidPGIdent(names.Snake(label)) {
+			t.Errorf("Snake(%q) = %q is not a pgident", label, names.Snake(label))
+		}
+	}
+}

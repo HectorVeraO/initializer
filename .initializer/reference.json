@@ -17,5 +17,15 @@
       "stack": "ng-web",
       "name": "ng-web"
     }
-  ]
+  ],
+  "database": {
+    "name": "initializer",
+    "user": "initializer"
+  },
+  "services": {
+    "kratos": "kratos",
+    "kratos-migrate": "kratos-migrate",
+    "postgres": "postgres",
+    "postgres-init": "postgres-init"
+  }
 }

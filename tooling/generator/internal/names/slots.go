@@ -169,6 +169,12 @@ func Reference(r Resolved) (map[string]string, []issue.Issue) {
 	if !ValidLabel(r.Project) {
 		add("/project/name", LabelMessage(r.Project))
 	}
+	if r.Database != "" && !ValidPGIdent(r.Database) {
+		add("/database/name", PGIdentMessage(r.Database))
+	}
+	if r.DBUser != "" && !ValidPGIdent(r.DBUser) {
+		add("/database/user", PGIdentMessage(r.DBUser))
+	}
 	stacks := make([]string, 0, len(r.Components))
 	for stack := range r.Components {
 		stacks = append(stacks, stack)

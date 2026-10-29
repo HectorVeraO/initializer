@@ -273,6 +273,9 @@ var flagPointers = map[string]string{
 	"/stacks":           "--stacks",
 	"/modules":          "--modules",
 	"/components":       "--component",
+	"/database/name":    "--db-name",
+	"/database/user":    "--db-user",
+	"/services":         "--service",
 	"/stack":            "--stack",
 }
 

@@ -87,7 +87,7 @@ func TestGenerateWithoutFeatureFlagsShipsNoFlagsConfig(t *testing.T) {
 		t.Fatal("flags.yaml delivered without feature-flags")
 	}
 	survivors := map[string][]string{
-		".deploy/local/.example.env": {"INITIALIZER_PG_PASSWORD=", "OTEL_SERVICE_NAME=", "APP_SESSION_KEYS=", "APP_KRATOS_ADMIN_URL="},
+		".deploy/local/.example.env": {"ACME_BACKEND_PG_PASSWORD=", "OTEL_SERVICE_NAME=", "APP_SESSION_KEYS=", "APP_KRATOS_ADMIN_URL="},
 		".deploy/local/README.md":    {"## Start and stop", "## Session keys"},
 	}
 	for p, wanted := range survivors {
@@ -138,7 +138,7 @@ func TestGenerateWithFeatureFlagsAndTenancyKeepsConfigByteForByte(t *testing.T) 
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
 	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
-		"--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "feature-flags,tenancy")
+		"-f", filepath.Join(root, ".initializer", "reference.json"), "--go-module", repoGoModule(t, root), "--modules", "feature-flags,tenancy")
 	if code != exitOK {
 		t.Fatalf("generate exit %d: %s", code, stderr)
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/emit"
@@ -38,6 +39,8 @@ func (d dryRun) resolvedSelection() manifest.Selection {
 	for _, component := range d.plan.Components {
 		selection.Components = append(selection.Components, manifest.Component{Stack: component.Stack, Name: component.Name})
 	}
+	selection.Database = d.plan.Database()
+	selection.Services = d.plan.Services()
 	return selection
 }
 
@@ -94,6 +97,12 @@ func writeDryRun(ctx *Context, d dryRun) int {
 		}
 		rows = append(rows, []string{"Go module", goModule})
 	}
+	if database := d.plan.Database(); database != nil {
+		rows = append(rows, []string{"Database", databaseText(database)})
+	}
+	if services := d.plan.Services(); len(services) > 0 {
+		rows = append(rows, []string{"Services", strings.Join(serviceNames(services), ", ")})
+	}
 	writeSummaryRows(&text, rows)
 	fmt.Fprintf(&text, "%d %s\n", len(d.project.Files), plural(len(d.project.Files), "file"))
 	return emitText(ctx, text.String())
@@ -146,4 +155,39 @@ func (d dryRun) modulesText(stack string) string {
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+// databaseText renders the database row: the name and, when live, its user.
+func databaseText(database *manifest.Database) string {
+	switch {
+	case database.Name != "" && database.User != "":
+		return database.Name + " (user " + database.User + ")"
+	case database.Name != "":
+		return database.Name
+	}
+	return "user " + database.User
+}
+
+// serviceNames returns the service names in the display order: the preferred
+// keys first, then the others sorted by key.
+func serviceNames(services map[string]string) []string {
+	var ordered []string
+	seen := map[string]bool{}
+	for _, key := range preferredServiceOrder {
+		if name, has := services[key]; has {
+			ordered = append(ordered, name)
+			seen[key] = true
+		}
+	}
+	var rest []string
+	for key := range services {
+		if !seen[key] {
+			rest = append(rest, key)
+		}
+	}
+	sort.Strings(rest)
+	for _, key := range rest {
+		ordered = append(ordered, services[key])
+	}
+	return ordered
 }
