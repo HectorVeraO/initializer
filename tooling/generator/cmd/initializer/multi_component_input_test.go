@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -94,7 +95,7 @@ func TestANameRequiredIssueCarriesSuggestedNamesAndAPasteableHint(t *testing.T) 
 
 func TestThePastedNameHintClearsTheNameRequiredIssue(t *testing.T) {
 	e := newEnv(t)
-	args := e.args("--stacks", "go-srv,ng-web", "--modules", "parameters", "--component", "go-srv",
+	args := e.args("--stacks", "go-srv,ng-web", "--modules", "parameters", "--display-name", "Acme Shop", "--component", "go-srv",
 		"--component", "go-srv", "--component", "ng-web=acme-web,backend=x")
 	_, stdout, _ := executeJSON(t, args...)
 	var hint string
@@ -106,7 +107,13 @@ func TestThePastedNameHintClearsTheNameRequiredIssue(t *testing.T) {
 	if hint == "" {
 		t.Fatalf("no hint in %s", stdout)
 	}
+	if !strings.Contains(hint, "--display-name 'Acme Shop'") {
+		t.Fatalf("hint does not quote the spaced value: %q", hint)
+	}
 	pasted := splitQuoted(strings.TrimPrefix(hint, "initializer "))
+	if !slices.Contains(pasted, "Acme Shop") {
+		t.Fatalf("pasted %v lost the spaced value", pasted)
+	}
 	// Bind the console to the first backend so only the guard is left.
 	firstBackend := ""
 	for _, arg := range pasted {
@@ -331,4 +338,20 @@ func splitQuoted(line string) []string {
 		words = append(words, current.String())
 	}
 	return words
+}
+
+func TestAShortenedSuggestionIsFlaggedInTheHint(t *testing.T) {
+	e := newEnv(t)
+	longName := strings.Repeat("a", 58)
+	args := e.args("--name", longName, "--component", "go-srv", "--component", "go-srv")
+	_, stdout, _ := executeJSON(t, args...)
+	var hint string
+	for _, found := range issuesOf(t, stdout).Issues {
+		if found.Code == "COMPONENT_NAME_REQUIRED" {
+			hint = found.Hint
+		}
+	}
+	if !strings.HasSuffix(hint, "(shortened to fit the 63-byte limit)") {
+		t.Fatalf("hint %q", hint)
+	}
 }

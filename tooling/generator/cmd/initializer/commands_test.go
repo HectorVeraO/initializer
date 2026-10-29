@@ -82,11 +82,10 @@ Examples:
   initializer generate acme --stacks go-srv,ng-web --display-name "Acme Shop"
   # run a second project beside the first on another port band
   initializer generate acme --port-band 103
-  # two backends and a console bound to the second
+  # name the backend and bind the console to it
   initializer generate acme --modules identity \
-    --component go-srv=acme-srv-first \
-    --component go-srv=acme-srv-second,modules=tenancy+api-keys \
-    --component ng-web=acme-web,backend=acme-srv-second
+    --component go-srv=acme-srv,modules=tenancy+api-keys \
+    --component ng-web=acme-web,backend=acme-srv
   # see the resolved values without writing anything
   initializer generate acme --modules tenancy --dry-run
 `

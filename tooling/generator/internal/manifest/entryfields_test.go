@@ -70,29 +70,36 @@ func TestDecodeInputReadsEntryFieldsFromYAML(t *testing.T) {
 }
 
 func TestDecodeInputEntryValuesFollowTheGrammar(t *testing.T) {
+	const (
+		selectionInvalid = "SELECTION_INVALID"
+		nameInvalid      = "NAME_INVALID"
+	)
 	cases := map[string]struct {
 		entry   string
 		pointer string
+		code    string
+		message string
 	}{
-		"module id":        {`{"stack":"go-srv","modules":["Bad"]}`, "#/components/0/modules/0"},
-		"go module":        {`{"stack":"go-srv","goModule":"x"}`, "#/components/0/goModule"},
-		"database name":    {`{"stack":"go-srv","database":{"name":"Bad-Name"}}`, "#/components/0/database/name"},
-		"database user":    {`{"stack":"go-srv","database":{"user":"Bad"}}`, "#/components/0/database/user"},
-		"service value":    {`{"stack":"go-srv","services":{"postgres":"Bad_Name"}}`, "#/components/0/services/postgres"},
-		"backend":          {`{"stack":"ng-web","backend":"Bad_Name"}`, "#/components/0/backend"},
-		"modules a map":    {`{"stack":"go-srv","modules":{}}`, "#/components/0/modules"},
-		"unknown subkey":   {`{"stack":"go-srv","database":{"host":"x"}}`, "#/components/0/database/host"},
-		"modules a scalar": {`{"stack":"go-srv","modules":"core"}`, "#/components/0/modules"},
+		"module id":        {`{"stack":"go-srv","modules":["Bad"]}`, "#/components/0/modules/0", selectionInvalid, "must be a module id of at most 31 characters"},
+		"go module":        {`{"stack":"go-srv","goModule":"x"}`, "#/components/0/goModule", selectionInvalid, "must be a Go module path with a lowercase dotted first segment"},
+		"database name":    {`{"stack":"go-srv","database":{"name":"Bad-Name"}}`, "#/components/0/database/name", nameInvalid, `"Bad-Name" must be lowercase letters, digits and underscores, 1-63 characters, starting with a letter or underscore`},
+		"database user":    {`{"stack":"go-srv","database":{"user":"Bad"}}`, "#/components/0/database/user", nameInvalid, `"Bad" must be lowercase letters, digits and underscores, 1-63 characters, starting with a letter or underscore`},
+		"service value":    {`{"stack":"go-srv","services":{"postgres":"Bad_Name"}}`, "#/components/0/services/postgres", nameInvalid, `"Bad_Name" must be lowercase letters, digits and inner hyphens, 2-63 characters, starting with a letter, without five digits in a row`},
+		"backend":          {`{"stack":"ng-web","backend":"Bad_Name"}`, "#/components/0/backend", nameInvalid, `"Bad_Name" must be lowercase letters, digits and inner hyphens, 2-63 characters, starting with a letter, without five digits in a row`},
+		"modules a map":    {`{"stack":"go-srv","modules":{}}`, "#/components/0/modules", selectionInvalid, "must be a list of strings"},
+		"unknown subkey":   {`{"stack":"go-srv","database":{"host":"x"}}`, "#/components/0/database/host", selectionInvalid, "unknown key"},
+		"modules a scalar": {`{"stack":"go-srv","modules":"core"}`, "#/components/0/modules", selectionInvalid, "must be a list of strings"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, issues := decode(t, "acme.json", `{"schema":2,"components":[`+tc.entry+`]}`)
 			found := false
 			for _, got := range issues {
-				found = found || got.Path == "acme.json"+tc.pointer
+				isExpected := got.Path == "acme.json"+tc.pointer && got.Code == tc.code && got.Message == tc.message
+				found = found || isExpected
 			}
 			if !found {
-				t.Fatalf("want an issue at %s, got %v", tc.pointer, issues)
+				t.Fatalf("want %s %q at %s, got %v", tc.code, tc.message, tc.pointer, issues)
 			}
 		})
 	}
