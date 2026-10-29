@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/lockfile"
 )
 
 const validSelection = `{
@@ -91,10 +93,26 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 }
 
 func TestVerifyWithoutADirectoryChecksTheWorkingDirectory(t *testing.T) {
-	t.Chdir(t.TempDir())
+	dir := t.TempDir()
+	t.Chdir(dir)
 	code, _, stderr := execute(t, "verify")
 	if code != exitInternal || !strings.Contains(stderr, "verify_unreadable") {
 		t.Fatalf("an empty working directory is not a project: exit %d %s", code, stderr)
+	}
+
+	lock, err := lockfile.Encode(lockfile.Lock{Schema: lockfile.SchemaVersion})
+	if err != nil {
+		t.Fatalf("encode lock: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, lockfile.Name), lock, 0o644); err != nil {
+		t.Fatalf("write lock: %v", err)
+	}
+	code, stdout, stderr := execute(t, "verify")
+	if code != exitOK {
+		t.Fatalf("a working directory holding a lock verifies: exit %d %s", code, stderr)
+	}
+	if !strings.Contains(stdout, `"differences":0`) {
+		t.Fatalf("stdout %q does not report zero differences", stdout)
 	}
 }
 
