@@ -22,7 +22,7 @@ Terms (TCK, catalog, selection, active tenant and the rest): `GLOSSARY.md`.
 
 ## Develop
 
-1. Install the pinned toolchain: `mise install`.
+1. Install the pinned toolchain: `mise install`. It also builds `tooling/generator/bin/initializer`.
 2. Enable the pre-commit leak gate: `lefthook install`.
 3. Start local infra: see `.deploy/local/README.md`.
 

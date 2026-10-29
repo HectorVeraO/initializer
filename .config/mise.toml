@@ -1,0 +1,13 @@
+# Repo-only mise config: builds the initializer CLI from this checkout.
+# Generated projects never receive this file.
+
+[env]
+_.path = ["{{config_root}}/tooling/generator/bin"]
+
+[tasks.cli]
+description = "Build the initializer CLI into tooling/generator/bin/"
+dir = "{{config_root}}/tooling/generator"
+run = "go run ./cmd/build-cli"
+
+[hooks]
+postinstall = "mise run cli"

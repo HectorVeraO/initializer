@@ -199,6 +199,38 @@ jobs:
           path: ${{ runner.temp }}/catalog.lock.json
           retention-days: 7
 
+  clone-setup:
+    name: clone-setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          install: false
+      - name: mise install builds the CLI
+        run: |
+          set -euo pipefail
+          status=0
+          mise install --dry-run || status=$?
+          echo "mise install before mise trust: exit ${status}"
+          mise trust
+          mise install
+          test -x tooling/generator/bin/initializer
+          mise exec -- initializer --help
+      - name: A generated project's mise install runs no hook
+        run: |
+          set -euo pipefail
+          git ls-files -z > "${RUNNER_TEMP}/files.bin"
+          bin="${GITHUB_WORKSPACE}/tooling/generator/bin/initializer"
+          "${bin}" catalog build --root "${GITHUB_WORKSPACE}" --files "${RUNNER_TEMP}/files.bin" --out "${RUNNER_TEMP}/catalog.lock.json"
+          "${bin}" generate --root "${GITHUB_WORKSPACE}" --catalog "${RUNNER_TEMP}/catalog.lock.json" --out "${RUNNER_TEMP}/demo" --name demo --go-module example.com/demo --stacks go-srv --modules identity
+          cd "${RUNNER_TEMP}/demo"
+          mise trust
+          mise install
+          test ! -e tooling/generator
+
   selections:
     name: selections
     runs-on: ubuntu-latest
