@@ -305,3 +305,19 @@ func TestSeveralBackendsWithOwnGoModulesStopOnlyAtTheMultiGuard(t *testing.T) {
 		t.Fatalf("exit %d codes %v", code, got)
 	}
 }
+
+// A backend's go-module stays its own: the other backend derives its module
+// from the project base, not from the first backend's value. Folding the
+// first value into the project would make the two collide and be reported
+// as NAME_CONFLICT instead of reaching the multi guard alone.
+func TestABackendGoModuleDoesNotBecomeTheBaseOfTheOthers(t *testing.T) {
+	e := newEnv(t)
+	args := e.fullstackArgs(
+		"--component", "go-srv=acme-srv-first,go-module=example.com/acme/acme-srv-second",
+		"--component", "go-srv=acme-srv-second",
+		"--component", "ng-web=acme-web,backend=acme-srv-first")
+	code, stdout, _ := executeJSON(t, args...)
+	if got := issuesOf(t, stdout).codes(); code != exitIssues || !reflect.DeepEqual(got, []string{"COMPONENT_MULTI_UNSUPPORTED"}) {
+		t.Fatalf("exit %d codes %v", code, got)
+	}
+}

@@ -391,7 +391,10 @@ func TestResolveDefaultsLeavesTheDerivedGoModulesOfSeveralGoComponentsToThePlan(
 	}
 	one := two
 	one.Selection.Components = two.Selection.Components[:1]
-	_, notes, _, _ = manifest.ResolveDefaults(one, "", t.TempDir(), []string{"go-srv"})
+	_, notes, _, issues = manifest.ResolveDefaults(one, "", t.TempDir(), []string{"go-srv"})
+	if len(issues) != 0 {
+		t.Fatalf("a single component returns no issues: %v", issues)
+	}
 	if len(notes) != 1 || !strings.HasPrefix(notes[0], "Go module defaults to example.com/acme") {
 		t.Fatalf("a single component keeps the note: %v", notes)
 	}
