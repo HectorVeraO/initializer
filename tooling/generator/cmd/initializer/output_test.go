@@ -76,12 +76,16 @@ func TestGenerateJSONDocument(t *testing.T) {
 		strings.Join(doc.Added[0].RequiredBy, ",") != "parameters" {
 		t.Fatalf("added = %+v", doc.Added)
 	}
-	hasParameters := false
+	gotModules := []string{}
 	for _, module := range doc.Modules {
-		hasParameters = hasParameters || (module.Module == "parameters" && module.Stack == "go-srv" && module.Version != "")
+		if module.Version == "" {
+			t.Fatalf("module without a version: %+v", module)
+		}
+		gotModules = append(gotModules, module.Stack+"/"+module.Module)
 	}
-	if !hasParameters {
-		t.Fatalf("modules = %+v", doc.Modules)
+	wantModules := "go-srv/core,go-srv/identity,go-srv/parameters"
+	if strings.Join(gotModules, ",") != wantModules {
+		t.Fatalf("modules = %v, want %s", gotModules, wantModules)
 	}
 	if len(doc.Notes) != 1 || !strings.HasPrefix(doc.Notes[0], "project name") {
 		t.Fatalf("notes = %v", doc.Notes)
@@ -390,5 +394,31 @@ func TestJSONResultThatCannotBeWrittenExitsInternalAndLogsTheEvent(t *testing.T)
 	}
 	if !strings.Contains(errOut.String(), "result_unwritable") {
 		t.Fatalf("stderr lacks the result_unwritable event: %s", errOut.String())
+	}
+}
+
+func TestInternalFailureIsExitThreeInBothFormats(t *testing.T) {
+	var out, errOut bytes.Buffer
+	textCtx := &Context{Stdout: &out, Stderr: &errOut, Format: formatText}
+	if code := reportFailure(textCtx, codeInternalError, "disk full"); code != exitInternal {
+		t.Fatalf("text exit %d", code)
+	}
+	if out.Len() != 0 || errOut.String() != "error: disk full [INTERNAL_ERROR]\n" {
+		t.Fatalf("stdout %q, stderr %q", out.String(), errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	jsonCtx := &Context{Stdout: &out, Stderr: &errOut, Format: formatJSON}
+	if code := reportFailure(jsonCtx, codeInternalError, "disk full"); code != exitInternal {
+		t.Fatalf("json exit %d", code)
+	}
+	var doc struct {
+		Schema int
+		OK     bool
+		Error  struct{ Code, Message string }
+	}
+	decodeDocument(t, errOut.String(), &doc)
+	if out.Len() != 0 || doc.Schema != 1 || doc.OK || doc.Error.Code != "INTERNAL_ERROR" || doc.Error.Message != "disk full" {
+		t.Fatalf("stdout %q, doc %+v", out.String(), doc)
 	}
 }
