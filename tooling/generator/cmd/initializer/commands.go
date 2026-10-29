@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 )
 
 // Command is one entry of the command table; help, parsing and dispatch read it.
@@ -72,7 +74,7 @@ func generateCommand() *Command {
 		MaxArgs: 1,
 		Flags: func(set *flagSet) any {
 			o := &generateOptions{}
-			set.str(&o.file, flagSpec{Name: "file", Short: "f", Placeholder: "PATH", Usage: "Input file: .json; - reads stdin", Default: "none"})
+			set.str(&o.file, flagSpec{Name: "file", Short: "f", Placeholder: "PATH", Usage: "Input file: .yaml, .yml or .json; - reads stdin", Default: "none"})
 			set.str(&o.name, flagSpec{Name: "name", Placeholder: "NAME", Usage: "Project name",
 				Default: `the folder's name, else "demo"`})
 			set.str(&o.goModule, flagSpec{Name: "go-module", Placeholder: "PATH", Usage: "Go module path",
@@ -104,6 +106,8 @@ func generateCommand() *Command {
 				"initializer generate acme --root . --catalog catalog.lock.json --go-module example.com/acme --stacks go-srv --modules identity"},
 			{"backend and web console with every module",
 				"initializer generate acme --root . --catalog catalog.lock.json --go-module example.com/acme --stacks go-srv,ng-web --all-modules"},
+			{"from a file, overriding one value",
+				"initializer generate -f acme.yaml --name acme-shop"},
 		},
 		Run: runGenerate,
 	}
@@ -118,10 +122,30 @@ func bindGenerate(set *flagSet, opts any) {
 // decoder reads.
 const codeInputFormatUnknown = "INPUT_FORMAT_UNKNOWN"
 
-// isJSONPath reports whether path names a JSON input: a .json extension in any
-// case, or "-" for stdin.
-func isJSONPath(path string) bool {
-	return path == "-" || strings.HasSuffix(strings.ToLower(path), ".json")
+// pathFormat returns the input format an -f value names: by extension in any
+// case, or FormatNone with known true for "-", whose format is decided by its
+// content. known is false for any other value.
+func pathFormat(path string) (format manifest.Format, known bool) {
+	lower := strings.ToLower(path)
+	switch {
+	case path == stdinPath:
+		return manifest.FormatNone, true
+	case strings.HasSuffix(lower, ".yaml"), strings.HasSuffix(lower, ".yml"):
+		return manifest.FormatYAML, true
+	case strings.HasSuffix(lower, ".json"):
+		return manifest.FormatJSON, true
+	}
+	return manifest.FormatNone, false
+}
+
+// sniffFormat decides the format of standard input: JSON when the first byte
+// that is not a space, tab, CR or LF is '{', else YAML.
+func sniffFormat(data []byte) manifest.Format {
+	trimmed := bytes.TrimLeft(data, " \t\r\n")
+	if len(trimmed) > 0 && trimmed[0] == '{' {
+		return manifest.FormatJSON
+	}
+	return manifest.FormatYAML
 }
 
 // checkGenerate reports the problems of a generate line that need more than one flag.
@@ -137,7 +161,7 @@ func checkGenerate(set *flagSet, opts any, positionals []string) []Problem {
 		problems = append(problems, Problem{Arg: "--selection", Message: "pass the file once"})
 	}
 	for _, input := range []struct{ flag, path string }{{"--file", o.file}, {"--selection", o.selection}} {
-		if input.path != "" && !isJSONPath(input.path) {
+		if input.path != "" && !isKnownPath(input.path) {
 			problems = append(problems, Problem{Arg: input.flag,
 				Message: fmt.Sprintf("%q has an unsupported input format", input.path), Code: codeInputFormatUnknown})
 		}
@@ -290,4 +314,10 @@ func resolve(words []string) resolution {
 		problem.Suggestion = words[0] + " " + nearest
 	}
 	return resolution{problem: problem}
+}
+
+// isKnownPath reports whether an -f value names a format a decoder reads.
+func isKnownPath(path string) bool {
+	_, known := pathFormat(path)
+	return known
 }

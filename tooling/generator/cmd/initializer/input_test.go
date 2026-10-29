@@ -281,7 +281,7 @@ func TestASchema1FileWithoutGoModuleGetsTheDefault(t *testing.T) {
 
 func TestInputFormatIsDecidedByTheExtension(t *testing.T) {
 	e := newEnv(t)
-	for _, name := range []string{"acme.yaml", "acme.yml", "acme.txt", "acme"} {
+	for _, name := range []string{"acme.txt", "acme", "acme.yaml.bak"} {
 		t.Run(name, func(t *testing.T) {
 			path := writeNamed(t, name, validSelection)
 			code, stdout, stderr := executeIn(t, t.TempDir(), "", e.inputArgs("-f", path, "--format", "json")...)
@@ -293,14 +293,14 @@ func TestInputFormatIsDecidedByTheExtension(t *testing.T) {
 				Issues   []map[string]any
 			}
 			decodeDocument(t, stderr, &doc)
-			if len(doc.Problems) != 1 || doc.Problems[0].Code != "INPUT_FORMAT_UNKNOWN" || doc.Problems[0].Hint != "use .json" {
+			if len(doc.Problems) != 1 || doc.Problems[0].Code != "INPUT_FORMAT_UNKNOWN" || doc.Problems[0].Hint != "use .yaml, .yml or .json" {
 				t.Fatalf("problems = %+v", doc.Problems)
 			}
 		})
 	}
 	t.Run("the alias is checked too", func(t *testing.T) {
-		code, _, stderr := executeIn(t, t.TempDir(), "", e.inputArgs("--selection", "acme.yaml")...)
-		if code != exitUsage || !strings.Contains(stderr, "[INPUT_FORMAT_UNKNOWN]") || !strings.Contains(stderr, "hint: use .json") {
+		code, _, stderr := executeIn(t, t.TempDir(), "", e.inputArgs("--selection", "acme.txt")...)
+		if code != exitUsage || !strings.Contains(stderr, "[INPUT_FORMAT_UNKNOWN]") || !strings.Contains(stderr, "hint: use .yaml, .yml or .json") {
 			t.Fatalf("exit %d: %s", code, stderr)
 		}
 	})
@@ -314,7 +314,7 @@ func TestInputFormatIsDecidedByTheExtension(t *testing.T) {
 
 func TestACommandLineProblemCarriesTheValueProblemsOfTheSameRun(t *testing.T) {
 	e := newEnv(t)
-	code, stdout, stderr := executeIn(t, t.TempDir(), "", e.inputArgs("-f", "acme.yaml", "--name", "A", "--format", "json")...)
+	code, stdout, stderr := executeIn(t, t.TempDir(), "", e.inputArgs("-f", "acme.txt", "--name", "A", "--format", "json")...)
 	if code != exitUsage || stdout != "" {
 		t.Fatalf("exit %d stdout %q", code, stdout)
 	}
@@ -326,7 +326,7 @@ func TestACommandLineProblemCarriesTheValueProblemsOfTheSameRun(t *testing.T) {
 	if len(doc.Problems) != 1 || len(doc.Issues) != 1 || doc.Issues[0]["path"] != "flags#/project/name" {
 		t.Fatalf("document = %s", stderr)
 	}
-	code, _, text := executeIn(t, t.TempDir(), "", e.inputArgs("-f", "acme.yaml", "--name", "A")...)
+	code, _, text := executeIn(t, t.TempDir(), "", e.inputArgs("-f", "acme.txt", "--name", "A")...)
 	if code != exitUsage || !strings.Contains(text, "error: --name: ") || !strings.Contains(text, "2 problems.") {
 		t.Fatalf("exit %d: %s", code, text)
 	}

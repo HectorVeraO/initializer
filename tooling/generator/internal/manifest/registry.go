@@ -152,6 +152,8 @@ type inputDecoder struct {
 	source  string
 	schema  int
 	origins map[string]Origin
+	// isYAML adds the quoting advice to wrong-kind messages.
+	isYAML bool
 }
 
 // DecodeInput validates a parsed selection tree against Registry and returns
@@ -167,6 +169,7 @@ func DecodeInput(source string, root *Node) (Input, []issue.Issue) {
 	if root == nil {
 		return in, nil
 	}
+	w.isYAML = root.Format == FormatYAML
 	if root.Kind != KindMap {
 		w.d.addAt(CodeSelectionInvalid, "", root.Line, "must be an object", "")
 		return in, w.d.result()
@@ -235,7 +238,12 @@ func (w *inputDecoder) walkMap(node *Node, pattern, pointer string) {
 // walk checks one value against its row: kind, grammar, then its children.
 func (w *inputDecoder) walk(node *Node, row FieldSpec, pointer string) {
 	if node.Kind != row.Kind {
-		w.d.addAt(CodeSelectionInvalid, pointer, node.Line, kindMessage(row), "")
+		message := kindMessage(row)
+		isScalar := node.Kind == KindInt || node.Kind == KindFloat || node.Kind == KindBool
+		if w.isYAML && row.Kind == KindString && isScalar {
+			message += " (quote it)"
+		}
+		w.d.addAt(CodeSelectionInvalid, pointer, node.Line, message, "")
 		return
 	}
 	w.origins[pointer] = Origin{Source: w.source, Pointer: pointer, Line: node.Line}

@@ -32,7 +32,7 @@ from the input file (-f), then from defaults.
 
 Flags:
   -f, --file PATH
-        Input file: .json; - reads stdin (default: none)
+        Input file: .yaml, .yml or .json; - reads stdin (default: none)
   --name NAME
         Project name (default: the folder's name, else "demo")
   --go-module PATH
@@ -59,6 +59,8 @@ Examples:
   initializer generate acme --root . --catalog catalog.lock.json --go-module example.com/acme --stacks go-srv --modules identity
   # backend and web console with every module
   initializer generate acme --root . --catalog catalog.lock.json --go-module example.com/acme --stacks go-srv,ng-web --all-modules
+  # from a file, overriding one value
+  initializer generate -f acme.yaml --name acme-shop
 `
 
 // linesWithPrefix returns the lines of text that start with prefix.
