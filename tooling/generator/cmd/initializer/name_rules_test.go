@@ -56,6 +56,22 @@ func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 			}
 		}
 	}
+	source, err := os.ReadFile(filepath.Join(root, ".deploy", "local", "docker-compose.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceLines := strings.Split(string(source), "\n")
+	for index, line := range sourceLines {
+		isMarker := strings.HasPrefix(strings.TrimSpace(line), "# initializer:")
+		if !isMarker {
+			sourceLines[index] = strings.NewReplacer("INITIALIZER", "ACME", "initializer", "acme").Replace(line)
+		}
+	}
+	// The repo copy names its services bare; the delivered copy prefixes them with the project.
+	unprefixed := strings.NewReplacer("acme-postgres", "postgres", "acme-kratos", "kratos").Replace(text)
+	if unprefixed != strings.Join(sourceLines, "\n") {
+		t.Error("the compose file differs from the repo copy beyond the renamed reference names")
+	}
 	// The Kratos role and database and the init folder keep their fixed names.
 	for _, kept := range []string{"postgres://kratos:", "./postgres-init:/postgres-init:ro", "./kratos:/etc/config/kratos:ro"} {
 		if !strings.Contains(text, kept) {

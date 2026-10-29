@@ -273,6 +273,40 @@ func TestServiceConflictsNameEveryField(t *testing.T) {
 	}
 }
 
+func TestTwoServicesResolvingToOneNameConflict(t *testing.T) {
+	code, stdout, _ := infraDryRun(t, "--name", "acme", "--stacks", "go-srv", "--format", "json",
+		"--modules", "identity", "--service", "postgres=acme-db", "--service", "postgres-init=acme-db")
+	found := issueArray(t, stdout)
+	if code != exitIssues || len(found) != 2 {
+		t.Fatalf("exit %d issues %v", code, found)
+	}
+	for _, issue := range found {
+		if issue["code"] != "NAME_CONFLICT" || issue["message"] != `service postgres and service postgres-init both resolve to "acme-db"` {
+			t.Errorf("issue = %v", issue)
+		}
+	}
+	paths := found[0]["path"] + " " + found[1]["path"]
+	if !strings.Contains(paths, "flags#/services/postgres ") && !strings.HasSuffix(paths, "flags#/services/postgres") {
+		t.Errorf("paths = %s", paths)
+	}
+	if !strings.Contains(paths, "flags#/services/postgres-init") {
+		t.Errorf("paths = %s", paths)
+	}
+}
+
+func TestADefaultServiceNameConflictPointsAtTheProjectName(t *testing.T) {
+	code, stdout, _ := infraDryRun(t, "--name", "acme", "--stacks", "go-srv", "--format", "json",
+		"--component", "go-srv=acme-postgres")
+	found := issueArray(t, stdout)
+	if code != exitIssues || len(found) != 2 {
+		t.Fatalf("exit %d issues %v", code, found)
+	}
+	paths := found[0]["path"] + " " + found[1]["path"]
+	if !strings.Contains(paths, "flags#/components/0") || !strings.Contains(paths, "#/project/name") {
+		t.Errorf("paths = %s", paths)
+	}
+}
+
 func TestADatabaseMayEqualItsUser(t *testing.T) {
 	doc := infraDryRunJSON(t, "--name", "acme", "--stacks", "go-srv", "--db-name", "shared", "--db-user", "shared")
 	if doc.Names["database"] != "shared" || doc.Names["dbUser"] != "shared" {
