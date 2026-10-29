@@ -161,7 +161,7 @@ Every generated project carries the resolved choices as `initializer.selection.j
 |---|---|---|
 | `--name NAME` | Project name | the folder's name, else `demo` |
 | `--display-name TEXT` | Brand text of the web console | the project name |
-| `--component STACK=NAME` | Folder of that stack's component | `<name>-<suffix>` (`acme-srv`, `acme-web`) |
+| `--component STACK[=NAME][,KEY=VALUE...]` | Add or override a component of that stack (repeatable); keys: `modules` (ids joined by `+`), `go-module`, `db-name`, `db-user`, `service.<key>`, `backend` | one per stack, named `<name>-<suffix>` (`acme-srv`, `acme-web`) |
 | `--db-name NAME`, `--db-user NAME` | Database and its user | `<name>` with `-` replaced by `_` |
 | `--service KEY=NAME` | Rename one compose service | `<name>-<key>` |
 | `--port-band NNN` | Host ports `1NNxx`, from 100 to 654 | `101` |
@@ -188,7 +188,13 @@ Names are lowercase letters, digits and inner hyphens, 2 to 63 characters, start
 
 ## 6. Components
 
-Each stack produces one component folder. Without `--component` the folder is `<name>-<suffix>`. Two components of the same stack are not supported yet: a second `--component go-srv=...` answers `COMPONENT_MULTI_UNSUPPORTED` and nothing is written.
+Each stack produces one component folder. Without `--component` the folder is `<name>-<suffix>`. A selection may ask for several components of one stack: repeat `--component` with the same stack, give each a name, and bind a frontend to its backend with `backend=`. The input is checked completely (`COMPONENT_NAME_REQUIRED`, `COMPONENT_LIMIT`, `COMPONENT_BACKEND_REQUIRED`, `COMPONENT_BACKEND_UNKNOWN`, `COMPONENT_BACKEND_TAKEN`, `COMPONENT_AMBIGUOUS`, `MODULES_UNUSED`), but generating more than one component of a stack is not supported yet: a valid selection answers `COMPONENT_MULTI_UNSUPPORTED` and nothing is written.
+
+```bash
+initializer generate acme --modules identity   --component go-srv=acme-srv-first   --component go-srv=acme-srv-second,modules=tenancy+api-keys   --component ng-web=acme-web,backend=acme-srv-second
+```
+
+When a stack has several components and one has no name, `COMPONENT_NAME_REQUIRED` carries `suggestedNames` and a hint that pastes the fixed command line, or the lines to add to the file. In a single project, an entry's `go-module`, `db-name`, `db-user`, `service.<key>` and `modules` replace the top-level value for that component.
 
 When a file lists components, a `--component STACK=NAME` flag must name one of them exactly; it never renames. For a file that lists `acme-core` for `go-srv`:
 
@@ -264,6 +270,9 @@ Codes a person meets:
 | `OUTPUT_NOT_EMPTY` | The folder already holds files; choose another one. |
 | `NAME_INVALID` | A name breaks the name rule of section 5. |
 | `COMPONENT_MULTI_UNSUPPORTED` | A stack has more than one component; use one. |
+| `COMPONENT_NAME_REQUIRED` | A stack with several components has an unnamed one; use the suggested names. |
+| `COMPONENT_LIMIT`, `COMPONENT_BACKEND_REQUIRED`, `COMPONENT_BACKEND_UNKNOWN`, `COMPONENT_BACKEND_TAKEN`, `COMPONENT_FIELD_NOT_ALLOWED` | The components break a limit of 7 per role, or a frontend has no, an unknown or a taken backend, or an entry has a key its role does not take. |
+| `COMPONENT_AMBIGUOUS`, `MODULES_UNUSED` | A top-level database several backends would inherit, or a top-level module list no backend starts from; set it per component. |
 | `COMPONENT_MERGE_AMBIGUOUS` | A `--component` flag names no component of the file; edit the file. |
 | `SOURCE_ROOT_NOT_FOUND` | No clone found from the working directory or the binary; run inside a clone, pass `--root <clone>`, or set `INITIALIZER_ROOT`. |
 | `REQUIRES_STACK_MISMATCH` | A catalog build error: a module names different required modules in its two stacks. |

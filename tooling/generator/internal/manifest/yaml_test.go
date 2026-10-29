@@ -237,8 +237,6 @@ func sameDecoded(t testing.TB, jsonText, yamlText []byte) {
 		t.Fatalf("yaml refused: %+v\n%s", parseIssues, yamlText)
 	}
 	yamlInput, yamlIssuesFound := manifest.DecodeInput("sel", yamlTree)
-	merged, _ := manifest.Merge(&yamlInput, mustFlags(manifest.Flags{}))
-	yamlIssuesFound = append(yamlIssuesFound, manifest.CheckMerged(merged)...)
 	issue.Sort(yamlIssuesFound)
 	if !reflect.DeepEqual(jsonInput.Selection, yamlInput.Selection) {
 		t.Fatalf("selections differ\njson %+v\nyaml %+v", jsonInput.Selection, yamlInput.Selection)

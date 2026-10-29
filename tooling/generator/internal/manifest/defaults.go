@@ -51,7 +51,7 @@ func ResolveDefaults(in Input, dir, wd string, backendStacks []string) (resolved
 	}
 	s.Has.Modules = true
 
-	if !s.Has.GoModule && names.ValidLabel(name) && selectsGoStack(s.Stacks) {
+	if !s.Has.GoModule && !entryGivesGoModule(s.Components) && names.ValidLabel(name) && selectsGoStack(s.Stacks) {
 		s.Project.GoModule = "example.com/" + name
 		notes = append(notes, fmt.Sprintf("Go module defaults to %s; pass --go-module to set yours", s.Project.GoModule))
 		resolved.Origins[patternGoModule] = Origin{Source: DefaultSource, Pointer: patternGoModule}
@@ -141,6 +141,16 @@ func selectsGoStack(stacks []string) bool {
 	for _, stack := range stacks {
 		info, known := LookupStack(stack)
 		if known && info.GoModule {
+			return true
+		}
+	}
+	return false
+}
+
+// entryGivesGoModule reports whether a component entry sets its own Go module.
+func entryGivesGoModule(components []Component) bool {
+	for _, component := range components {
+		if component.GoModule != "" {
 			return true
 		}
 	}

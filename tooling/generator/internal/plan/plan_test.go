@@ -251,7 +251,7 @@ func TestStackChoiceIsValidated(t *testing.T) {
 	cat := load(t, "fullstack.json")
 	frontendOnly := selection()
 	frontendOnly.Stacks = []string{"ng-web"}
-	wantCodes(t, cat, frontendOnly, manifest.CodeSelectionInvalid)
+	wantCodes(t, cat, frontendOnly, manifest.CodeSelectionInvalid, manifest.CodeSelectionInvalid)
 	twice := selection()
 	twice.Stacks = []string{"go-srv", "go-srv"}
 	wantCodes(t, cat, twice, manifest.CodeSelectionInvalid)
@@ -265,9 +265,9 @@ func TestStackChoiceIsValidated(t *testing.T) {
 	}
 	twoFrontends := load(t, "fullstack.json")
 	twoFrontends.Stacks[0].Role = "frontend"
-	issues = wantCodes(t, twoFrontends, both, manifest.CodeSelectionInvalid, manifest.CodeSelectionInvalid)
-	if !strings.Contains(issues[0].Message, "at most one frontend") {
-		t.Fatalf("issue = %+v", issues[0])
+	issues = wantCodes(t, twoFrontends, both, manifest.CodeSelectionInvalid, manifest.CodeSelectionInvalid, manifest.CodeSelectionInvalid, manifest.CodeSelectionInvalid)
+	if !strings.Contains(issues[1].Message, "at most one frontend") {
+		t.Fatalf("issue = %+v", issues[1])
 	}
 }
 

@@ -200,29 +200,7 @@ func (r *resolver) checkNames() {
 // checkOverrides reports NAME_OVERRIDE_UNUSED for a component of a stack that
 // is unknown or not selected.
 func (r *resolver) checkOverrides() {
-	selected := map[string]bool{}
-	for _, stack := range r.sel.Stacks {
-		selected[stack] = true
-	}
-	var tableIDs []string
-	for _, info := range manifest.Stacks() {
-		tableIDs = append(tableIDs, info.ID)
-	}
-	for i, component := range r.sel.Components {
-		if selected[component.Stack] && isKnownStack(component.Stack) {
-			continue
-		}
-		pointer := fmt.Sprintf("/components/%d", i)
-		found := issue.Issue{
-			Code:    CodeNameOverrideUnused,
-			Path:    issue.Path(selectionSource, pointer+"/stack"),
-			Message: fmt.Sprintf("%s: stack %s is not selected", pointer, quoteStack(component.Stack)),
-		}
-		if closest := names.Closest(component.Stack, tableIDs); closest != "" {
-			found.Hint = fmt.Sprintf("did you mean %q?", closest)
-		}
-		r.issues = append(r.issues, found)
-	}
+	r.issues = append(r.issues, componentStackIssues(r.sel)...)
 }
 
 func isKnownStack(stack string) bool {

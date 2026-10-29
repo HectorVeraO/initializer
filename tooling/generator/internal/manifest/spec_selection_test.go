@@ -112,7 +112,7 @@ func TestDecodeSelectionValidFixture(t *testing.T) {
 
 func TestDecodeSelectionReportsEveryProblem(t *testing.T) {
 	_, issues := decodeFile(t, selectionPath, readFixture(t, "selection.invalid.json"))
-	for _, path := range []string{"#/project/goModule", "#/stacks", "#/modules/0"} {
+	for _, path := range []string{"#/project/goModule", "#/modules/0"} {
 		if !hasIssue(issues, manifest.CodeSelectionInvalid, selectionPath+path) {
 			t.Errorf("missing SELECTION_INVALID at %s: %v", path, issues)
 		}
@@ -141,9 +141,6 @@ func TestDecodeSelectionRules(t *testing.T) {
 		{"goModule trailing slash", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/x/" }, "#/project/goModule", manifest.CodeSelectionInvalid},
 		{"goModule first segment no dot", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example/x" }, "#/project/goModule", manifest.CodeSelectionInvalid},
 		{"goModule bad character", func(m map[string]any) { m["project"].(map[string]any)["goModule"] = "example.com/a b" }, "#/project/goModule", manifest.CodeSelectionInvalid},
-		{"two backend stacks", func(m map[string]any) { m["stacks"] = []any{"go-srv", "go-srv"} }, "#/stacks", manifest.CodeSelectionInvalid},
-		{"no backend stack", func(m map[string]any) { m["stacks"] = []any{"ng-web"} }, "#/stacks", manifest.CodeSelectionInvalid},
-		{"two frontend stacks", func(m map[string]any) { m["stacks"] = []any{"go-srv", "ng-web", "ng-web"} }, "#/stacks", manifest.CodeSelectionInvalid},
 		{"unknown stack", func(m map[string]any) { m["stacks"] = []any{"go-srv", "rust-srv"} }, "#/stacks/1", manifest.CodeSelectionInvalid},
 		{"bad module id", func(m map[string]any) { m["modules"] = []any{"Bad"} }, "#/modules/0", manifest.CodeSelectionInvalid},
 		{"unknown key", func(m map[string]any) { m["extra"] = 1 }, "#/extra", manifest.CodeSelectionInvalid},

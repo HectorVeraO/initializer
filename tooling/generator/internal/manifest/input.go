@@ -111,6 +111,7 @@ func FlagsInput(f Flags) (Input, []issue.Issue) {
 		if flag.Entry.Name != "" {
 			checkValue(d, patternCompName, pointer, flag.Entry.Name)
 		}
+		flagsInputEntry(&in, d, flag, pointer, arg)
 	}
 	flagsInputInfra(&in, d, f)
 	if f.Has.PortBand {
@@ -123,6 +124,53 @@ func FlagsInput(f Flags) (Input, []issue.Issue) {
 		}
 	}
 	return in, d.result()
+}
+
+// flagsInputEntry records the origins of the keys a --component value set and
+// checks their values; pointer is the entry's pointer in the flags input.
+func flagsInputEntry(in *Input, d *decoder, flag ComponentFlag, pointer, arg string) {
+	entry := flag.Entry
+	origin := func(field string) string {
+		in.Origins[pointer+field] = Origin{Source: FlagsSource, Pointer: pointer + field, Arg: arg}
+		return pointer + field
+	}
+	if entry.HasModules {
+		origin("/modules")
+		for j, module := range entry.Modules {
+			checkValue(d, patternCompModule, origin("/modules/"+strconv.Itoa(j)), module)
+		}
+	}
+	if entry.Backend != "" {
+		checkValue(d, patternCompBack, origin("/backend"), entry.Backend)
+	}
+	if entry.GoModule != "" {
+		checkValue(d, patternCompGoMod, origin("/goModule"), entry.GoModule)
+	}
+	if entry.Database != nil {
+		origin("/database")
+		if entry.Database.Name != "" {
+			checkValue(d, patternCompDBName, origin("/database/name"), entry.Database.Name)
+		}
+		if entry.Database.User != "" {
+			checkValue(d, patternCompDBUser, origin("/database/user"), entry.Database.User)
+		}
+	}
+	if len(entry.Services) > 0 {
+		origin("/services")
+	}
+	for _, key := range sortedServiceKeys(entry.Services) {
+		checkValue(d, patternCompSvc, origin("/services"+issue.Pointer(key)), entry.Services[key])
+	}
+}
+
+// sortedServiceKeys returns the keys of services in byte order.
+func sortedServiceKeys(services map[string]string) []string {
+	keys := make([]string, 0, len(services))
+	for key := range services {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // flagsInputInfra fills the database and services of the flags input.
@@ -167,42 +215,6 @@ func checkValue(d *decoder, pattern, pointer, value string) {
 	}
 }
 
-// CheckMerged reports the catalog-free rules that need the merged input: the
-// stack counts. They apply only to a stacks list somebody gave; a defaulted
-// list is checked by the plan.
-func CheckMerged(in Input) []issue.Issue {
-	if !in.Selection.Has.Stacks {
-		return nil
-	}
-	backends, frontends := 0, 0
-	for _, stack := range in.Selection.Stacks {
-		switch {
-		case IsBackendStack(stack):
-			backends++
-		case IsFrontendStack(stack):
-			frontends++
-		}
-	}
-	var issues []issue.Issue
-	origin := in.Origins["/stacks"]
-	add := func(message string) {
-		issues = append(issues, issue.Issue{
-			Code:    CodeSelectionInvalid,
-			Path:    issue.Path(origin.Source, origin.Pointer),
-			Line:    origin.Line,
-			Message: message,
-		})
-	}
-	if backends != 1 {
-		add("must contain exactly one backend stack")
-	}
-	if frontends > 1 {
-		add("must contain at most one frontend stack")
-	}
-	issue.Sort(issues)
-	return issues
-}
-
 // RecordedSelection builds the document initializer.selection.json holds: the
 // merged input as given, with the installed module list of the backend stack
 // as the one exception (modules are always recorded). Name, Go module, stacks
@@ -228,6 +240,7 @@ func RecordedSelection(in Input, installedModules []string) Selection {
 		recorded.Has.Stacks = true
 	}
 	recorded.Components = append([]Component(nil), given.Components...)
+	recordEntryModules(&recorded, installedModules)
 	if given.Database != nil {
 		copied := *given.Database
 		recorded.Database = &copied

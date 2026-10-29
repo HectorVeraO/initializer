@@ -160,33 +160,6 @@ func TestDecodeInputOfANonObjectRoot(t *testing.T) {
 	}
 }
 
-func TestCheckMergedCountsStacksOnlyWhenGiven(t *testing.T) {
-	cases := map[string]struct {
-		stacks  string
-		message string
-	}{
-		"no backend":       {`["ng-web"]`, "exactly one backend"},
-		"two backends":     {`["go-srv","go-srv"]`, "exactly one backend"},
-		"two frontends":    {`["go-srv","ng-web","ng-web"]`, "at most one frontend"},
-		"empty list given": {`[]`, "exactly one backend"},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			in, issues := decode(t, "acme.json", `{"schema":2,"stacks":`+tc.stacks+`}`)
-			if len(issues) != 0 {
-				t.Fatalf("issues: %v", issues)
-			}
-			if got := manifest.CheckMerged(in); issueAt(got, "acme.json#/stacks", tc.message) == nil {
-				t.Fatalf("want %q, got %v", tc.message, got)
-			}
-		})
-	}
-	in, _ := decode(t, "acme.json", `{"schema":2}`)
-	if got := manifest.CheckMerged(in); len(got) != 0 {
-		t.Fatalf("absent stacks are defaulted later: %v", got)
-	}
-}
-
 func TestFlagsInputReportsGrammarAtTheFlags(t *testing.T) {
 	_, issues := manifest.FlagsInput(manifest.Flags{
 		Name: "A", GoModule: "x", Stacks: []string{"rust-srv"}, Modules: []string{"Bad"},

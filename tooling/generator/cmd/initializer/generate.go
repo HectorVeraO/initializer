@@ -102,7 +102,6 @@ func (o *generateOptions) readSelection(ctx *Context, dir string) (inputRun, *re
 	run.issues = append(run.issues, flagIssues...)
 	merged, mergeIssues := manifest.Merge(file, flags)
 	run.issues = append(run.issues, mergeIssues...)
-	run.issues = append(run.issues, manifest.CheckMerged(merged)...)
 	run.merged = merged
 	if file != nil && overridesNamedComponents(file, flags) {
 		source := file.Origins[""].Source
@@ -282,12 +281,19 @@ func generateProject(ctx *Context, in generateInput) int {
 	resolvedInput, defaultNotes, outDir, defaultIssues := manifest.ResolveDefaults(in.run.merged, in.dir, workDir, backendStackIDs(built))
 	issues := append(append([]issue.Issue(nil), in.run.issues...), defaultIssues...)
 	notes := append(append(append([]string(nil), in.run.notes...), defaultNotes...), sourceNotes...)
+	componentIssues := plan.ResolveComponents(built, resolvedInput)
+	componentIssues = relocate(addNameHints(ctx.Args, resolvedInput, componentIssues), resolvedInput)
+	issues = append(issues, componentIssues...)
+	if len(issues) == 0 {
+		issues = append(issues, relocate(multiComponentIssues(resolvedInput), resolvedInput)...)
+	}
+	resolvedInput = manifest.ApplyEntryOverrides(resolvedInput)
 	selection := resolvedInput.Selection
-	issues = append(issues, multiComponentIssues(resolvedInput)...)
 
 	root := found.Root.FS
 	var resolved plan.Plan
-	if !hasCode(issues, manifest.CodeSelectionInvalid, plan.CodeComponentMultiUnsupported) {
+	skipsPlan := hasSeveralOfStack(selection) || hasCode(issues, planBlockingCodes...)
+	if !skipsPlan {
 		var planIssues []issue.Issue
 		resolved, planIssues = plan.Resolve(built, selection)
 		issues = append(issues, planIssues...)
@@ -315,7 +321,7 @@ func generateProject(ctx *Context, in generateInput) int {
 		fmt.Fprintf(ctx.Stderr, "note: %s\n", note)
 	}
 	if len(issues) > 0 {
-		issues = folderNameIssues(relocate(issues, resolvedInput), selection.Project.Name, in.dir)
+		issues = folderNameIssues(dedupeIssues(relocate(issues, resolvedInput)), selection.Project.Name, in.dir)
 		view := in.run.view
 		view.dir = in.dir
 		view.moduleIDs = moduleIDs(built)
@@ -380,6 +386,31 @@ func generateProject(ctx *Context, in generateInput) int {
 		slog.Int("file_count", len(project.Files)),
 		slog.Int("module_count", len(resolved.Selection.Modules)))
 	return exitOK
+}
+
+// planBlockingCodes are the issue codes after which the plan does not run: the
+// selection has no usable shape or a component check already refused it.
+var planBlockingCodes = []string{
+	manifest.CodeSelectionInvalid, plan.CodeComponentMultiUnsupported, plan.CodeComponentNameRequired,
+	plan.CodeComponentLimit, plan.CodeComponentFieldNotAllowed, plan.CodeComponentBackendRequired,
+	plan.CodeComponentBackendUnknown, plan.CodeComponentBackendTaken, plan.CodeComponentAmbiguous,
+	plan.CodeModulesUnused,
+}
+
+// dedupeIssues drops an issue equal to an earlier one: the component checks and
+// the plan both report a module the catalog lacks.
+func dedupeIssues(issues []issue.Issue) []issue.Issue {
+	var kept []issue.Issue
+	for _, found := range issues {
+		isRepeat := false
+		for _, earlier := range kept {
+			isRepeat = isRepeat || (earlier.Code == found.Code && earlier.Path == found.Path && earlier.Message == found.Message)
+		}
+		if !isRepeat {
+			kept = append(kept, found)
+		}
+	}
+	return kept
 }
 
 // hasCode reports whether an issue carries one of codes.

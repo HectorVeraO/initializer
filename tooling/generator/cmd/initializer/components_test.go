@@ -14,64 +14,93 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 )
 
-func TestParseComponent(t *testing.T) {
+func TestParseComponentFlagReadsHeadAndKeys(t *testing.T) {
 	good := map[string]manifest.Component{
+		"go-srv":             {Stack: "go-srv"},
 		"go-srv=acme-srv":    {Stack: "go-srv", Name: "acme-srv"},
-		"ng-web=acme-web":    {Stack: "ng-web", Name: "acme-web"},
 		"rust-srv=x":         {Stack: "rust-srv", Name: "x"},
 		"go-srv=Not_A_Label": {Stack: "go-srv", Name: "Not_A_Label"},
 		"go-srv=a=b":         {Stack: "go-srv", Name: "a=b"},
+		"go-srv=acme,modules=tenancy+api-keys": {Stack: "go-srv", Name: "acme", HasModules: true,
+			Modules: []string{"tenancy", "api-keys"}},
+		"go-srv=acme,modules=": {Stack: "go-srv", Name: "acme", HasModules: true, Modules: []string{}},
+		"go-srv=acme,go-module=example.com/acme,db-name=acme_db,db-user=acme_u,service.postgres=acme-pg": {
+			Stack: "go-srv", Name: "acme", GoModule: "example.com/acme",
+			Database: &manifest.Database{Name: "acme_db", User: "acme_u"},
+			Services: map[string]string{"postgres": "acme-pg"}},
+		"ng-web=acme-web,backend=acme-srv": {Stack: "ng-web", Name: "acme-web", Backend: "acme-srv"},
 	}
 	for value, want := range good {
-		got, problem := parseComponent(value, nil)
-		if problem != nil || got != want {
-			t.Errorf("parseComponent(%q) = %+v %v, want %+v", value, got, problem, want)
-		}
-	}
-	bad := map[string]string{
-		"":                      "the value is empty",
-		"=acme":                 "needs a stack before =NAME",
-		",x=y":                  "needs a stack before =NAME",
-		"go-srv":                `"go-srv" needs STACK=NAME`,
-		"go-srv=":               `"go-srv=" needs a name after =`,
-		"go-srv=acme,modules=x": `unknown key "modules"`,
-		"go-srv=acme,loose":     `unknown key "loose"`,
-		"go-srv=acme,":          `unknown key ""`,
-	}
-	for value, message := range bad {
-		_, problem := parseComponent(value, nil)
-		if problem == nil || !strings.Contains(problem.message, message) {
-			t.Errorf("parseComponent(%q) problem = %v, want %q", value, problem, message)
+		got, problem := ParseComponentFlag(value)
+		if problem != nil || !reflect.DeepEqual(got.Entry, want) {
+			t.Errorf("ParseComponentFlag(%q) = %+v %v, want %+v", value, got.Entry, problem, want)
 		}
 	}
 }
 
-func TestParseComponentSuggestsAClosedKey(t *testing.T) {
-	keys := []string{"modules", "go-module"}
-	_, problem := parseComponent("go-srv=acme,modueles=x", keys)
+func TestParseComponentFlagRecordsTheKeysGiven(t *testing.T) {
+	got, problem := ParseComponentFlag("go-srv=acme,modules=,db-user=u,service.kratos=k")
+	want := map[string]bool{"modules": true, "db-user": true, "service.kratos": true}
+	if problem != nil || !reflect.DeepEqual(got.Set, want) {
+		t.Fatalf("Set = %v (%v), want %v", got.Set, problem, want)
+	}
+}
+
+func TestParseComponentFlagRefusesBadSyntax(t *testing.T) {
+	bad := map[string]string{
+		"":                                    "the value is empty",
+		"=acme":                               "needs a stack before =NAME",
+		",x=y":                                "needs a stack before =NAME",
+		"go-srv=":                             `"go-srv=" needs a name after =`,
+		"go-srv=acme,loose":                   `"loose" needs KEY=VALUE`,
+		"go-srv=acme,":                        `"" needs KEY=VALUE`,
+		"go-srv=acme,k=v":                     `unknown key "k"`,
+		"go-srv=acme,modules=a,modules=b":     `key "modules" is given twice`,
+		"go-srv=acme,go-module=":              `key "go-module" needs a value`,
+		"go-srv=acme,db-name=":                `key "db-name" needs a value`,
+		"go-srv=acme,db-user=":                `key "db-user" needs a value`,
+		"ng-web=w,backend=":                   `key "backend" needs a value`,
+		"go-srv=acme,service.k=":              `key "service.k" needs a value`,
+		"go-srv=acme,service.=x":              "needs a service key after service.",
+		"go-srv=acme,modules=a++b":            "empty module id",
+		"go-srv=acme,service.k=a,service.k=b": `key "service.k" is given twice`,
+	}
+	for value, message := range bad {
+		_, problem := ParseComponentFlag(value)
+		if problem == nil || !strings.Contains(problem.message, message) {
+			t.Errorf("ParseComponentFlag(%q) problem = %v, want %q", value, problem, message)
+		}
+	}
+}
+
+func TestParseComponentFlagSuggestsAKey(t *testing.T) {
+	_, problem := ParseComponentFlag("go-srv=acme,modueles=x")
 	if problem == nil || problem.suggestion != "modules" {
 		t.Fatalf("problem = %+v", problem)
 	}
-	got, problem := parseComponent("go-srv=acme,modules=x", keys)
-	if problem != nil || got.Name != "acme" {
-		t.Fatalf("a registered key is valid: %+v %v", got, problem)
-	}
 }
 
-func FuzzComponentFlag(f *testing.F) {
-	for _, seed := range []string{"go-srv=acme-srv", "ng-web=x", "", "=", "go-srv", "go-srv=", "a=b,c=d", ",", "=a,b", "go-srv=a=b", "\x00=\xff"} {
+func FuzzParseComponentFlag(f *testing.F) {
+	seeds := []string{"go-srv=acme-srv", "ng-web=x", "", "=", "go-srv", "go-srv=", "a=b,c=d", ",", "=a,b", "go-srv=a=b", "\x00=\xff",
+		"go-srv=a,modules=x+y,db-name=d,service.k=v", "ng-web=w,backend=b", "go-srv,modules="}
+	for _, seed := range seeds {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, value string) {
-		component, problem := parseComponent(value, componentKeys)
+		first, problem := ParseComponentFlag(value)
 		if problem != nil {
 			return
 		}
-		if component.Stack == "" || component.Name == "" {
-			t.Fatalf("accepted %q without a stack and a name: %+v", value, component)
+		if first.Entry.Stack == "" {
+			t.Fatalf("accepted %q without a stack: %+v", value, first.Entry)
 		}
-		if got := component.Stack + "=" + component.Name; got != value {
-			t.Fatalf("accepted %q does not round-trip: %q", value, got)
+		again, problem := ParseComponentFlag(componentFlagArg(first))
+		if problem != nil {
+			t.Fatalf("accepted %q but its rendering %q is refused: %v", value, componentFlagArg(first), problem)
+		}
+		first.Arg, again.Arg = "", ""
+		if !reflect.DeepEqual(first, again) {
+			t.Fatalf("round trip of %q: %+v != %+v", value, first, again)
 		}
 	})
 }
@@ -79,7 +108,7 @@ func FuzzComponentFlag(f *testing.F) {
 func TestComponentFlagProblemsAreAllListed(t *testing.T) {
 	e := newEnv(t)
 	args := e.args("--stacks", "go-srv", "--modules", "parameters", "--go-module", "example.com/acme",
-		"--component", "go-srv=", "--component", "go-srv", "--component", "=x", "--component", "go-srv=a,k=v",
+		"--component", "go-srv=", "--component", "go-srv,loose", "--component", "=x", "--component", "go-srv=a,k=v",
 		"--component", "go-srv=same", "--component", "go-srv=same")
 	code, _, stderr := execute(t, args...)
 	if code != exitUsage {
@@ -87,7 +116,7 @@ func TestComponentFlagProblemsAreAllListed(t *testing.T) {
 	}
 	for _, want := range []string{
 		`--component: invalid value: "go-srv=" needs a name after =`,
-		`--component: invalid value: "go-srv" needs STACK=NAME`,
+		`--component: invalid value: "loose" needs KEY=VALUE`,
 		`--component: invalid value: "=x" needs a stack before =NAME`,
 		`unknown key "k"`,
 		"--component go-srv=same: is given twice",
@@ -294,13 +323,13 @@ func TestTheRecordedSelectionHoldsTheComponentsAsGivenAndReplays(t *testing.T) {
 
 func TestSeveralComponentsOfOneStackAreRefused(t *testing.T) {
 	e := newEnv(t)
-	code, stdout, _ := executeJSON(t, e.fullstackArgs("--component", "go-srv=acme-srv", "--component", "go-srv=other-srv")...)
+	code, stdout, _ := executeJSON(t, e.fullstackArgs("--component", "go-srv=acme-srv", "--component", "go-srv=other-srv", "--component", "ng-web=acme-web,backend=acme-srv")...)
 	found := issueArray(t, stdout)
 	if code != exitIssues || len(found) != 1 {
 		t.Fatalf("exit %d issues %v", code, found)
 	}
-	if found[0]["code"] != "COMPONENT_MULTI_UNSUPPORTED" || found[0]["path"] != "flags#/components/1" ||
-		found[0]["message"] != "several components of stack go-srv are not supported by this generator yet" {
+	if found[0]["code"] != "COMPONENT_MULTI_UNSUPPORTED" || found[0]["path"] != "flags#/components" ||
+		found[0]["message"] != "several backend components are not supported by this generator yet" {
 		t.Fatalf("issue %v", found[0])
 	}
 	if _, err := os.Stat(e.out); err == nil {
@@ -405,7 +434,7 @@ func TestANameProblemAndAFileProblemAreReportedTogether(t *testing.T) {
 	for _, issue := range issueArray(t, stdout) {
 		codes = append(codes, issue["code"]+" "+issue["path"][strings.Index(issue["path"], "#"):])
 	}
-	want := []string{"NAME_INVALID #/components/0/name", "SELECTION_INVALID #/components/1/extra", "NAME_INVALID #/project/name"}
+	want := []string{"NAME_INVALID #/components/0/name", "SELECTION_INVALID #/components/1/extra", "NAME_INVALID #/project/name", "NAME_OVERRIDE_UNUSED #/components/1/stack"}
 	sort.Strings(want)
 	sort.Strings(codes)
 	if code != exitIssues || !reflect.DeepEqual(codes, want) {
