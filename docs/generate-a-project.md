@@ -245,7 +245,7 @@ It prints nothing when every selection passes; each log is `try/<name>.log`.
 
 ## 10. Output and errors
 
-- `--format json` prints the result as one JSON document on stdout (on stderr when the command fails).
+- `--format json` prints one JSON document: on stdout for exit 0 and 1, on stderr for exit 2 and 3 (stdout stays empty).
 - `--log json` writes structured log events to stderr.
 - `Sources:`, `note:`, `warning:` and `error:` lines go to stderr; stdout carries the result only.
 
