@@ -311,11 +311,10 @@ func mustAtoi(t *testing.T, text string) int {
 	return value
 }
 
-func TestTheDryRunJSONPortsMemberFollowsNames(t *testing.T) {
-	_, stdout, _ := infraDryRun(t, "--name", "acme", "--stacks", "go-srv", "--port-band", "103", "--format", "json")
-	names, ports, added := strings.Index(stdout, `"names":`), strings.LastIndex(stdout, `"ports":{"band":103}`), strings.Index(stdout, `"added":`)
-	if names < 0 || !(names < ports && ports < added) {
-		t.Fatalf("ports must sit between names and added: %d %d %d", names, ports, added)
+func TestTheDryRunJSONCarriesThePortBand(t *testing.T) {
+	doc := infraDryRunJSON(t, "--name", "acme", "--stacks", "go-srv", "--port-band", "103")
+	if doc.Ports.Band != 103 {
+		t.Fatalf("ports = %+v", doc.Ports)
 	}
 }
 

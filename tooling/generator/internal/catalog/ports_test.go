@@ -187,16 +187,22 @@ func TestACatalogWithoutPortsRecordsNoBand(t *testing.T) {
 func TestDecodeRefusesBadPortRecords(t *testing.T) {
 	built, issues := buildRepo(t, portsRepo(t))
 	assertCodes(t, issues)
-	cases := map[string]func(c *Catalog){
-		"band out of range":     func(c *Catalog) { c.PortBand = 7 },
-		"ports without a band":  func(c *Catalog) { c.PortBand = 0 },
-		"offset out of range":   func(c *Catalog) { c.Stacks[0].Modules[0].Ports[0].Offset = 99 },
-		"name is not a label":   func(c *Catalog) { c.Stacks[0].Modules[0].Ports[0].Name = "Srv" },
-		"port files unsorted":   func(c *Catalog) { c.Stacks[0].Modules[0].PortFiles = []string{"b", "a"} },
-		"port file not a path":  func(c *Catalog) { c.Stacks[0].Modules[0].PortFiles = []string{"../a"} },
-		"port files duplicated": func(c *Catalog) { c.Stacks[0].Modules[0].PortFiles = []string{"a", "a"} },
+	type refusal struct {
+		mutate   func(c *Catalog)
+		wantPath string
 	}
-	for name, mutate := range cases {
+	cases := map[string]refusal{
+		"band out of range":     {func(c *Catalog) { c.PortBand = 7 }, "#/portBand"},
+		"ports without a band":  {func(c *Catalog) { c.PortBand = 0 }, "#/portBand"},
+		"offset out of range":   {func(c *Catalog) { c.Stacks[0].Modules[0].Ports[0].Offset = 99 }, "/ports/0/offset"},
+		"name is not a label":   {func(c *Catalog) { c.Stacks[0].Modules[0].Ports[0].Name = "Srv" }, "/ports/0/name"},
+		"port files unsorted":   {func(c *Catalog) { c.Stacks[0].Modules[0].PortFiles = []string{"b", "a"} }, "/portFiles/1"},
+		"port file not a path":  {func(c *Catalog) { c.Stacks[0].Modules[0].PortFiles = []string{"../a"} }, "/portFiles/0"},
+		"port files duplicated": {func(c *Catalog) { c.Stacks[0].Modules[0].PortFiles = []string{"a", "a"} }, "/portFiles/1"},
+	}
+	for name, refusal := range cases {
+		mutate := refusal.mutate
+		wantPath := refusal.wantPath
 		t.Run(name, func(t *testing.T) {
 			copied := built
 			copied.Stacks = append([]StackEntry(nil), built.Stacks...)
@@ -209,8 +215,9 @@ func TestDecodeRefusesBadPortRecords(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, decodeIssues := Decode(encoded); len(decodeIssues) == 0 {
-				t.Fatal("want a refusal")
+			_, decodeIssues := Decode(encoded)
+			if len(decodeIssues) != 1 || decodeIssues[0].Code != "CATALOG_INVALID" || !strings.HasSuffix(decodeIssues[0].Path, wantPath) {
+				t.Fatalf("want one CATALOG_INVALID at ...%s, got %v", wantPath, decodeIssues)
 			}
 		})
 	}

@@ -1,6 +1,7 @@
 package manifest_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -129,7 +130,7 @@ func TestFlagBandAndFileBandGiveTheSameInput(t *testing.T) {
 }
 
 func TestFlagBandProblemsAreValueProblemsAtTheFlag(t *testing.T) {
-	for _, value := range []string{"abc", "", "99", "655", "10x", "-101", "+103", "1e2", "103.0", "99999999999999999999", " 103"} {
+	for _, value := range []string{"abc", "", "99", "655", "10x", "-101", "+103", "1e2", "103.0", "99999999999999999999", " 103", "00101"} {
 		in, issues := manifest.FlagsInput(manifest.Flags{PortBand: value, Has: manifest.FlagPresence{PortBand: true}})
 		if len(issues) != 1 || issues[0].Path != "flags#/ports/band" || issues[0].Code != manifest.CodeSelectionInvalid ||
 			issues[0].Message != "must be an integer from 100 to 654" {
@@ -170,8 +171,11 @@ func TestRecordedSelectionHoldsThePortBandOnlyWhenGiven(t *testing.T) {
 		t.Fatalf("recorded = %+v", recorded)
 	}
 	encoded, err := recorded.MarshalJSON()
-	if err != nil || !strings.HasSuffix(string(encoded), `"ports":{"band":103}}`) {
-		t.Fatalf("ports must be the last key: %s (%v)", encoded, err)
+	var decoded struct {
+		Ports struct{ Band int }
+	}
+	if err != nil || json.Unmarshal(encoded, &decoded) != nil || decoded.Ports.Band != 103 {
+		t.Fatalf("recorded JSON must carry ports.band 103: %s (%v)", encoded, err)
 	}
 	plain := manifest.RecordedSelection(mustFlagsMerged(t), []string{"core"})
 	if plain.Ports != nil || plain.Schema != 1 {

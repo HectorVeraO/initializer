@@ -94,6 +94,7 @@ func TestRewriteRefusesWhatItCannotRewrite(t *testing.T) {
 		{"foreign band names its line", "ok 10100\n\nbad 10232", 101, 102, nil, "line 3"},
 		{"target band too low", "10100", 101, 99, nil, "from 100 to 654"},
 		{"target band too high", "10100", 101, 655, nil, "from 100 to 654"},
+		{"identity with a band out of range", "10100", 50, 50, nil, "from 100 to 654"},
 		{"source band too low", "10100", 99, 101, nil, "from 100 to 654"},
 		{"offset mapped below zero", "10120", 101, 101, map[int]int{20: -1}, "outside 0-99"},
 		{"offset mapped above 99", "10120", 101, 101, map[int]int{20: 100}, "outside 0-99"},
