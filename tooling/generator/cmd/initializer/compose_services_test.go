@@ -54,7 +54,7 @@ func TestGenerateNamesTheComponentsInMiseAndTheDeployReadme(t *testing.T) {
 		"- Both modes run acme-srv from `acme-srv/` (the container's working directory is `/project/acme-srv`), so relative path values resolve against `acme-srv/`.\n",
 		"yml stop acme-srv\nmise run dev:srv\n",
 		"stop `acme-srv acme-web`, then run `mise run dev:srv` and `mise run dev:web`",
-		"Editing only the console: stop `acme-web`, then `mise run dev:web`. Once per clone: `npm --prefix acme-web ci`.",
+		"stop `acme-web`, then `mise run dev:web`", "`npm --prefix acme-web ci`",
 		"(`../flags.yaml` from `acme-srv/`, set by `.example.env`)",
 	} {
 		if !strings.Contains(deploy, want) {

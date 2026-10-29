@@ -35,6 +35,6 @@ run = "npm start"
 # initializer:stack go-srv
 [tasks.tck]
 description = "Run the TCK against the running backend"
-env = { TCK_BASE_URL = "http://localhost:10120", APP_PUBLIC_BASE_URL = "http://localhost:10120" }
+env = { TCK_BASE_URL = "http://localhost:10100", APP_PUBLIC_BASE_URL = "http://localhost:10120" }
 run = "npm --prefix specs run tck"
 # initializer:end go-srv
