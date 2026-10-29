@@ -137,6 +137,9 @@ func TestParseYAMLTypesScalarsByTag(t *testing.T) {
 	if value, _ := tree.Member("s"); value.Value != "no" {
 		t.Fatalf("no = %q", value.Value)
 	}
+	if value, _ := tree.Member("inf"); value.Value != "1e999" {
+		t.Fatalf("inf = %q, want 1e999", value.Value)
+	}
 	if tree.Format != manifest.FormatYAML {
 		t.Fatal("root must record the YAML format")
 	}

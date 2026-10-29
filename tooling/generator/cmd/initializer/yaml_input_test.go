@@ -49,10 +49,14 @@ func TestAFlagOverridesAValueOfTheYAMLFile(t *testing.T) {
 
 func TestTheSelectionAliasLoadsAYAMLFile(t *testing.T) {
 	e := newEnv(t)
+	wd := t.TempDir()
 	file := writeNamed(t, "acme.yaml", validYAMLSelection)
-	code, _, stderr := executeIn(t, t.TempDir(), "", e.inputArgs("--selection", file)...)
+	code, _, stderr := executeIn(t, wd, "", e.inputArgs("--selection", file)...)
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	if lockedName(t, filepath.Join(wd, "acme-backend")) != "acme-backend" {
+		t.Fatal("YAML selection not used through --selection")
 	}
 }
 
