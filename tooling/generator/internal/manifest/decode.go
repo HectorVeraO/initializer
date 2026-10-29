@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 )
@@ -174,6 +175,18 @@ func (d *decoder) boolean(raw json.RawMessage, pointer string) (bool, bool) {
 	}
 	d.add(pointer, "must be a boolean")
 	return false, false
+}
+
+// integer decodes a JSON number written as an integer literal that fits an int.
+func (d *decoder) integer(raw json.RawMessage, pointer string) (int, bool) {
+	text := string(bytes.TrimSpace(raw))
+	value, err := strconv.Atoi(text)
+	isLiteral := err == nil && text != "" && text[0] != '+'
+	if !isLiteral {
+		d.add(pointer, "must be an integer")
+		return 0, false
+	}
+	return value, true
 }
 
 func (d *decoder) array(raw json.RawMessage, pointer string) ([]json.RawMessage, bool) {

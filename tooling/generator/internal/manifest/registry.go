@@ -8,6 +8,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/ports"
 )
 
 // FieldSpec is one key of the selection document at one schema.
@@ -44,6 +45,8 @@ var Registry = []FieldSpec{
 	{Pointer: "/database/user", Kind: KindString, Since: 2},
 	{Pointer: "/services", Kind: KindMap, Since: 2},
 	{Pointer: "/services/*", Kind: KindString, Since: 2},
+	{Pointer: "/ports", Kind: KindMap, Since: 2},
+	{Pointer: "/ports/band", Kind: KindInt, Since: 2},
 }
 
 // MaxSchema is the highest schema this generator reads and writes.
@@ -60,7 +63,11 @@ const (
 	patternDBName     = "/database/name"
 	patternDBUser     = "/database/user"
 	patternService    = "/services/*"
+	patternPortBand   = "/ports/band"
 )
+
+// portBandMessage is the SELECTION_INVALID text of a port band outside its range.
+const portBandMessage = "must be an integer from 100 to 654"
 
 const setSchemaHint = `set "schema": 2`
 
@@ -115,6 +122,9 @@ func kindMessage(row FieldSpec) string {
 	case KindString:
 		return "must be a string"
 	case KindInt:
+		if row.Pointer == patternPortBand {
+			return portBandMessage
+		}
 		return "must be an integer"
 	case KindMap:
 		return "must be an object"
@@ -166,6 +176,35 @@ func valueProblem(pattern, value string) (code, message string, bad bool) {
 		}
 	}
 	return "", "", false
+}
+
+// intProblem applies the grammar of the integer at a registry pattern; the
+// value is the number literal. It returns the issue code and message, and
+// false when the value is valid.
+func intProblem(pattern, value string) (code, message string, bad bool) {
+	if pattern != patternPortBand {
+		return "", "", false
+	}
+	if _, valid := parsePortBand(value); !valid {
+		return CodeSelectionInvalid, portBandMessage, true
+	}
+	return "", "", false
+}
+
+// parsePortBand reads text as a port band: ASCII digits only, in range.
+func parsePortBand(text string) (int, bool) {
+	isShort := text != "" && len(text) <= 4
+	if !isShort {
+		return 0, false
+	}
+	band := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] < '0' || text[i] > '9' {
+			return 0, false
+		}
+		band = band*10 + int(text[i]-'0')
+	}
+	return band, ports.ValidBand(band)
 }
 
 // inputDecoder walks a selection tree against Registry.
@@ -274,6 +313,10 @@ func (w *inputDecoder) walk(node *Node, row FieldSpec, pointer string) {
 		if code, message, bad := valueProblem(row.Pointer, node.Value); bad {
 			w.d.addAt(code, pointer, node.Line, message, "")
 		}
+	case KindInt:
+		if code, message, bad := intProblem(row.Pointer, node.Value); bad {
+			w.d.addAt(code, pointer, node.Line, message, "")
+		}
 	case KindSeq:
 		item, _ := registryRow(row.Pointer + "/*")
 		for i, element := range node.Items {
@@ -319,6 +362,7 @@ func (w *inputDecoder) extract(root *Node) Selection {
 	if w.schema >= 2 {
 		s.Database = extractDatabase(root)
 		s.Services = extractServices(root)
+		s.Ports = extractPorts(root)
 	}
 	return s
 }
@@ -341,6 +385,24 @@ func extractDatabase(root *Node) *Database {
 		return nil
 	}
 	return &database
+}
+
+// extractPorts reads the ports map of a walked tree; nil when it holds no
+// valid band.
+func extractPorts(root *Node) *Ports {
+	node, found := root.Member("ports")
+	if !found || node.Kind != KindMap {
+		return nil
+	}
+	band, has := node.Member("band")
+	if !has || band.Kind != KindInt {
+		return nil
+	}
+	value, valid := parsePortBand(band.Value)
+	if !valid {
+		return nil
+	}
+	return &Ports{Band: value}
 }
 
 // extractServices reads the services map of a walked tree: its string

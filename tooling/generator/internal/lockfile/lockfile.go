@@ -15,6 +15,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/ports"
 )
 
 // Name is the file name of the lock at the project root.
@@ -39,7 +40,8 @@ type Lock struct {
 	Components []Component `json:"components"`
 	// Names holds the effective value of every live slot, component.* included.
 	Names map[string]string `json:"names"`
-	// Ports is written by the port band track; omitted before.
+	// Ports is the effective port band; omitted when the catalog declared no
+	// ports and in locks written before ports existed.
 	Ports   *Ports   `json:"ports,omitempty"`
 	TCKTags []string `json:"tckTags"`
 	TCKGrep string   `json:"tckGrep"`
@@ -85,6 +87,15 @@ type Source struct {
 // Ports records the port band of the project.
 type Ports struct {
 	Band int `json:"band"`
+}
+
+// PortBand returns the port band of the project: the recorded band, else the
+// reference band 101 for a lock written before ports existed.
+func (l Lock) PortBand() int {
+	if l.Ports == nil {
+		return ports.DefaultBand
+	}
+	return l.Ports.Band
 }
 
 // Spec is one copied spec with the delivered hash of each file.
@@ -333,6 +344,9 @@ func checkSchema2(lock Lock) error {
 	}
 	if err := checkNames(lock.Names, byStack); err != nil {
 		return err
+	}
+	if lock.Ports != nil && !ports.ValidBand(lock.Ports.Band) {
+		return errors.New("ports.band must be an integer from 100 to 654")
 	}
 	if lock.Source != nil && !commitPattern.MatchString(lock.Source.Commit) {
 		return errors.New("source.commit must be 40 or 64 lowercase hex digits")

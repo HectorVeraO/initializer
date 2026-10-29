@@ -294,6 +294,8 @@ func TestIdentityTargetOmitsSourceHashes(t *testing.T) {
 	repo := fixture.Load(t)
 	sel := selection(fixtureModule, "feature-flags", "parameters", "tenancy")
 	sel.Project.Name = "fixture"
+	// A project with a console keeps the reference origin, so no port file changes.
+	sel.Stacks = []string{"go-srv", "ng-web"}
 	project := mustBuild(t, repo, sel)
 	for _, module := range decodeLock(t, project).Modules {
 		for _, file := range module.Files {

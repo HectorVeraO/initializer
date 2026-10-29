@@ -26,6 +26,7 @@ func TestDryRunPrintsTheResolvedProjectAndWritesNothing(t *testing.T) {
 		"acme-srv    go-srv   acme-srv/   core, identity (required by parameters), parameters\n" +
 		"acme-web    ng-web   acme-web/   core, identity (required by parameters), parameters\n" +
 		"Go module   example.com/acme (default)\n" +
+		"Ports       band 101\n" +
 		strconv.Itoa(files) + " files\n"
 	if stdout != want {
 		t.Fatalf("stdout\n%s\nwant\n%s", stdout, want)
@@ -144,6 +145,7 @@ type dryRunDocument struct {
 	Recorded   json.RawMessage
 	Components []struct{ Stack, Name string }
 	Names      map[string]string
+	Ports      struct{ Band int }
 	Added      []moduleAdded
 	Notes      []string
 	Warnings   []Warning
@@ -172,7 +174,7 @@ func TestDryRunJSONDocument(t *testing.T) {
 		t.Fatalf("added = %+v", doc.Added)
 	}
 	wantSelection := `{"schema":2,"project":{"name":"acme","goModule":"example.com/acme"},"stacks":["go-srv","ng-web"],` +
-		`"modules":["core","identity","parameters"],"components":[{"stack":"go-srv","name":"acme-srv"},{"stack":"ng-web","name":"acme-web"}]}`
+		`"modules":["core","identity","parameters"],"components":[{"stack":"go-srv","name":"acme-srv"},{"stack":"ng-web","name":"acme-web"}],"ports":{"band":101}}`
 	if string(doc.Selection) != wantSelection {
 		t.Fatalf("selection\n%s\nwant\n%s", doc.Selection, wantSelection)
 	}

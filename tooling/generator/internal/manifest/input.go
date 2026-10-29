@@ -21,6 +21,8 @@ type Flags struct {
 	DBName, DBUser string
 	// Services holds the --service values in command-line order.
 	Services []KeyValue
+	// PortBand is the --port-band value as typed.
+	PortBand string
 }
 
 // FlagPresence records which flags were given; an empty --modules= is given.
@@ -28,6 +30,7 @@ type FlagPresence struct {
 	Name, GoModule, Stacks, Modules bool
 	DBName, DBUser                  bool
 	DisplayName                     bool
+	PortBand                        bool
 }
 
 // KeyValue is one parsed KEY=NAME flag value.
@@ -110,6 +113,15 @@ func FlagsInput(f Flags) (Input, []issue.Issue) {
 		}
 	}
 	flagsInputInfra(&in, d, f)
+	if f.Has.PortBand {
+		s.Schema = MaxSchema
+		in.Origins[patternPortBand] = Origin{Source: FlagsSource, Pointer: patternPortBand, Arg: "--port-band"}
+		if band, valid := parsePortBand(f.PortBand); valid {
+			s.Ports = &Ports{Band: band}
+		} else {
+			d.addCode(CodeSelectionInvalid, patternPortBand, portBandMessage)
+		}
+	}
 	return in, d.result()
 }
 
@@ -221,7 +233,11 @@ func RecordedSelection(in Input, installedModules []string) Selection {
 		recorded.Database = &copied
 	}
 	recorded.Services = copyServices(given.Services)
-	hasInfra := recorded.Database != nil || len(recorded.Services) > 0
+	if given.Ports != nil {
+		copied := *given.Ports
+		recorded.Ports = &copied
+	}
+	hasInfra := recorded.Database != nil || len(recorded.Services) > 0 || recorded.Ports != nil
 	isFirstSchema := recorded.Has.Name && recorded.Has.Stacks && len(recorded.Components) == 0 && !hasInfra && recorded.DisplayName == ""
 	recorded.Schema = MaxSchema
 	if isFirstSchema {

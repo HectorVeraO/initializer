@@ -69,6 +69,8 @@ type Plan struct {
 	// Live is the set of live slots: the project, the component slot of every
 	// selected stack and the slots of every live rule.
 	Live map[string]bool
+	// Ports is the effective port layout.
+	Ports PortPlan
 }
 
 // Component is one delivered stack and the name of its project folder,
@@ -556,6 +558,7 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 		Reference:     r.cat.Reference,
 		Slots:         r.values,
 		Live:          r.live,
+		Ports:         r.portPlan(stacks),
 	}
 }
 

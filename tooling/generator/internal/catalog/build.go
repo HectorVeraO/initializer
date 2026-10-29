@@ -14,6 +14,7 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/ports"
 )
 
 // Issue codes emitted by Build, besides the ones the manifest package emits.
@@ -143,7 +144,11 @@ type builder struct {
 	reference    map[string]string
 	// referenceReady is true when the reference file decoded without issues.
 	referenceReady bool
-	parsed         map[string]*parsedGo
+	// referenceDecoded is true when the reference file decoded; portBand is
+	// its ports.band, 0 when it has none.
+	referenceDecoded bool
+	portBand         int
+	parsed           map[string]*parsedGo
 }
 
 // Build validates every manifest and returns the catalog, or every issue found.
@@ -218,6 +223,9 @@ func (b *builder) run() error {
 		return err
 	}
 	if err := b.checkNameRules(); err != nil {
+		return err
+	}
+	if err := b.checkPorts(); err != nil {
 		return err
 	}
 	b.checkTargets()
@@ -649,6 +657,7 @@ func (b *builder) assemble(generator string) Catalog {
 		Generator: generator,
 		GoModule:  b.goModule,
 		Reference: b.reference,
+		PortBand:  b.portBand,
 		Specs:     []SpecEntry{},
 		Stacks:    []StackEntry{},
 	}
@@ -703,6 +712,8 @@ func (b *builder) moduleEntry(doc *moduleDoc) ModuleEntry {
 		TablePrefixes:   append([]string(nil), m.TablePrefixes...),
 		Files:           sortedFiles(doc.files),
 		Names:           doc.recorded,
+		Ports:           append([]ports.Port(nil), m.Ports...),
+		PortFiles:       recordedPortFiles(m.PortFiles),
 	}
 	for spec, version := range m.ImplementsSpec {
 		entry.ImplementsSpec[spec] = version.String()

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strconv"
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
@@ -21,6 +22,7 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/markers"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/ports"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/render"
 )
 
@@ -87,6 +89,8 @@ type builder struct {
 	files   map[string][]byte
 	// rules maps a source path to the name rules of the installed modules.
 	rules map[string][]names.Rule
+	// portFiles holds the source paths of the port files of the installed modules.
+	portFiles map[string]bool
 }
 
 // Build produces the whole project in memory. Nothing touches the disk. An
@@ -107,12 +111,13 @@ func Build(opts BuildOptions) (Project, error) {
 		return Project{}, errors.New("catalog hash is malformed")
 	}
 	b := &builder{
-		opts:    opts,
-		source:  opts.Plan.GoModule,
-		target:  selection.Project.GoModule,
-		project: selection.Project.Name,
-		files:   map[string][]byte{},
-		rules:   nameRules(opts.Plan),
+		opts:      opts,
+		source:    opts.Plan.GoModule,
+		target:    selection.Project.GoModule,
+		project:   selection.Project.Name,
+		files:     map[string][]byte{},
+		rules:     nameRules(opts.Plan),
+		portFiles: portFiles(opts.Plan),
 	}
 	return b.run()
 }
@@ -126,6 +131,7 @@ func (b *builder) run() (Project, error) {
 		Source:        b.opts.Source,
 		Selection:     b.recorded(),
 		Names:         p.LockNames(),
+		Ports:         lockPorts(p),
 		TCKTags:       p.TCKTags,
 		TCKGrep:       p.TCKGrep,
 		TCKGrepInvert: p.TCKGrepInvert,
@@ -236,13 +242,21 @@ func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byt
 		data = renamed
 	}
 	// Order: name rules on the source bytes, then the marker drop, then the
-	// port band substitution (none yet), then the go.mod and import rewrite.
+	// port band substitution, then the go.mod and import rewrite.
 	if _, hasMarkers := markers.SyntaxFor(sourcePath); hasMarkers && owner == manifest.CoreModule {
 		dropped, err := markers.Drop(sourcePath, data, markers.Keep{Module: b.hasModule, Stack: b.hasStack})
 		if err != nil {
 			return nil, err
 		}
 		data = dropped
+	}
+	if b.portFiles[sourcePath] {
+		p := b.opts.Plan.Ports
+		rewritten, err := ports.Rewrite(data, p.RefBand, p.Band, p.Offsets)
+		if err != nil {
+			return nil, fmt.Errorf("%s: port band: %w", sourcePath, err)
+		}
+		data = rewritten
 	}
 	switch {
 	case sourcePath == gorewrite.GoModPath:
@@ -261,13 +275,7 @@ func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byt
 	return data, nil
 }
 
-// Band 101 constants of the README run section: the host port range and the
-// public origin of a project with and without a console.
 const (
-	portBandLow    = 10100
-	portBandHigh   = 10199
-	webOriginURL   = "http://localhost:10120"
-	apiOriginURL   = "http://localhost:10100"
 	devSrvTaskName = "dev:srv"
 	devWebTaskName = "dev:web"
 	tckTaskName    = "tck"
@@ -277,7 +285,9 @@ const (
 // bound to the component of the frontend stack when one is selected.
 func (b *builder) readmeRun() render.ReadmeRun {
 	p := b.opts.Plan
-	run := render.ReadmeRun{PortLow: portBandLow, PortHigh: portBandHigh}
+	band := p.Ports.Band
+	run := render.ReadmeRun{PortLow: band * 100, PortHigh: band*100 + 99}
+	originURL := "http://localhost:" + strconv.Itoa(p.Ports.Origin)
 	var web string
 	for _, stack := range p.Stacks {
 		component, hasComponent := p.Component(stack.Stack)
@@ -293,18 +303,42 @@ func (b *builder) readmeRun() render.ReadmeRun {
 		instance := render.ReadmeInstance{
 			Backend:     component.Name,
 			Web:         web,
-			OriginURL:   apiOriginURL,
+			OriginURL:   originURL,
 			HasIdentity: b.hasModule("identity"),
 			DevSrvTask:  devSrvTaskName,
 			TCKTask:     tckTaskName,
 		}
 		if web != "" {
-			instance.OriginURL = webOriginURL
 			instance.DevWebTask = devWebTaskName
 		}
 		run.Instances = append(run.Instances, instance)
 	}
 	return run
+}
+
+// lockPorts returns the lock's ports member: the effective band whenever the
+// catalog declares ports, nil otherwise.
+func lockPorts(p plan.Plan) *lockfile.Ports {
+	if p.Ports.RefBand == 0 {
+		return nil
+	}
+	return &lockfile.Ports{Band: p.Ports.Band}
+}
+
+// portFiles collects the port files of the installed modules by source path.
+func portFiles(p plan.Plan) map[string]bool {
+	files := map[string]bool{}
+	if p.Ports.RefBand == 0 {
+		return files
+	}
+	for _, stack := range p.Stacks {
+		for _, module := range stack.Modules {
+			for _, path := range module.PortFiles {
+				files[path] = true
+			}
+		}
+	}
+	return files
 }
 
 // recorded returns the selection the project records.

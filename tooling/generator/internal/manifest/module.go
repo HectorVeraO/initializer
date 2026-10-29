@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/ports"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/semver"
 )
 
@@ -38,6 +39,11 @@ type Module struct {
 	Exclude         []FileEntry
 	// Names are the name rules of the module, in manifest order.
 	Names []NameRule
+	// Ports are the host ports the module declares, in manifest order.
+	Ports []ports.Port
+	// PortFiles are the files whose port tokens the generator rewrites, in
+	// manifest order.
+	PortFiles []string
 }
 
 // NameRule is one element of names: a context-anchored text with %{slot}
@@ -50,6 +56,7 @@ type NameRule struct {
 var moduleKeys = []string{
 	"schema", "stack", "module", "version", "implied", "implementsSpec",
 	"requiresCore", "requiresModules", "tablePrefixes", "files", "exclude", "names",
+	"ports", "portFiles",
 }
 
 // DecodeModule decodes and validates a module manifest. path is the manifest
@@ -72,6 +79,12 @@ func DecodeModule(path string, data []byte) (Module, []issue.Issue) {
 	d.moduleFiles(members, &module)
 	if raw, present := members["names"]; present {
 		module.Names = d.nameRules(raw)
+	}
+	if raw, present := members["ports"]; present {
+		module.Ports = d.ports(raw)
+	}
+	if raw, present := members["portFiles"]; present {
+		module.PortFiles = d.portFiles(raw)
 	}
 	return module, d.result()
 }
@@ -394,4 +407,73 @@ func (d *decoder) nameRules(raw json.RawMessage) []NameRule {
 		}
 	}
 	return rules
+}
+
+// ports decodes ports: an array of objects with name, offset and optionally
+// origin. The value rules (label, range, uniqueness, origin placement) are the
+// catalog's to check.
+func (d *decoder) ports(raw json.RawMessage) []ports.Port {
+	items, ok := d.array(raw, "/ports")
+	if !ok {
+		return nil
+	}
+	declared := []ports.Port{}
+	for i, item := range items {
+		pointer := fmt.Sprintf("/ports/%d", i)
+		fields, ok := d.object(item, pointer, []string{"name", "offset", "origin"})
+		if !ok {
+			continue
+		}
+		var port ports.Port
+		complete := true
+		if rawName, found := d.required(fields, pointer, "name"); found {
+			name, isString := d.str(rawName, pointer+"/name")
+			complete = complete && isString
+			port.Name = name
+		} else {
+			complete = false
+		}
+		if rawOffset, found := d.required(fields, pointer, "offset"); found {
+			offset, isInteger := d.integer(rawOffset, pointer+"/offset")
+			complete = complete && isInteger
+			port.Offset = offset
+		} else {
+			complete = false
+		}
+		if rawOrigin, found := fields["origin"]; found {
+			origin, isBool := d.boolean(rawOrigin, pointer+"/origin")
+			complete = complete && isBool
+			port.Origin = origin
+		}
+		if complete {
+			declared = append(declared, port)
+		}
+	}
+	return declared
+}
+
+// portFiles decodes portFiles: repo-relative file paths, each listed once.
+func (d *decoder) portFiles(raw json.RawMessage) []string {
+	values, valid, ok := d.strings(raw, "/portFiles")
+	if !ok {
+		return nil
+	}
+	files := []string{}
+	seen := map[string]bool{}
+	for i, value := range values {
+		if !valid[i] {
+			continue
+		}
+		pointer := fmt.Sprintf("/portFiles/%d", i)
+		switch {
+		case !validRepoPath(value) || value[len(value)-1] == '/':
+			d.add(pointer, "must be a repo-relative file path with / separators and no empty, . or .. segment")
+		case seen[value]:
+			d.add(pointer, "duplicate entry")
+		default:
+			seen[value] = true
+			files = append(files, value)
+		}
+	}
+	return files
 }

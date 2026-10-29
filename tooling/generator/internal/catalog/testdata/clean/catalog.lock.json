@@ -8,6 +8,7 @@
     "envPrefix": "FIXTURE_APP",
     "project": "fixture-app"
   },
+  "portBand": 0,
   "specs": [
     {
       "spec": "core",

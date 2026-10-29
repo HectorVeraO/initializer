@@ -41,6 +41,7 @@ func (d dryRun) resolvedSelection() manifest.Selection {
 	}
 	selection.Database = d.plan.Database()
 	selection.Services = d.plan.Services()
+	selection.Ports = &manifest.Ports{Band: d.plan.Ports.Band}
 	return selection
 }
 
@@ -77,11 +78,12 @@ func writeDryRun(ctx *Context, d dryRun) int {
 			Recorded   manifest.Selection   `json:"recorded"`
 			Components []lockfile.Component `json:"components"`
 			Names      map[string]string    `json:"names"`
+			Ports      manifest.Ports       `json:"ports"`
 			Added      []moduleAdded        `json:"added"`
 			Notes      []string             `json:"notes"`
 			Warnings   []Warning            `json:"warnings"`
 		}{documentSchema, true, true, name, filepath.ToSlash(d.path), len(d.project.Files), d.source, d.catalog,
-			d.resolvedSelection(), d.recorded, list(lock.Components), lock.Names, list(d.added), list(ctx.Notes), ctx.warnings()}
+			d.resolvedSelection(), d.recorded, list(lock.Components), lock.Names, manifest.Ports{Band: d.plan.Ports.Band}, list(d.added), list(ctx.Notes), ctx.warnings()}
 		return emitDocument(ctx, ctx.Stdout, doc, exitOK)
 	}
 
@@ -103,6 +105,7 @@ func writeDryRun(ctx *Context, d dryRun) int {
 	if services := d.plan.Services(); len(services) > 0 {
 		rows = append(rows, []string{"Services", strings.Join(serviceNames(services), ", ")})
 	}
+	rows = append(rows, []string{"Ports", fmt.Sprintf("band %d", d.plan.Ports.Band)})
 	writeSummaryRows(&text, rows)
 	fmt.Fprintf(&text, "%d %s\n", len(d.project.Files), plural(len(d.project.Files), "file"))
 	return emitText(ctx, text.String())

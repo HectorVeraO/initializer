@@ -15,6 +15,7 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/ports"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/semver"
 )
 
@@ -33,8 +34,11 @@ type Catalog struct {
 	// Reference is the slot map of .initializer/reference.json: the value every
 	// name rule matches in the source files.
 	Reference map[string]string `json:"reference"`
-	Specs     []SpecEntry       `json:"specs"`
-	Stacks    []StackEntry      `json:"stacks"`
+	// PortBand is the reference band of the port tokens, from
+	// .initializer/reference.json; 0 when the reference has none.
+	PortBand int          `json:"portBand"`
+	Specs    []SpecEntry  `json:"specs"`
+	Stacks   []StackEntry `json:"stacks"`
 }
 
 // SpecEntry is one spec folder.
@@ -65,6 +69,8 @@ type ModuleEntry struct {
 	RequiresModules []Requirement     `json:"requiresModules"`
 	TablePrefixes   []string          `json:"tablePrefixes,omitempty"`
 	Names           []NameRule        `json:"names,omitempty"`
+	Ports           []ports.Port      `json:"ports,omitempty"`
+	PortFiles       []string          `json:"portFiles,omitempty"`
 	Files           []File            `json:"files"`
 }
 
@@ -129,6 +135,8 @@ func normalize(c Catalog) Catalog {
 				module.RequiresModules = []Requirement{}
 			}
 			module.Files = nonNilFiles(module.Files)
+			module.Ports = append([]ports.Port(nil), module.Ports...)
+			module.PortFiles = append([]string(nil), module.PortFiles...)
 			module.Names = append([]NameRule(nil), module.Names...)
 			for k := range module.Names {
 				module.Names[k].Blocks = nonNilStrings(module.Names[k].Blocks)
@@ -206,6 +214,7 @@ func (v *validator) catalog(c Catalog) {
 		v.add("/generator", "must not be empty")
 	}
 	v.reference(c.Reference)
+	v.portBand(c)
 	specNames := make([]string, len(c.Specs))
 	for i, spec := range c.Specs {
 		specNames[i] = spec.Spec
@@ -245,6 +254,7 @@ func (v *validator) stack(pointer string, stack StackEntry) {
 		}
 		v.sortedStrings(at+"/tablePrefixes", module.TablePrefixes)
 		v.nameRules(at+"/names", module.Names)
+		v.modulePorts(at, module)
 		v.files(at+"/files", module.Files)
 	}
 	v.sortedStrings(pointer+"/modules", names)

@@ -28,5 +28,8 @@
     "kratos-migrate": "kratos-migrate",
     "postgres": "postgres",
     "postgres-init": "postgres-init"
+  },
+  "ports": {
+    "band": 101
   }
 }

@@ -43,6 +43,10 @@ func (b *builder) readReference() error {
 		b.issues = append(b.issues, issues...)
 		return nil
 	}
+	b.referenceDecoded = true
+	if selection.Ports != nil {
+		b.portBand = selection.Ports.Band
+	}
 	resolved := names.Resolved{Project: selection.Project.Name, DisplayName: selection.DisplayName, Components: map[string]string{}}
 	if selection.Database != nil {
 		resolved.Database, resolved.DBUser = selection.Database.Name, selection.Database.User

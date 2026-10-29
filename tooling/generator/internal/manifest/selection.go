@@ -27,6 +27,11 @@ type Database struct {
 	User string `json:"user,omitempty"`
 }
 
+// Ports holds the host port band, as given.
+type Ports struct {
+	Band int `json:"band"`
+}
+
 // Presence records which optional top-level values an input gave, so "absent"
 // and "empty" differ.
 type Presence struct {
@@ -49,6 +54,8 @@ type Selection struct {
 	Database *Database `json:"database,omitempty"`
 	// Services maps a service key to its compose service name; schema 2 only.
 	Services map[string]string `json:"services,omitempty"`
+	// Ports holds the host port band; schema 2 only.
+	Ports *Ports `json:"ports,omitempty"`
 	// AllModules is the --all-modules flag; the plan expands it and it is
 	// never encoded.
 	AllModules bool `json:"-"`
@@ -57,7 +64,7 @@ type Selection struct {
 }
 
 // MarshalJSON writes the selection in key order schema, project, displayName, stacks,
-// modules, components, database, services. A schema 1 document always writes
+// modules, components, database, services, ports. A schema 1 document always writes
 // stacks and modules. A schema 2 document writes each when Has says it was given or when it holds
 // values (a decoded lock carries no Has); an absent list is omitted.
 func (s Selection) MarshalJSON() ([]byte, error) {
@@ -70,8 +77,9 @@ func (s Selection) MarshalJSON() ([]byte, error) {
 		Components  []Component       `json:"components,omitempty"`
 		Database    *Database         `json:"database,omitempty"`
 		Services    map[string]string `json:"services,omitempty"`
+		Ports       *Ports            `json:"ports,omitempty"`
 	}
-	out := document{Schema: s.Schema, Project: s.Project, DisplayName: s.DisplayName, Components: s.Components, Database: s.Database, Services: s.Services}
+	out := document{Schema: s.Schema, Project: s.Project, DisplayName: s.DisplayName, Components: s.Components, Database: s.Database, Services: s.Services, Ports: s.Ports}
 	isFirstSchema := s.Schema == 1
 	if isFirstSchema || s.Has.Stacks || len(s.Stacks) > 0 {
 		stacks := nonNil(s.Stacks)

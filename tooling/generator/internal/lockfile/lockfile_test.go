@@ -137,13 +137,13 @@ func TestDecodeRefusals(t *testing.T) {
 func TestDecodeAcceptsSourceAndPorts(t *testing.T) {
 	lock := validLock()
 	lock.Source = &lockfile.Source{Commit: strings.Repeat("a", 40), Modified: true}
-	lock.Ports = &lockfile.Ports{Band: 10100}
+	lock.Ports = &lockfile.Ports{Band: 103}
 	encoded, err := lockfile.Encode(lock)
 	if err != nil {
 		t.Fatal(err)
 	}
 	decoded, err := lockfile.Decode(encoded)
-	if err != nil || decoded.Source == nil || decoded.Ports == nil || decoded.Ports.Band != 10100 {
+	if err != nil || decoded.Source == nil || decoded.Ports == nil || decoded.Ports.Band != 103 {
 		t.Fatalf("decoded = %+v, error %v", decoded, err)
 	}
 	if decoded.Source.Commit != lock.Source.Commit || decoded.Source.Modified != lock.Source.Modified {
@@ -212,7 +212,7 @@ func TestDecodeSchema1RefusesSchema2Members(t *testing.T) {
 		"components": `,"components":[]`,
 		"names":      `,"names":{}`,
 		"source":     `,"source":{"commit":"` + strings.Repeat("a", 40) + `","modified":false}`,
-		"ports":      `,"ports":{"band":10100}`,
+		"ports":      `,"ports":{"band":101}`,
 	}
 	for name, member := range members {
 		_, err := lockfile.Decode([]byte(schema1Lock(member)))
@@ -309,5 +309,49 @@ func TestDecodeSchema1RefusesSelectionComponents(t *testing.T) {
 	_, err := lockfile.Decode([]byte(raw))
 	if err == nil || !strings.Contains(err.Error(), "selection.components") {
 		t.Fatalf("want a selection.components refusal, got %v", err)
+	}
+}
+
+func TestASchema2LockWithoutPortsReadsItsBandAs101(t *testing.T) {
+	encoded, err := lockfile.Encode(validLock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), `"ports"`) {
+		t.Fatalf("a lock without ports must not write them:\n%s", encoded)
+	}
+	decoded, err := lockfile.Decode(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.PortBand() != 101 {
+		t.Errorf("PortBand() = %d, want 101", decoded.PortBand())
+	}
+	schema1, err := lockfile.Decode([]byte(schema1Lock("")))
+	if err != nil || schema1.PortBand() != 101 {
+		t.Errorf("schema 1 band = %d, error %v", schema1.PortBand(), err)
+	}
+}
+
+func TestDecodeChecksThePortBandRange(t *testing.T) {
+	for _, band := range []int{99, 655, 0, -1, 10100} {
+		lock := validLock()
+		lock.Ports = &lockfile.Ports{Band: band}
+		encoded, err := lockfile.Encode(lock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := lockfile.Decode(encoded); err == nil || !strings.Contains(err.Error(), "ports.band") {
+			t.Errorf("band %d: error = %v", band, err)
+		}
+	}
+	for _, band := range []int{100, 101, 654} {
+		lock := validLock()
+		lock.Ports = &lockfile.Ports{Band: band}
+		encoded, _ := lockfile.Encode(lock)
+		decoded, err := lockfile.Decode(encoded)
+		if err != nil || decoded.PortBand() != band {
+			t.Errorf("band %d: decoded %d, error %v", band, decoded.PortBand(), err)
+		}
 	}
 }

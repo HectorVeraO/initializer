@@ -56,6 +56,8 @@ Flags:
         Database user (default: <name> with - replaced by _)
   --service KEY=NAME
         Rename one compose service, repeatable (default: <name>-<key>)
+  --port-band NNN
+        Host port band 1NNxx, from 100 to 654 (default: 101)
   --dry-run
         Print what would be generated and write nothing (default: false)
   --root DIR
@@ -76,6 +78,8 @@ Examples:
   initializer generate -f acme.yaml --name acme-shop
   # set the brand text the web console shows
   initializer generate acme --stacks go-srv,ng-web --display-name "Acme Shop"
+  # run a second project beside the first on another port band
+  initializer generate acme --port-band 103
   # see the resolved values without writing anything
   initializer generate acme --modules tenancy --dry-run
 `

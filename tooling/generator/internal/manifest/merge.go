@@ -27,6 +27,10 @@ func Merge(file *Input, flags Input) (Input, []issue.Issue) {
 			merged.Selection.Database = &copied
 		}
 		merged.Selection.Services = copyServices(file.Selection.Services)
+		if file.Selection.Ports != nil {
+			copied := *file.Selection.Ports
+			merged.Selection.Ports = &copied
+		}
 		for pointer, origin := range file.Origins {
 			merged.Origins[pointer] = origin
 		}
@@ -38,7 +42,7 @@ func Merge(file *Input, flags Input) (Input, []issue.Issue) {
 	mergeLists(&merged, flags)
 	mergeInfra(&merged, flags)
 	issues := mergeComponents(&merged, file, flags)
-	hasInfra := merged.Selection.Database != nil || len(merged.Selection.Services) > 0
+	hasInfra := merged.Selection.Database != nil || len(merged.Selection.Services) > 0 || merged.Selection.Ports != nil
 	if hasInfra {
 		merged.Selection.Schema = MaxSchema
 	}
@@ -50,6 +54,11 @@ func Merge(file *Input, flags Input) (Input, []issue.Issue) {
 }
 
 func mergeScalars(merged *Input, flags Input) {
+	if flags.Selection.Ports != nil {
+		copied := *flags.Selection.Ports
+		merged.Selection.Ports = &copied
+		merged.Origins[patternPortBand] = flags.Origins[patternPortBand]
+	}
 	if flags.Selection.DisplayName != "" {
 		merged.Selection.DisplayName = flags.Selection.DisplayName
 		merged.Origins[patternDisplay] = flags.Origins[patternDisplay]
