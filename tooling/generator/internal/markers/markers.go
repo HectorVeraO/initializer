@@ -240,8 +240,14 @@ type Keep struct {
 
 // Drop returns src without the blocks whose predicate reports false, applying the
 // blank-line rule (a dropped block also removes the one blank line directly before
-// it). It never changes a byte outside a dropped block or that blank line. It returns
-// an error when Parse reports an issue or a predicate is nil.
+// it). It never changes a byte outside a dropped block or that blank line.
+//
+// Blocks that directly follow each other (no line between a closing marker and
+// the next opening marker) form a sequence. A sequence that starts with a stack
+// block is a run of that stack: when the stack is not selected the whole run is
+// dropped, so a block of another stack kept inside it (the console service's
+// go-srv dependency) never outlives its service. It returns an error when Parse
+// reports an issue or a predicate is nil.
 func Drop(p string, src []byte, keep Keep) ([]byte, error) {
 	if keep.Module == nil || keep.Stack == nil {
 		return nil, errors.New("keep predicates must be non-nil")
@@ -257,12 +263,21 @@ func Drop(p string, src []byte, keep Keep) ([]byte, error) {
 	lines := splitLines(src)
 	removed := make([]bool, len(lines))
 	anyRemoved := false
-	for _, block := range blocks {
+	runStack := ""
+	for i, block := range blocks {
+		isContinuing := i > 0 && block.Start == blocks[i-1].End+1
+		if !isContinuing {
+			runStack = ""
+			if block.Kind == KindStack {
+				runStack = block.ID
+			}
+		}
 		isKept := keep.Module
 		if block.Kind == KindStack {
 			isKept = keep.Stack
 		}
-		if isKept(block.ID) {
+		isRunDropped := runStack != "" && !keep.Stack(runStack)
+		if isKept(block.ID) && !isRunDropped {
 			continue
 		}
 		anyRemoved = true

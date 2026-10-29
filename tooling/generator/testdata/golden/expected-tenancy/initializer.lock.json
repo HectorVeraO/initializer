@@ -252,7 +252,7 @@
   "generated": [
     {
       "path": "README.md",
-      "sha256": "c95ddd328937985b5e3592bf1010ad13fa591e22d0b88bdd41d66e5e70a38123"
+      "sha256": "5cc11b4b130f88fbb9779ea77db0a6f3e1e5bb2d3acfd33f5542daed6137e2a1"
     },
     {
       "path": "acme-backend-srv/cmd/server/modules.go",

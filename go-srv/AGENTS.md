@@ -28,6 +28,7 @@ Read the fragment routed to your task before building here; this `AGENTS.md` is 
 | Lint | `go vet ./...` |
 | Build | `go build ./...` |
 <!-- AGENTIC-SETUP:AUTOGEN:commands END -->
+- Host-dev from the repo root: `mise run dev:srv` reads `.deploy/local/.example.env`, then `.env` (optional).
 
 ## Verification
 

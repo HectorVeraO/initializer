@@ -154,6 +154,9 @@ Sections, in this order: `## Title & Issue Link`, `## What Changed`, `## Why It 
 - **Resets**: `docker compose -f .deploy/local/docker-compose.yml down -v` is authorized for routine local recovery. Applies to local disposable volumes only; never target shared or staging stacks.
 - Full addressing rules, port allocation, verification layout and cleanup: see `.claude/references/local-env.md`.
 <!-- AGENTIC-SETUP:AUTOGEN:local-environment END -->
+- **Docker mode**: the component services `go-srv` and `ng-web` are behind the compose profile `app`; plain `up -d` starts the infrastructure only, `mise run up` (`--profile app up -d --build`) starts everything.
+- **Shared stack**: never run `mise run up`, `mise run down`, `mise run infra` or `docker compose --profile app` against the shared stack (project `initializer`); prove compose changes with `docker compose -f .deploy/local/docker-compose.yml config --hash "*"` or `config -q`, never plain `config`.
+- **Host-dev exception**: editing `ng-web` stops `ng-web` only; editing `go-srv` stops `go-srv` and `ng-web` and runs both on the host (`mise run dev:srv`, `mise run dev:web`), because nginx in the container reaches only the `go-srv` service. This replaces "Stop only the component being edited" above for `go-srv`.
 
 ## Data changes
 
@@ -250,6 +253,9 @@ Format: see `.claude/references/code-path-parity-format.md`. Root keeps a one-li
 - **Session tenant schemas**: `Role`, `TenantStatus`, `MembershipStatus`, `TenantSummary` and `MembershipView` are byte-identical in `specs/identity/openapi.yaml` and `specs/tenancy/openapi.yaml`. Full row: `.claude/references/code-path-parity.md`.
 - **Flag key rule**: `^[a-z][a-z0-9_]*$`, at most 64 characters, is the same in the `CHECK` of both `flg_*` migrations, `go-srv/internal/platform/featureflags/manifest.go` and `tooling/gates/internal/flagscheck/flagscheck.go`. Full row: `.claude/references/code-path-parity.md`.
 - **yaml pin**: `go-srv/go.mod`, `tooling/gates/go.mod` and `tooling/generator/go.mod` require the same `go.yaml.in/yaml/v3` version. Full row: `.claude/references/code-path-parity.md`.
+- **Go pin**: `mise.toml`, `go-srv/go.mod` and `go-srv/Dockerfile` name the same Go version. Full row: `.claude/references/code-path-parity.md`.
+- **Node pin**: `mise.toml` and `ng-web/Dockerfile` name the same Node version. Full row: `.claude/references/code-path-parity.md`.
+- **Local secret defaults**: the compose `:-` password defaults equal `.deploy/local/.example.env`. Full row: `.claude/references/code-path-parity.md`.
 
 ## Anti-degradation governance
 

@@ -261,6 +261,52 @@ func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byt
 	return data, nil
 }
 
+// Band 101 constants of the README run section: the host port range and the
+// public origin of a project with and without a console.
+const (
+	portBandLow    = 10100
+	portBandHigh   = 10199
+	webOriginURL   = "http://localhost:10120"
+	apiOriginURL   = "http://localhost:10100"
+	devSrvTaskName = "dev:srv"
+	devWebTaskName = "dev:web"
+	tckTaskName    = "tck"
+)
+
+// readmeRun returns the run section data: one instance per backend component,
+// bound to the component of the frontend stack when one is selected.
+func (b *builder) readmeRun() render.ReadmeRun {
+	p := b.opts.Plan
+	run := render.ReadmeRun{PortLow: portBandLow, PortHigh: portBandHigh}
+	var web string
+	for _, stack := range p.Stacks {
+		component, hasComponent := p.Component(stack.Stack)
+		if stack.Role == manifest.RoleFrontend && hasComponent {
+			web = component.Name
+		}
+	}
+	for _, stack := range p.Stacks {
+		component, hasComponent := p.Component(stack.Stack)
+		if stack.Role != manifest.RoleBackend || !hasComponent {
+			continue
+		}
+		instance := render.ReadmeInstance{
+			Backend:     component.Name,
+			Web:         web,
+			OriginURL:   apiOriginURL,
+			HasIdentity: b.hasModule("identity"),
+			DevSrvTask:  devSrvTaskName,
+			TCKTask:     tckTaskName,
+		}
+		if web != "" {
+			instance.OriginURL = webOriginURL
+			instance.DevWebTask = devWebTaskName
+		}
+		run.Instances = append(run.Instances, instance)
+	}
+	return run
+}
+
 // recorded returns the selection the project records.
 func (b *builder) recorded() manifest.Selection {
 	if b.opts.Recorded.Schema == 0 {
@@ -333,17 +379,13 @@ func (b *builder) render() ([]lockfile.File, error) {
 	for _, key := range keys {
 		env = append(env, render.EnvPair{Key: key, Value: p.TCKEnv[key]})
 	}
-	var components []render.Component
-	for _, component := range p.Components {
-		components = append(components, render.Component{Stack: component.Stack, Name: component.Name})
-	}
 	readme, err := render.Readme(render.ReadmeInput{
 		Name:             b.project,
 		GeneratorVersion: generator.Version,
-		Components:       components,
 		Modules:          rows,
 		TCKTags:          p.TCKTags,
 		TCKEnv:           env,
+		Run:              b.readmeRun(),
 	})
 	if err != nil {
 		return nil, err

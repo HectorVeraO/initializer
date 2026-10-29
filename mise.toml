@@ -4,3 +4,37 @@ node = "24.22.1"
 gitleaks = "8.30.1"
 lefthook = "2.2.2"
 "github:oasdiff/oasdiff" = "1.34.1"
+
+[tasks.up]
+description = "Build and start everything in Docker"
+run = "docker compose -f .deploy/local/docker-compose.yml --profile app up -d --build"
+
+[tasks.infra]
+description = "Start the infrastructure only, for host-dev"
+run = "docker compose -f .deploy/local/docker-compose.yml up -d"
+
+[tasks.down]
+description = "Stop everything; volumes are kept"
+run = "docker compose -f .deploy/local/docker-compose.yml --profile app down"
+
+# initializer:stack go-srv
+[tasks."dev:srv"]
+description = "Run the backend on the host"
+dir = "{{config_root}}/go-srv"
+env = { _.file = ["{{config_root}}/.deploy/local/.example.env", "{{config_root}}/.deploy/local/.env"] }
+run = "go run ./cmd/server"
+# initializer:end go-srv
+
+# initializer:stack ng-web
+[tasks."dev:web"]
+description = "Run the console dev server on the host"
+dir = "{{config_root}}/ng-web"
+run = "npm start"
+# initializer:end ng-web
+
+# initializer:stack go-srv
+[tasks.tck]
+description = "Run the TCK against the running backend"
+env = { TCK_BASE_URL = "http://localhost:10120", APP_PUBLIC_BASE_URL = "http://localhost:10120" }
+run = "npm --prefix specs run tck"
+# initializer:end go-srv

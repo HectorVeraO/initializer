@@ -1,8 +1,10 @@
+# initializer:stack go-srv
 upstream go-srv {
     ip_hash;
     server ${GO_SRV_HOST};
 }
 
+# initializer:end go-srv
 server {
     listen       80;
     server_name  localhost;
@@ -18,12 +20,14 @@ server {
         add_header Cache-Control "no-store" always;
     }
 
+    # initializer:stack go-srv
     location /api/ {
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_pass http://go-srv;
     }
+    # initializer:end go-srv
 
     # initializer:module identity
     location /kratos/ {
@@ -34,12 +38,14 @@ server {
     }
     # initializer:end identity
 
+    # initializer:stack go-srv
     location /health/ {
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_pass http://go-srv;
     }
+    # initializer:end go-srv
 
     client_max_body_size 128M;
 }
