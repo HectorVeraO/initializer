@@ -282,8 +282,10 @@ jobs:
           for file in "${files[@]}"; do
             line="$(jq -c --arg name "$(basename "${file}" .json)" '
               (.stacks | index("ng-web") != null) as $web
+              | ((.ports.band // 101) * 100) as $base
               | {selection: $name, web: $web,
-                 public_base_url: (if $web then "http://localhost:10120" else "http://localhost:10100" end)}' "${file}")"
+                 public_base_url: "http://localhost:\($base + (if $web then 20 else 0 end))",
+                 kratos_url: "http://127.0.0.1:\($base + 33)"}' "${file}")"
             lines+="${line}"$'\n'
           done
           legs="$(printf '%s' "${lines}" | jq -sc 'sort_by(.selection)')"
@@ -426,29 +428,34 @@ jobs:
           fi
           exit "${status}"
       - name: Start the generated project stack
-        env:
-          POSTGRES: ${{ steps.layout.outputs.postgres }}
         run: |
           set -euo pipefail
           project="${RUNNER_TEMP}/gen-a"
-          cp "${project}/.deploy/local/.example.env" "${project}/.deploy/local/.env"
           compose="docker compose -f ${project}/.deploy/local/docker-compose.yml"
+          # The lock's TCK env, as the backend reads it from its component folder.
+          jq -r '.tckEnv | to_entries[]
+            | .value as $v
+            | (($v | test("/")) and ($v | test("://") | not) and ($v | startswith("/") | not)) as $rel
+            | "\(.key)=\(if $rel then "../" + $v else $v end)"' \
+            "${project}/initializer.lock.json" >> "${project}/.deploy/local/.env"
+          # The leg's public base wins over the template value in .example.env, for the go-srv container and Kratos.
+          printf 'APP_PUBLIC_BASE_URL=%s\n' "${APP_PUBLIC_BASE_URL}" >> "${project}/.deploy/local/.env"
           ${compose} config -q
-          ${compose} up -d
+          ${compose} --profile app config -q
+          ${compose} --profile app up -d --build
           wait_kratos=false
           if jq -e 'any(.modules[]; .module == "identity")' "${project}/initializer.lock.json" > /dev/null; then
             wait_kratos=true
           fi
-          for _ in $(seq 1 60); do
-            state="$(${compose} ps --format json "${POSTGRES}" | jq -rs 'flatten | .[0].Health // empty')"
-            if [ "${state}" = "healthy" ]; then
-              if [ "${wait_kratos}" = false ] || curl -fsS http://127.0.0.1:10133/health/ready > /dev/null; then
+          for _ in $(seq 1 90); do
+            if curl -fsS "${TCK_BASE_URL}/health/ready" > /dev/null; then
+              if [ "${wait_kratos}" = false ] || curl -fsS "${{ matrix.kratos_url }}/health/ready" > /dev/null; then
                 exit 0
               fi
             fi
             sleep 2
           done
-          echo "timeout waiting for the generated project stack" >&2
+          echo "timeout waiting for the generated project" >&2
           exit 1
       - name: Format, vet, build and test the generated go-srv
         working-directory: ${{ runner.temp }}/gen-a/${{ steps.layout.outputs.srv }}
@@ -461,32 +468,8 @@ jobs:
           fi
           go vet ./...
           go build ./...
-          database_url="$(. ../.deploy/local/.env; printf '%s' "${APP_DATABASE_URL}")"
+          database_url="$(set -a; . ../.deploy/local/.example.env; printf '%s' "${APP_DATABASE_URL}")"
           APP_TEST_DATABASE_URL="${database_url}" APP_TEST_PUBLIC_BASE_URL="${APP_PUBLIC_BASE_URL}" go test ./...
-      - name: Build and start the generated go-srv
-        env:
-          SRV: ${{ steps.layout.outputs.srv }}
-        run: |
-          set -euo pipefail
-          project="${RUNNER_TEMP}/gen-a"
-          go -C "${project}/${SRV}" build -o "${RUNNER_TEMP}/go-srv-bin" ./cmd/server
-          cd "${project}"
-          set -a; . .deploy/local/.env; set +a
-          while IFS= read -r pair; do
-            export "${pair}"
-          done < <(jq -r '.tckEnv | to_entries[] | "\(.key)=\(.value)"' initializer.lock.json)
-          export APP_PUBLIC_BASE_URL="${{ matrix.public_base_url }}"
-          "${RUNNER_TEMP}/go-srv-bin" > "${RUNNER_TEMP}/go-srv.log" 2>&1 &
-          echo $! > "${RUNNER_TEMP}/go-srv.pid"
-          url=http://localhost:10100/health/ready
-          for _ in $(seq 1 60); do
-            if curl -fsS "${url}" > /dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "timeout waiting for ${url}" >&2
-          exit 1
       - name: Lint, build and test the generated ng-web
         if: matrix.web
         working-directory: ${{ runner.temp }}/gen-a/${{ steps.layout.outputs.web }}
@@ -496,22 +479,6 @@ jobs:
           npm run lint
           npm run build
           npm test -- --watch=false
-      - name: Start the generated ng-web dev server
-        if: matrix.web
-        working-directory: ${{ runner.temp }}/gen-a/${{ steps.layout.outputs.web }}
-        run: |
-          set -euo pipefail
-          npm start > "${RUNNER_TEMP}/ng-web.log" 2>&1 &
-          echo $! > "${RUNNER_TEMP}/ng-web.pid"
-          url=http://localhost:10120/
-          for _ in $(seq 1 60); do
-            if curl -fsS "${url}" > /dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "timeout waiting for ${url}" >&2
-          exit 1
       - name: Run the console e2e the lock selects
         if: matrix.web
         run: |
@@ -534,9 +501,9 @@ jobs:
           npm --prefix initializer-e2e ci
           (cd initializer-e2e && npx playwright install --with-deps chromium)
           grep -Ev '^(PW_(VIDEO|SCREENSHOT|TRACE)|INIT_START_STACK|INIT_WEB_BASE_URL|INIT_USER_EMAIL|INIT_USER_PASSWORD)=' initializer-e2e/.example.env > initializer-e2e/.env
-          email="$(. "${project}/.deploy/local/.env"; printf '%s' "${APP_BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}")"
-          password="$(. "${project}/.deploy/local/.env"; printf '%s' "${APP_BOOTSTRAP_ADMIN_PASSWORD:-change-me-local-only}")"
-          printf 'INIT_WEB_BASE_URL=http://localhost:10120\nINIT_USER_EMAIL=%s\nINIT_USER_PASSWORD=%s\n' "${email}" "${password}" >> initializer-e2e/.env
+          email="$(. "${project}/.deploy/local/.example.env"; if [ -f "${project}/.deploy/local/.env" ]; then . "${project}/.deploy/local/.env"; fi; printf '%s' "${APP_BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}")"
+          password="$(. "${project}/.deploy/local/.example.env"; if [ -f "${project}/.deploy/local/.env" ]; then . "${project}/.deploy/local/.env"; fi; printf '%s' "${APP_BOOTSTRAP_ADMIN_PASSWORD:-change-me-local-only}")"
+          printf 'INIT_WEB_BASE_URL=%s\nINIT_USER_EMAIL=%s\nINIT_USER_PASSWORD=%s\n' "${TCK_BASE_URL}" "${email}" "${password}" >> initializer-e2e/.env
           (cd initializer-e2e && npx playwright test tests/e2e/console --grep "${e2e_grep}")
       - name: Run the TCK the lock selects
         working-directory: ${{ runner.temp }}/gen-a/specs
@@ -572,7 +539,7 @@ jobs:
       - name: Collect logs
         if: always()
         run: |
-          docker compose -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" logs --no-color > "${RUNNER_TEMP}/compose.log" 2>&1 || true
+          docker compose -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" --profile app logs --no-color > "${RUNNER_TEMP}/compose.log" 2>&1 || true
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -583,28 +550,211 @@ jobs:
             ${{ runner.temp }}/gen-a/specs/playwright-report/
             initializer-e2e/playwright-report/
             initializer-e2e/test-results/
-            ${{ runner.temp }}/go-srv.log
-            ${{ runner.temp }}/ng-web.log
             ${{ runner.temp }}/compose.log
             ${{ runner.temp }}/tck-list.txt
           if-no-files-found: warn
           retention-days: 7
-      - name: Stop go-srv and the stack
+      - name: Stop the stack
         if: always()
         run: |
-          if [ -f "${RUNNER_TEMP}/go-srv.pid" ]; then
-            kill "$(cat "${RUNNER_TEMP}/go-srv.pid")" || true
-          fi
-          if [ -f "${RUNNER_TEMP}/ng-web.pid" ]; then
-            kill "$(cat "${RUNNER_TEMP}/ng-web.pid")" || true
-          fi
           if [ -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" ]; then
-            docker compose -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" down -v
+            docker compose -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" --profile app down -v
+          fi
+
+  generated-project-host-dev:
+    name: generated-project-host-dev
+    needs: [generator]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      TCK_BASE_URL: http://localhost:10120
+      APP_PUBLIC_BASE_URL: http://localhost:10120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go-srv/go.mod
+          cache-dependency-path: go-srv/go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: specs/package.json
+          cache: npm
+          cache-dependency-path: initializer-e2e/package-lock.json
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          install: false
+          cache: false
+          working_directory: ${{ runner.temp }}
+      - name: Build the CLI and generate the project
+        run: |
+          set -euo pipefail
+          go -C tooling/generator build -o "${RUNNER_TEMP}/initializer" ./cmd/initializer
+          git ls-files -z > "${RUNNER_TEMP}/files.bin"
+          "${RUNNER_TEMP}/initializer" catalog build \
+            --root "${GITHUB_WORKSPACE}" \
+            --files "${RUNNER_TEMP}/files.bin" \
+            --out "${RUNNER_TEMP}/catalog.lock.json"
+          "${RUNNER_TEMP}/initializer" generate \
+            --root "${GITHUB_WORKSPACE}" \
+            --catalog "${RUNNER_TEMP}/catalog.lock.json" \
+            --selection "${GITHUB_WORKSPACE}/tooling/generator/testdata/ci/api-keys+identity-web.json" \
+            --out "${RUNNER_TEMP}/gen-a"
+          "${RUNNER_TEMP}/initializer" verify --project "${RUNNER_TEMP}/gen-a"
+      - name: Read the project layout from the lock
+        id: layout
+        run: |
+          set -euo pipefail
+          lock="${RUNNER_TEMP}/gen-a/initializer.lock.json"
+          one() {
+            jq -r --arg stack "$1" '[.components[] | select(.stack == $stack) | .name] | if length == 1 then .[0] else empty end' "${lock}"
+          }
+          srv="$(one go-srv)"
+          web="$(one ng-web)"
+          if [ -z "${srv}" ] || [ -z "${web}" ]; then
+            echo "the lock names no single go-srv or ng-web component" >&2
+            exit 1
+          fi
+          postgres="$(jq -r '.names["service.postgres"] // empty' "${lock}")"
+          if [ -z "${postgres}" ]; then
+            echo "the lock names no postgres service" >&2
+            exit 1
+          fi
+          {
+            echo "srv=${srv}"
+            echo "web=${web}"
+            echo "postgres=${postgres}"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Install the project's tools with mise
+        working-directory: ${{ runner.temp }}/gen-a
+        run: |
+          set -euo pipefail
+          mise trust
+          mise install
+      - name: Start the infrastructure
+        working-directory: ${{ runner.temp }}/gen-a
+        env:
+          POSTGRES: ${{ steps.layout.outputs.postgres }}
+        run: |
+          set -euo pipefail
+          compose="docker compose -f ${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml"
+          mise run infra
+          for _ in $(seq 1 60); do
+            state="$(${compose} ps --format json "${POSTGRES}" | jq -rs 'flatten | .[0].Health // empty')"
+            if [ "${state}" = "healthy" ] && curl -fsS http://127.0.0.1:10133/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "timeout waiting for the generated infrastructure" >&2
+          exit 1
+      - name: Prepare the TCK env and install the dependencies
+        working-directory: ${{ runner.temp }}/gen-a
+        env:
+          WEB: ${{ steps.layout.outputs.web }}
+        run: |
+          set -euo pipefail
+          # The lock's TCK env, as the backend reads it from its component folder.
+          jq -r '.tckEnv | to_entries[]
+            | .value as $v
+            | (($v | test("/")) and ($v | test("://") | not) and ($v | startswith("/") | not)) as $rel
+            | "\(.key)=\(if $rel then "../" + $v else $v end)"' \
+            initializer.lock.json >> .deploy/local/.env
+          mise exec -- npm --prefix "${WEB}" ci
+          mise exec -- npm --prefix specs ci
+      - name: Run the backend and the console on the host
+        working-directory: ${{ runner.temp }}/gen-a
+        run: |
+          set -euo pipefail
+          # setsid gives each task its own process group, so the kill stops go run and ng serve children.
+          setsid mise run dev:srv > "${RUNNER_TEMP}/srv.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/srv.pid"
+          setsid mise run dev:web > "${RUNNER_TEMP}/web.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/web.pid"
+          for _ in $(seq 1 90); do
+            if curl -fsS http://localhost:10100/health/ready > /dev/null && curl -fsS http://localhost:10120/ > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "timeout waiting for the host-dev backend and console" >&2
+          exit 1
+      - name: Run the console e2e on the dev server
+        run: |
+          set -euo pipefail
+          project="${RUNNER_TEMP}/gen-a"
+          mise exec -- npm --prefix initializer-e2e ci
+          (cd initializer-e2e && mise exec -- npx playwright install --with-deps chromium)
+          grep -Ev '^(PW_(VIDEO|SCREENSHOT|TRACE)|INIT_START_STACK|INIT_WEB_BASE_URL|INIT_USER_EMAIL|INIT_USER_PASSWORD)=' initializer-e2e/.example.env > initializer-e2e/.env
+          email="$(. "${project}/.deploy/local/.example.env"; if [ -f "${project}/.deploy/local/.env" ]; then . "${project}/.deploy/local/.env"; fi; printf '%s' "${APP_BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}")"
+          password="$(. "${project}/.deploy/local/.example.env"; if [ -f "${project}/.deploy/local/.env" ]; then . "${project}/.deploy/local/.env"; fi; printf '%s' "${APP_BOOTSTRAP_ADMIN_PASSWORD:-change-me-local-only}")"
+          printf 'INIT_WEB_BASE_URL=%s\nINIT_USER_EMAIL=%s\nINIT_USER_PASSWORD=%s\n' "${TCK_BASE_URL}" "${email}" "${password}" >> initializer-e2e/.env
+          (cd initializer-e2e && mise exec -- npx playwright test tests/e2e/console --grep "@console-identity|@console-platform-keys")
+      - name: Run the TCK with the mise task
+        working-directory: ${{ runner.temp }}/gen-a
+        run: |
+          set -euo pipefail
+          mise run tck
+      - name: Stop the host processes, then prove the up and down tasks
+        working-directory: ${{ runner.temp }}/gen-a
+        run: |
+          set -euo pipefail
+          for name in srv web; do
+            kill -- -"$(cat "${RUNNER_TEMP}/${name}.pid")" || true
+          done
+          for _ in $(seq 1 30); do
+            if ! curl -fsS http://localhost:10100/health/ready > /dev/null 2>&1 && ! curl -fsS http://localhost:10120/ > /dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          mise run down
+          mise run up
+          for _ in $(seq 1 90); do
+            if curl -fsS http://localhost:10120/health/ready > /dev/null; then
+              mise run down
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "timeout waiting for the project started by mise run up" >&2
+          exit 1
+      - name: Collect logs
+        if: always()
+        run: |
+          docker compose -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" --profile app logs --no-color > "${RUNNER_TEMP}/compose.log" 2>&1 || true
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: generated-host-dev
+          path: |
+            ${{ runner.temp }}/gen-a/specs/test-results/
+            ${{ runner.temp }}/gen-a/specs/playwright-report/
+            initializer-e2e/playwright-report/
+            initializer-e2e/test-results/
+            ${{ runner.temp }}/srv.log
+            ${{ runner.temp }}/web.log
+            ${{ runner.temp }}/compose.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Stop the processes and the stack
+        if: always()
+        run: |
+          for name in srv web; do
+            if [ -f "${RUNNER_TEMP}/${name}.pid" ]; then
+              kill -- -"$(cat "${RUNNER_TEMP}/${name}.pid")" 2>/dev/null || true
+            fi
+          done
+          if [ -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" ]; then
+            docker compose -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" --profile app down -v
           fi
 
   generated-projects:
     name: generated-projects
-    needs: [selections, generated-project]
+    needs: [selections, generated-project, generated-project-host-dev]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -612,6 +762,7 @@ jobs:
         run: |
           test "${{ needs.selections.result }}" = success
           test "${{ needs.generated-project.result }}" = success
+          test "${{ needs.generated-project-host-dev.result }}" = success
 
   tck:
     name: tck
