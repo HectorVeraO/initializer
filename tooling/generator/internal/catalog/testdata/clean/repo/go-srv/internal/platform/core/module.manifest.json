@@ -8,5 +8,6 @@
   "requiresModules": [],
   "tablePrefixes": ["cor"],
   "files": [".deploy/local/", ".gitattributes", ".gitignore", "go-srv/", "specs/package.json", "specs/tck-support/"],
-  "exclude": ["go-srv/AGENTS.md", "go-srv/cookbooks/"]
+  "exclude": ["go-srv/AGENTS.md", "go-srv/cookbooks/"],
+  "names": [{"path": ".deploy/local/docker-compose.yml", "text": "name: %{project}"}]
 }

@@ -1,8 +1,8 @@
 {
-  "schema": 1,
+  "schema": 2,
   "generator": "0.1.0",
   "goModule": "example.com/fixture/srv",
-  "composeName": "fixture-app",
+  "reference": {"project": "fixture-app", "envPrefix": "FIXTURE_APP", "component.go-srv": "go-srv", "component.ng-web": "ng-web"},
   "specs": [
     {"spec": "core", "version": "0.1.0", "tckTags": ["@core"], "tckEnv": {}, "files": []},
     {"spec": "identity", "version": "0.1.0", "tckTags": ["@identity"], "tckEnv": {}, "files": []}

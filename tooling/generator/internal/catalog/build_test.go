@@ -303,14 +303,14 @@ func TestIssueCodes(t *testing.T) {
 			addNgCore(r)
 			delete(r, ngRoot+"core/module.ts")
 		}, []string{"ENTRYPOINT_MISSING"}},
-		{"compose name", func(t *testing.T, r fstest.MapFS) {
+		{"compose line 1 differs from the reference", func(t *testing.T, r fstest.MapFS) {
 			put(r, ".deploy/local/docker-compose.yml", "name: Bad_Name\n")
-		}, []string{"COMPOSE_NAME_INVALID"}},
-		{"compose file missing", func(t *testing.T, r fstest.MapFS) {
+		}, []string{"NAME_RULE_UNMATCHED"}},
+		{"rule file not owned", func(t *testing.T, r fstest.MapFS) {
 			delete(r, ".deploy/local/docker-compose.yml")
 			put(r, ".deploy/local/other.txt", "other\n")
 			edit(t, r, coreManifest, `".deploy/local/", `, `".deploy/local/other.txt", `)
-		}, []string{"COMPOSE_NAME_INVALID"}},
+		}, []string{"NAME_RULE_FOREIGN"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -358,7 +358,7 @@ func TestIssuesAreCollectedTogether(t *testing.T) {
 	put(repo, ".deploy/local/docker-compose.yml", "name: Bad_Name\n")
 	put(repo, "specs/package.json", "{\r\n}\r\n")
 	_, issues := buildRepo(t, repo)
-	assertCodes(t, issues, "FILE_UNOWNED", "COMPOSE_NAME_INVALID", "NON_LF_TEXT")
+	assertCodes(t, issues, "FILE_UNOWNED", "NAME_RULE_UNMATCHED", "NON_LF_TEXT")
 }
 
 func TestBuildIsDeterministicOverFileOrder(t *testing.T) {

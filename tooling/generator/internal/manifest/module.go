@@ -36,11 +36,20 @@ type Module struct {
 	TablePrefixes   []string
 	Files           []FileEntry
 	Exclude         []FileEntry
+	// Names are the name rules of the module, in manifest order.
+	Names []NameRule
+}
+
+// NameRule is one element of names: a context-anchored text with %{slot}
+// placeholders that rewrites reference names inside one file the module owns.
+type NameRule struct {
+	Path string
+	Text string
 }
 
 var moduleKeys = []string{
 	"schema", "stack", "module", "version", "implied", "implementsSpec",
-	"requiresCore", "requiresModules", "tablePrefixes", "files", "exclude",
+	"requiresCore", "requiresModules", "tablePrefixes", "files", "exclude", "names",
 }
 
 // DecodeModule decodes and validates a module manifest. path is the manifest
@@ -61,6 +70,9 @@ func DecodeModule(path string, data []byte) (Module, []issue.Issue) {
 	d.moduleIdentity(members, &module)
 	d.moduleRequirements(members, &module)
 	d.moduleFiles(members, &module)
+	if raw, present := members["names"]; present {
+		module.Names = d.nameRules(raw)
+	}
 	return module, d.result()
 }
 
@@ -338,4 +350,48 @@ func (d *decoder) fileEntry(raw json.RawMessage, pointer string) (FileEntry, boo
 		complete = false
 	}
 	return entry, complete
+}
+
+// nameRules decodes names: an array of objects with exactly path and text. The
+// slot syntax of text is the catalog's to check.
+func (d *decoder) nameRules(raw json.RawMessage) []NameRule {
+	items, ok := d.array(raw, "/names")
+	if !ok {
+		return nil
+	}
+	rules := []NameRule{}
+	for i, item := range items {
+		pointer := fmt.Sprintf("/names/%d", i)
+		fields, ok := d.object(item, pointer, []string{"path", "text"})
+		if !ok {
+			continue
+		}
+		var rule NameRule
+		complete := true
+		if rawPath, found := d.required(fields, pointer, "path"); found {
+			path, isString := d.str(rawPath, pointer+"/path")
+			switch {
+			case !isString:
+				complete = false
+			case !validRepoPath(path) || path[len(path)-1] == '/':
+				d.add(pointer+"/path", "must be a repo-relative file path with / separators and no empty, . or .. segment")
+				complete = false
+			default:
+				rule.Path = path
+			}
+		} else {
+			complete = false
+		}
+		if rawText, found := d.required(fields, pointer, "text"); found {
+			text, isString := d.str(rawText, pointer+"/text")
+			complete = complete && isString
+			rule.Text = text
+		} else {
+			complete = false
+		}
+		if complete {
+			rules = append(rules, rule)
+		}
+	}
+	return rules
 }

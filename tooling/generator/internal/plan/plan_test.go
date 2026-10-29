@@ -101,8 +101,8 @@ func TestEmptySelectionResolvesCore(t *testing.T) {
 	if !reflect.DeepEqual(p.Selection.Modules, []string{"core"}) {
 		t.Fatalf("recorded modules = %v", p.Selection.Modules)
 	}
-	if p.GoModule != "example.com/fixture/srv" || p.ComposeName != "fixture-app" {
-		t.Fatalf("catalog identity not carried: %q %q", p.GoModule, p.ComposeName)
+	if p.GoModule != "example.com/fixture/srv" || p.Reference["project"] != "fixture-app" {
+		t.Fatalf("catalog identity not carried: %q %q", p.GoModule, p.Reference["project"])
 	}
 }
 

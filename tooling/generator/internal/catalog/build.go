@@ -13,6 +13,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 )
 
 // Issue codes emitted by Build, besides the ones the manifest package emits.
@@ -44,12 +45,16 @@ const (
 	CodeGoParseFailed         = "GO_PARSE_FAILED"
 	CodeImportBoundary        = "IMPORT_BOUNDARY"
 	CodeEntrypointMissing     = "ENTRYPOINT_MISSING"
-	CodeComposeNameInvalid    = "COMPOSE_NAME_INVALID"
+	CodeNameRuleInvalid       = "NAME_RULE_INVALID"
+	CodeNameRuleForeign       = "NAME_RULE_FOREIGN"
+	CodeNameRuleUnmatched     = "NAME_RULE_UNMATCHED"
+	CodeNameRuleOverlap       = "NAME_RULE_OVERLAP"
+	CodeReferenceInvalid      = names.CodeReferenceInvalid
+	CodeReferenceIncomplete   = "REFERENCE_INCOMPLETE"
 )
 
 const (
 	goModPath        = "go-srv/go.mod"
-	composePath      = ".deploy/local/docker-compose.yml"
 	maxManifestBytes = 1 << 20
 	maxFileBytes     = 64 << 20
 	textProbeBytes   = 8000
@@ -93,6 +98,10 @@ func sourceStackTable() []stackInfo {
 // staticRoots are the managed roots that do not depend on a stack manifest.
 var staticRoots = []string{"specs/", ".deploy/local/", ".initializer/"}
 
+// ReferencePath is the file that holds the reference names the name rules
+// match. The catalog reads it and never delivers it.
+const ReferencePath = ".initializer/reference.json"
+
 // renderedFiles are project-level files the generator renders; no copy may land on them.
 var renderedFiles = []string{"README.md", "initializer.selection.json", "initializer.lock.json"}
 
@@ -103,6 +112,8 @@ type moduleDoc struct {
 	module    manifest.Module
 	duplicate bool
 	files     []File
+	// recorded are the name rules with their blocks, sorted by (path, text).
+	recorded []NameRule
 }
 
 type specDoc struct {
@@ -129,8 +140,10 @@ type builder struct {
 	specs        []*specDoc
 	managedStack map[string]bool
 	goModule     string
-	composeName  string
-	parsed       map[string]*parsedGo
+	reference    map[string]string
+	// referenceReady is true when the reference file decoded without issues.
+	referenceReady bool
+	parsed         map[string]*parsedGo
 }
 
 // Build validates every manifest and returns the catalog, or every issue found.
@@ -198,10 +211,13 @@ func (b *builder) run() error {
 	if err := b.readGoModule(); err != nil {
 		return err
 	}
-	if err := b.readComposeName(); err != nil {
+	if err := b.readReference(); err != nil {
 		return err
 	}
 	if err := b.assignOwnership(); err != nil {
+		return err
+	}
+	if err := b.checkNameRules(); err != nil {
 		return err
 	}
 	b.checkTargets()
@@ -455,7 +471,7 @@ func (b *builder) specOf(p string) *specDoc {
 
 func (b *builder) assignOwnership() error {
 	for _, p := range b.tracked {
-		if isCompositionRoot(p) || b.underUnmanagedStack(p) {
+		if p == ReferencePath || isCompositionRoot(p) || b.underUnmanagedStack(p) {
 			continue
 		}
 		if spec := b.specOf(p); spec != nil {
@@ -531,31 +547,6 @@ func isText(data []byte) bool {
 		}
 	}
 	return true
-}
-
-func (b *builder) readComposeName() error {
-	if !b.set[composePath] {
-		b.addPlain(CodeComposeNameInvalid, composePath, "file is not tracked")
-		return nil
-	}
-	data, symlink, err := b.readFile(composePath, maxFileBytes)
-	if err != nil {
-		return err
-	}
-	if symlink {
-		return nil
-	}
-	firstLine := string(data)
-	if end := strings.IndexByte(firstLine, '\n'); end >= 0 {
-		firstLine = firstLine[:end]
-	}
-	name, found := strings.CutPrefix(firstLine, "name: ")
-	if !found || !composeNamePattern.MatchString(name) {
-		b.addPlain(CodeComposeNameInvalid, composePath, "line 1 must be \"name: <name>\" with a lowercase name")
-		return nil
-	}
-	b.composeName = name
-	return nil
 }
 
 func (b *builder) readGoModule() error {
@@ -654,12 +645,12 @@ func (b *builder) reservedTarget(doc *moduleDoc, target string) string {
 // assemble builds the catalog value from the loaded documents.
 func (b *builder) assemble(generator string) Catalog {
 	c := Catalog{
-		Schema:      SchemaVersion,
-		Generator:   generator,
-		GoModule:    b.goModule,
-		ComposeName: b.composeName,
-		Specs:       []SpecEntry{},
-		Stacks:      []StackEntry{},
+		Schema:    SchemaVersion,
+		Generator: generator,
+		GoModule:  b.goModule,
+		Reference: b.reference,
+		Specs:     []SpecEntry{},
+		Stacks:    []StackEntry{},
 	}
 	for _, spec := range b.specs {
 		tags := append([]string{}, spec.spec.TCKTags...)
@@ -685,7 +676,7 @@ func (b *builder) assemble(generator string) Catalog {
 		var entries []ModuleEntry
 		for _, doc := range b.modules {
 			if doc.stack.name == stack.name && !doc.duplicate {
-				entries = append(entries, moduleEntry(doc))
+				entries = append(entries, b.moduleEntry(doc))
 			}
 		}
 		if len(entries) == 0 {
@@ -701,7 +692,7 @@ func (b *builder) assemble(generator string) Catalog {
 	return c
 }
 
-func moduleEntry(doc *moduleDoc) ModuleEntry {
+func (b *builder) moduleEntry(doc *moduleDoc) ModuleEntry {
 	m := doc.module
 	entry := ModuleEntry{
 		Module:          m.Module,
@@ -711,6 +702,7 @@ func moduleEntry(doc *moduleDoc) ModuleEntry {
 		RequiresModules: []Requirement{},
 		TablePrefixes:   append([]string(nil), m.TablePrefixes...),
 		Files:           sortedFiles(doc.files),
+		Names:           doc.recorded,
 	}
 	for spec, version := range m.ImplementsSpec {
 		entry.ImplementsSpec[spec] = version.String()

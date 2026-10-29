@@ -107,6 +107,7 @@ func TestDecodeRefusals(t *testing.T) {
 		}, "inside the folder"},
 		"names unknown key":        {func(l *lockfile.Lock) { l.Names["bogus"] = "x" }, "not a slot name"},
 		"names unknown stack slot": {func(l *lockfile.Lock) { l.Names["component.rust-srv"] = "x" }, "not a slot name"},
+		"names bad service key":    {func(l *lockfile.Lock) { l.Names["service.Bad_Key"] = "x" }, "not a slot name"},
 		"names empty value":        {func(l *lockfile.Lock) { l.Names["project"] = "" }, "empty value"},
 		"names component differs":  {func(l *lockfile.Lock) { l.Names["component.go-srv"] = "other" }, "must equal"},
 		"names component missing":  {func(l *lockfile.Lock) { delete(l.Names, "component.go-srv") }, "is missing"},

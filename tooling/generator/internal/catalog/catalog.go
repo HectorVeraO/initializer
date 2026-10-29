@@ -9,14 +9,17 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/semver"
 )
 
 // SchemaVersion is the only catalog schema this package reads and writes.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // CodeCatalogInvalid is the issue code of a catalog file that Decode refuses.
 const CodeCatalogInvalid = "CATALOG_INVALID"
@@ -24,12 +27,14 @@ const CodeCatalogInvalid = "CATALOG_INVALID"
 // Catalog is the content of catalog.lock.json. Field order is the key order of
 // the encoded file.
 type Catalog struct {
-	Schema      int          `json:"schema"`
-	Generator   string       `json:"generator"`
-	GoModule    string       `json:"goModule"`
-	ComposeName string       `json:"composeName"`
-	Specs       []SpecEntry  `json:"specs"`
-	Stacks      []StackEntry `json:"stacks"`
+	Schema    int    `json:"schema"`
+	Generator string `json:"generator"`
+	GoModule  string `json:"goModule"`
+	// Reference is the slot map of .initializer/reference.json: the value every
+	// name rule matches in the source files.
+	Reference map[string]string `json:"reference"`
+	Specs     []SpecEntry       `json:"specs"`
+	Stacks    []StackEntry      `json:"stacks"`
 }
 
 // SpecEntry is one spec folder.
@@ -59,7 +64,20 @@ type ModuleEntry struct {
 	RequiresCore    string            `json:"requiresCore,omitempty"`
 	RequiresModules []Requirement     `json:"requiresModules"`
 	TablePrefixes   []string          `json:"tablePrefixes,omitempty"`
+	Names           []NameRule        `json:"names,omitempty"`
 	Files           []File            `json:"files"`
+}
+
+// NameRule is one name rule of a module manifest as the catalog records it.
+type NameRule struct {
+	// Path is the source path of the file the rule rewrites.
+	Path string `json:"path"`
+	// Text is the rule text with %{slot} placeholders.
+	Text string `json:"text"`
+	// Blocks lists the marker blocks that enclose the rule's occurrences in
+	// the source file, sorted: "" for outside any block, "module:<id>",
+	// "stack:<id>".
+	Blocks []string `json:"blocks"`
 }
 
 // Requirement is one element of requiresModules.
@@ -94,6 +112,7 @@ func Encode(c Catalog) ([]byte, error) {
 // and {} instead of null.
 func normalize(c Catalog) Catalog {
 	out := c
+	out.Reference = nonNilMap(c.Reference)
 	out.Specs = make([]SpecEntry, len(c.Specs))
 	for i, spec := range c.Specs {
 		spec.TCKTags = nonNilStrings(spec.TCKTags)
@@ -110,6 +129,10 @@ func normalize(c Catalog) Catalog {
 				module.RequiresModules = []Requirement{}
 			}
 			module.Files = nonNilFiles(module.Files)
+			module.Names = append([]NameRule(nil), module.Names...)
+			for k := range module.Names {
+				module.Names[k].Blocks = nonNilStrings(module.Names[k].Blocks)
+			}
 			modules[j] = module
 		}
 		stack.Modules = modules
@@ -139,10 +162,7 @@ func nonNilFiles(files []File) []File {
 	return files
 }
 
-var (
-	sha256Pattern      = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	composeNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
-)
+var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // Decode reads a catalog strictly: unknown keys, trailing data, a wrong schema,
 // malformed versions or hashes, and unsorted or duplicate lists are refused.
@@ -180,14 +200,12 @@ func (v *validator) add(pointer, message string) {
 
 func (v *validator) catalog(c Catalog) {
 	if c.Schema != SchemaVersion {
-		v.add("/schema", "must be the number 1")
+		v.add("/schema", "must be the number 2")
 	}
 	if c.Generator == "" {
 		v.add("/generator", "must not be empty")
 	}
-	if !composeNamePattern.MatchString(c.ComposeName) {
-		v.add("/composeName", "must match ^[a-z][a-z0-9-]*$")
-	}
+	v.reference(c.Reference)
 	specNames := make([]string, len(c.Specs))
 	for i, spec := range c.Specs {
 		specNames[i] = spec.Spec
@@ -226,9 +244,68 @@ func (v *validator) stack(pointer string, stack StackEntry) {
 			}
 		}
 		v.sortedStrings(at+"/tablePrefixes", module.TablePrefixes)
+		v.nameRules(at+"/names", module.Names)
 		v.files(at+"/files", module.Files)
 	}
 	v.sortedStrings(pointer+"/modules", names)
+}
+
+// reference checks that every key is a slot of the stack table and every value
+// is not empty.
+func (v *validator) reference(slots map[string]string) {
+	var stacks []string
+	for _, info := range manifest.Stacks() {
+		stacks = append(stacks, info.ID)
+	}
+	keys := make([]string, 0, len(slots))
+	for key := range slots {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		pointer := "/reference" + issue.Pointer(key)
+		switch {
+		case !names.IsSlot(key, stacks):
+			v.add(pointer, "key is not a slot name")
+		case slots[key] == "":
+			v.add(pointer, "must not be empty")
+		}
+	}
+}
+
+// nameRules checks the order, the text and the blocks of the rules of a module.
+func (v *validator) nameRules(pointer string, rules []NameRule) {
+	for i, rule := range rules {
+		at := fmt.Sprintf("%s/%d", pointer, i)
+		if !validTrackedPath(rule.Path) {
+			v.add(at+"/path", "must be a repo-relative path")
+		}
+		if _, err := names.Slots(rule.Text); err != nil {
+			v.add(at+"/text", err.Error())
+		}
+		v.sortedStrings(at+"/blocks", rule.Blocks)
+		for j, block := range rule.Blocks {
+			if !validBlock(block) {
+				v.add(fmt.Sprintf("%s/blocks/%d", at, j), `must be "", "module:<id>" or "stack:<id>"`)
+			}
+		}
+		if i > 0 {
+			previous := rules[i-1]
+			isSorted := previous.Path < rule.Path || (previous.Path == rule.Path && previous.Text < rule.Text)
+			if !isSorted {
+				v.add(at, "rules must be sorted by path then text and unique")
+			}
+		}
+	}
+}
+
+// validBlock reports whether b names no block, a module block or a stack block.
+func validBlock(b string) bool {
+	if b == "" {
+		return true
+	}
+	kind, id, found := strings.Cut(b, ":")
+	return found && (kind == "module" || kind == "stack") && id != ""
 }
 
 func (v *validator) version(pointer, value string) {

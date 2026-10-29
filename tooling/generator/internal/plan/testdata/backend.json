@@ -1,8 +1,8 @@
 {
-  "schema": 1,
+  "schema": 2,
   "generator": "0.1.0",
   "goModule": "example.com/fixture/srv",
-  "composeName": "fixture-app",
+  "reference": {"project": "fixture-app", "envPrefix": "FIXTURE_APP", "component.go-srv": "go-srv", "component.ng-web": "ng-web"},
   "specs": [
     {"spec": "core", "version": "0.1.0", "tckTags": ["@core", "@otel"], "tckEnv": {}, "files": []},
     {"spec": "feature-flags", "version": "0.1.0", "tckTags": ["@feature-flags"], "tckEnv": {"APP_FLAGS_FILE": "specs/feature-flags/tck/fixtures/flags.yaml"}, "files": []},
