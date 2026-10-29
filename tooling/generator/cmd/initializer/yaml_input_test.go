@@ -47,6 +47,15 @@ func TestAFlagOverridesAValueOfTheYAMLFile(t *testing.T) {
 	}
 }
 
+func TestTheSelectionAliasLoadsAYAMLFile(t *testing.T) {
+	e := newEnv(t)
+	file := writeNamed(t, "acme.yaml", validYAMLSelection)
+	code, _, stderr := executeIn(t, t.TempDir(), "", e.inputArgs("--selection", file)...)
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+}
+
 func TestStdinIsJSONWhenItStartsWithABraceElseYAML(t *testing.T) {
 	e := newEnv(t)
 	cases := map[string]string{
