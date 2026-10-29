@@ -278,7 +278,7 @@ func TestTheRecordedSelectionHoldsTheComponentsAsGivenAndReplays(t *testing.T) {
 
 	second := first
 	second.out = filepath.Join(filepath.Dir(first.out), "again")
-	if code, _, stderr := execute(t, second.args("--selection", filepath.Join(first.out, "initializer.selection.json"))...); code != exitOK {
+	if code, _, stderr := execute(t, second.args("-f", filepath.Join(first.out, "initializer.selection.json"))...); code != exitOK {
 		t.Fatalf("replay: %d %s", code, stderr)
 	}
 	left, right := tree(t, first.out), tree(t, second.out)
@@ -313,7 +313,7 @@ func TestSeveralComponentsOfOneStackInAFileAreRefused(t *testing.T) {
 	body := `{"schema":2,"project":{"name":"acme-backend","goModule":"example.com/acme/backend"},"stacks":["go-srv"],"modules":["parameters"],
 "components":[{"stack":"go-srv","name":"acme-srv"},{"stack":"go-srv","name":"other-srv"}]}`
 	file := writeSelection(t, body)
-	code, stdout, _ := executeJSON(t, e.args("--selection", file)...)
+	code, stdout, _ := executeJSON(t, e.args("-f", file)...)
 	found := issueArray(t, stdout)
 	if code != exitIssues || len(found) != 1 || found[0]["code"] != "COMPONENT_MULTI_UNSUPPORTED" ||
 		found[0]["path"] != filepath.ToSlash(file)+"#/components" {
@@ -400,7 +400,7 @@ func TestANameProblemAndAFileProblemAreReportedTogether(t *testing.T) {
 	e := newEnv(t)
 	body := `{"schema":2,"project":{"name":"Bad_Name","goModule":"example.com/acme/backend"},"stacks":["go-srv"],"modules":["parameters"],
 "components":[{"stack":"go-srv","name":"Bad_Srv"},{"stack":"ng-web","extra":1}]}`
-	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, body))...)
+	code, stdout, _ := executeJSON(t, e.args("-f", writeSelection(t, body))...)
 	var codes []string
 	for _, issue := range issueArray(t, stdout) {
 		codes = append(codes, issue["code"]+" "+issue["path"][strings.Index(issue["path"], "#"):])
@@ -416,7 +416,7 @@ func TestANameProblemAndAFileProblemAreReportedTogether(t *testing.T) {
 func TestComponentsUnderSchema1AreRefused(t *testing.T) {
 	e := newEnv(t)
 	body := strings.Replace(validSelection, `"schema": 1,`, `"schema": 1, "components": [],`, 1)
-	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, body))...)
+	code, stdout, _ := executeJSON(t, e.args("-f", writeSelection(t, body))...)
 	found := issueArray(t, stdout)
 	if code != exitIssues || len(found) != 1 || found[0]["message"] != "components needs schema 2" {
 		t.Fatalf("exit %d issues %v", code, found)
@@ -427,7 +427,7 @@ func TestAFileWithComponentsGenerates(t *testing.T) {
 	e := newEnv(t)
 	body := `{"schema":2,"project":{"name":"acme-backend","goModule":"example.com/acme/backend"},"stacks":["go-srv","ng-web"],"modules":["parameters"],
 "components":[{"stack":"go-srv","name":"acme-srv"},{"stack":"ng-web"}]}`
-	code, _, stderr := execute(t, e.args("--selection", writeSelection(t, body))...)
+	code, _, stderr := execute(t, e.args("-f", writeSelection(t, body))...)
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
@@ -513,7 +513,7 @@ func TestEveryCISelectionDeliversUnderItsComponentFolders(t *testing.T) {
 				t.Fatal(err)
 			}
 			out := filepath.Join(t.TempDir(), "out")
-			code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--selection", writeSelection(t, string(selection)), out)
+			code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "-f", writeSelection(t, string(selection)), out)
 			if code != exitOK {
 				t.Fatalf("generate exit %d: %s", code, stderr)
 			}

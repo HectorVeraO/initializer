@@ -231,25 +231,6 @@ func lastLines(stderr string) string {
 	return strings.Join(kept, "\n")
 }
 
-func TestAliasWarningTravelsInTextAndInTheDocument(t *testing.T) {
-	e := newEnv(t)
-	sel := writeSelection(t, validSelection)
-	code, stdout, stderr := executeJSON(t, "generate", "--root", e.root, "--catalog", e.catalog, "--out", e.out, "--selection", sel)
-	if code != exitOK {
-		t.Fatalf("exit %d: %s", code, stderr)
-	}
-	var doc generatedDoc
-	decodeDocument(t, stdout, &doc)
-	if len(doc.Warnings) != 2 || doc.Warnings[0].Code != "FLAG_DEPRECATED" ||
-		doc.Warnings[0].Message != "--out is deprecated" || doc.Warnings[0].Hint != "pass the folder as an argument: initializer generate <dir>" ||
-		doc.Warnings[1].Message != "--selection is deprecated" {
-		t.Fatalf("warnings = %+v", doc.Warnings)
-	}
-	if got := linesWithPrefix(stderr, "warning:"); len(got) != 2 {
-		t.Fatalf("stderr keeps one warning line per alias: %q", stderr)
-	}
-}
-
 func TestLogEventsAppearOnlyWithLogJSON(t *testing.T) {
 	e := newEnv(t)
 	sel := writeSelection(t, validSelection)
@@ -258,17 +239,17 @@ func TestLogEventsAppearOnlyWithLogJSON(t *testing.T) {
 		t.Fatalf("default run: exit %d, stderr %q", code, stderr)
 	}
 	second := newEnv(t)
-	code, _, stderr = executeLogged(t, "generate", "--root", second.root, "--catalog", second.catalog, "--out", second.out, "--selection", sel)
+	code, _, stderr = executeLogged(t, "generate", "--root", second.root, "--catalog", second.catalog, second.out, "-f", sel)
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
-	for _, event := range []string{"selection_decoded", "project_generated", "flag_deprecated"} {
+	for _, event := range []string{"selection_decoded", "project_generated"} {
 		if !strings.Contains(stderr, `"msg":"`+event+`"`) {
 			t.Errorf("no %s event: %s", event, stderr)
 		}
 	}
-	if !strings.Contains(stderr, `"flag":"--out"`) {
-		t.Errorf("flag_deprecated names the flag: %s", stderr)
+	if strings.Contains(stderr, "flag_deprecated") {
+		t.Errorf("no deprecation event exists: %s", stderr)
 	}
 }
 
@@ -293,7 +274,7 @@ func TestCatalogBuildTextResult(t *testing.T) {
 
 func TestVerifyTextAndJSONReportDifferences(t *testing.T) {
 	e := newEnv(t)
-	if code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...); code != exitOK {
+	if code, _, stderr := execute(t, e.args("-f", writeSelection(t, validSelection))...); code != exitOK {
 		t.Fatalf("generate: %d %s", code, stderr)
 	}
 	srv := folderOf(t, e.out, "go-srv")
@@ -318,15 +299,15 @@ func TestJSONRunsWriteOneDocumentOnTheRightStream(t *testing.T) {
 	e := newEnv(t)
 	sel := writeSelection(t, validSelection)
 	generated := newEnv(t)
-	if code, _, stderr := execute(t, generated.args("--selection", sel)...); code != exitOK {
+	if code, _, stderr := execute(t, generated.args("-f", sel)...); code != exitOK {
 		t.Fatalf("generate: %d %s", code, stderr)
 	}
 	cases := map[string]struct {
 		args []string
 		code int
 	}{
-		"ok":          {e.args("--selection", sel), exitOK},
-		"issues":      {e.args("--selection", writeSelection(t, strings.Replace(validSelection, `"parameters"`, `"nope"`, 1))), exitIssues},
+		"ok":          {e.args("-f", sel), exitOK},
+		"issues":      {e.args("-f", writeSelection(t, strings.Replace(validSelection, `"parameters"`, `"nope"`, 1))), exitIssues},
 		"usage":       {[]string{"generate", "--bogus"}, exitUsage},
 		"internal":    {[]string{"verify", t.TempDir()}, exitInternal},
 		"verify ok":   {[]string{"verify", generated.out}, exitOK},

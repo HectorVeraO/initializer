@@ -51,7 +51,7 @@ func TestTheSelectionAliasLoadsAYAMLFile(t *testing.T) {
 	e := newEnv(t)
 	wd := t.TempDir()
 	file := writeNamed(t, "acme.yaml", validYAMLSelection)
-	code, _, stderr := executeIn(t, wd, "", e.inputArgs("--selection", file)...)
+	code, _, stderr := executeIn(t, wd, "", e.inputArgs("-f", file)...)
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}

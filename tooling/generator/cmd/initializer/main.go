@@ -158,7 +158,7 @@ func registerFlags(set *flagSet, cmd *Command) (opts any, out *outputOptions) {
 }
 
 // runCommand scans args against cmd's flags, reports every command-line
-// problem at once, warns about deprecated spellings and runs the command.
+// problem at once and runs the command.
 func runCommand(ctx *Context, cmd *Command, args []string) int {
 	set := newFlagSet(strings.Join(cmd.Path, " "))
 	opts, out := registerFlags(set, cmd)
@@ -191,15 +191,6 @@ func runCommand(ctx *Context, cmd *Command, args []string) int {
 		}
 		return reportProblemsAndIssues(ctx, problems, issues, view)
 	}
-	for _, spec := range set.specs {
-		if spec.Deprecated == "" || set.given[spec.Name] == 0 {
-			continue
-		}
-		message := fmt.Sprintf("--%s is deprecated", spec.Name)
-		fmt.Fprintf(ctx.Stderr, "warning: %s; %s\n", message, spec.Deprecated)
-		ctx.Warnings = append(ctx.Warnings, Warning{Code: codeFlagDeprecated, Message: message, Hint: spec.Deprecated})
-		ctx.Logger.Warn("flag_deprecated", slog.String("flag", "--"+spec.Name))
-	}
 	return cmd.Run(ctx, opts, positionals)
 }
 
@@ -231,12 +222,8 @@ func writeOutput(path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func runVerify(ctx *Context, opts any, positionals []string) int {
-	o := opts.(*verifyOptions)
+func runVerify(ctx *Context, _ any, positionals []string) int {
 	dir := "."
-	if o.project != "" {
-		dir = o.project
-	}
 	if len(positionals) > 0 {
 		dir = positionals[0]
 	}

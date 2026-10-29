@@ -15,7 +15,7 @@ func generateAcme(t *testing.T, stacks string) string {
 	t.Helper()
 	root, catalogPath := realCatalog(t)
 	out := filepath.Join(t.TempDir(), "out")
-	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out,
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out,
 		"--name", "acme", "--go-module", "example.com/acme", "--stacks", stacks, "--all-modules")
 	if code != exitOK {
 		t.Fatalf("generate %s exit %d: %s", stacks, code, stderr)
@@ -171,7 +171,7 @@ func TestGeneratedComposeConfig(t *testing.T) {
 		name := strings.TrimSuffix(filepath.Base(selection), ".json")
 		t.Run(name, func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out")
-			code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, "--out", out, "--selection", selection)
+			code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out, "-f", selection)
 			if code != exitOK {
 				t.Fatalf("generate exit %d: %s", code, stderr)
 			}

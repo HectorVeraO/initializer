@@ -75,7 +75,7 @@ func (o *generateOptions) flagsOf() manifest.Flags {
 func (o *generateOptions) readSelection(ctx *Context, dir string) (inputRun, *readFailure) {
 	run := inputRun{view: issueView{dir: dir, components: typedComponents(o.components)}}
 	var file *manifest.Input
-	if path := o.filePath(); path != "" {
+	if path := o.file; path != "" {
 		data, source, err := readSelectionFile(ctx, path)
 		if err != nil {
 			return run, &readFailure{err}
@@ -144,15 +144,15 @@ func readSelectionFile(ctx *Context, path string) (data []byte, source string, e
 // command-line problems; it skips an input file it cannot read.
 func generateIssues(ctx *Context, opts any, positionals []string) ([]issue.Issue, issueView) {
 	o := opts.(*generateOptions)
-	dir := o.out
+	dir := ""
 	if len(positionals) > 0 {
 		dir = positionals[0]
 	}
 	if o.given == nil {
 		o.given = map[string]int{}
 	}
-	if path := o.filePath(); path != "" && !isKnownPath(path) {
-		o.file, o.selection = "", ""
+	if path := o.file; path != "" && !isKnownPath(path) {
+		o.file = ""
 	}
 	run, failure := o.readSelection(ctx, dir)
 	if failure != nil {
@@ -163,7 +163,7 @@ func generateIssues(ctx *Context, opts any, positionals []string) ([]issue.Issue
 
 func runGenerate(ctx *Context, opts any, positionals []string) int {
 	o := opts.(*generateOptions)
-	dir := o.out
+	dir := ""
 	if len(positionals) > 0 {
 		dir = positionals[0]
 	}

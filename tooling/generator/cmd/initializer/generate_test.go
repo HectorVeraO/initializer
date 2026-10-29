@@ -35,7 +35,7 @@ func newEnv(t *testing.T) env {
 }
 
 func (e env) args(extra ...string) []string {
-	base := []string{"generate", "--root", e.root, "--catalog", e.catalog, "--out", e.out}
+	base := []string{"generate", "--root", e.root, "--catalog", e.catalog, e.out}
 	return append(base, extra...)
 }
 
@@ -71,7 +71,7 @@ func issueCodes(t *testing.T, stdout string) string {
 
 func TestGenerateWritesTheProjectAndReportsTheCount(t *testing.T) {
 	e := newEnv(t)
-	code, stdout, stderr := executeLogged(t, e.args("--selection", writeSelection(t, validSelection), "--format", "json")...)
+	code, stdout, stderr := executeLogged(t, e.args("-f", writeSelection(t, validSelection), "--format", "json")...)
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
@@ -97,7 +97,7 @@ func TestGenerateWritesTheProjectAndReportsTheCount(t *testing.T) {
 
 func TestGenerateFromFlagsEqualsGenerateFromTheFile(t *testing.T) {
 	a, b := newEnv(t), newEnv(t)
-	if code, _, stderr := execute(t, a.args("--selection", writeSelection(t, validSelection))...); code != exitOK {
+	if code, _, stderr := execute(t, a.args("-f", writeSelection(t, validSelection))...); code != exitOK {
 		t.Fatalf("selection file: %d %s", code, stderr)
 	}
 	flags := b.args("--name", "acme-backend", "--go-module", "example.com/acme/backend", "--stacks", "go-srv", "--modules", "parameters")
@@ -123,7 +123,7 @@ func TestGenerateFromTheRecordedSelectionReproducesTheProject(t *testing.T) {
 	second := first
 	second.out = filepath.Join(filepath.Dir(first.out), "again")
 	recorded := filepath.Join(first.out, "initializer.selection.json")
-	if code, _, stderr := execute(t, second.args("--selection", recorded)...); code != exitOK {
+	if code, _, stderr := execute(t, second.args("-f", recorded)...); code != exitOK {
 		t.Fatalf("second: %d %s", code, stderr)
 	}
 	left, right := tree(t, first.out), tree(t, second.out)
@@ -146,7 +146,7 @@ func TestNonEmptyOutputIsRefusedAndNothingIsWritten(t *testing.T) {
 	if err := os.WriteFile(keep, []byte("mine"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, stderr := executeJSON(t, e.args("--selection", writeSelection(t, validSelection))...)
+	code, stdout, stderr := executeJSON(t, e.args("-f", writeSelection(t, validSelection))...)
 	if code != exitIssues || issueCodes(t, stdout) != "OUTPUT_NOT_EMPTY" {
 		t.Fatalf("exit %d, codes %q, stdout %q", code, issueCodes(t, stdout), stdout)
 	}
@@ -163,7 +163,7 @@ func TestOutputThatIsAFileIsRefused(t *testing.T) {
 	if err := os.WriteFile(e.out, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, validSelection))...)
+	code, stdout, _ := executeJSON(t, e.args("-f", writeSelection(t, validSelection))...)
 	if code != exitIssues || issueCodes(t, stdout) != "OUTPUT_NOT_EMPTY" {
 		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stdout))
 	}
@@ -172,7 +172,7 @@ func TestOutputThatIsAFileIsRefused(t *testing.T) {
 func TestPlanIssuesWriteNothing(t *testing.T) {
 	e := newEnv(t)
 	unknown := strings.Replace(validSelection, `"parameters"`, `"nonexistent"`, 1)
-	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, unknown))...)
+	code, stdout, _ := executeJSON(t, e.args("-f", writeSelection(t, unknown))...)
 	if code != exitIssues || issueCodes(t, stdout) != "MODULE_UNKNOWN" {
 		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stdout))
 	}
@@ -206,7 +206,7 @@ func TestCatalogFromAnotherTreeIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.root = other
-	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, validSelection))...)
+	code, stdout, _ := executeJSON(t, e.args("-f", writeSelection(t, validSelection))...)
 	if code != exitIssues || issueCodes(t, stdout) != "CATALOG_FILE_MISMATCH" {
 		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stdout))
 	}
@@ -231,7 +231,7 @@ func TestCatalogFromAnotherGeneratorVersionIsRefused(t *testing.T) {
 	if err := os.WriteFile(e.catalog, []byte(changed), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, _ := executeJSON(t, e.args("--selection", writeSelection(t, validSelection))...)
+	code, stdout, _ := executeJSON(t, e.args("-f", writeSelection(t, validSelection))...)
 	if code != exitIssues || issueCodes(t, stdout) != "CATALOG_GENERATOR_MISMATCH" {
 		t.Fatalf("exit %d, codes %q", code, issueCodes(t, stdout))
 	}
@@ -242,13 +242,13 @@ func TestUnreadableOrUndecodableCatalogExitsThree(t *testing.T) {
 	sel := writeSelection(t, validSelection)
 	missing := e
 	missing.catalog = filepath.Join(t.TempDir(), "nope.json")
-	if code, _, _ := execute(t, missing.args("--selection", sel)...); code != exitInternal {
+	if code, _, _ := execute(t, missing.args("-f", sel)...); code != exitInternal {
 		t.Errorf("missing catalog: exit %d", code)
 	}
 	if err := os.WriteFile(e.catalog, []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, _, _ := execute(t, e.args("--selection", sel)...); code != exitInternal {
+	if code, _, _ := execute(t, e.args("-f", sel)...); code != exitInternal {
 		t.Errorf("undecodable catalog: exit %d", code)
 	}
 }
@@ -263,7 +263,7 @@ func TestCatalogPathOutsideTheRepositoryExitsThreeBeforeAnyWrite(t *testing.T) {
 	if err := os.WriteFile(e.catalog, []byte(changed), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...)
+	code, _, stderr := execute(t, e.args("-f", writeSelection(t, validSelection))...)
 	if code != exitInternal {
 		t.Fatalf("exit %d", code)
 	}
@@ -305,7 +305,7 @@ func TestLeakedSourceModulePathExitsThreeAndWritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.root = other
-	code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...)
+	code, _, stderr := execute(t, e.args("-f", writeSelection(t, validSelection))...)
 	if code != exitInternal || !strings.Contains(stderr, "leak.txt") {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
@@ -316,11 +316,11 @@ func TestLeakedSourceModulePathExitsThreeAndWritesNothing(t *testing.T) {
 
 func TestVerifyExitCodes(t *testing.T) {
 	e := newEnv(t)
-	if code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...); code != exitOK {
+	if code, _, stderr := execute(t, e.args("-f", writeSelection(t, validSelection))...); code != exitOK {
 		t.Fatalf("generate: %d %s", code, stderr)
 	}
-	code, stdout, stderr := executeJSON(t, "verify", "--project", e.out)
-	if code != exitOK || stdout != `{"schema":1,"ok":true,"project":"acme-backend","differences":[],"warnings":[{"code":"FLAG_DEPRECATED","message":"--project is deprecated","hint":"pass the folder as an argument: initializer verify <dir>"}]}`+"\n" {
+	code, stdout, stderr := executeJSON(t, "verify", e.out)
+	if code != exitOK || stdout != `{"schema":1,"ok":true,"project":"acme-backend","differences":[],"warnings":[]}`+"\n" {
 		t.Fatalf("fresh project: exit %d, stdout %q, stderr %s", code, stdout, stderr)
 	}
 
@@ -335,7 +335,7 @@ func TestVerifyExitCodes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(e.out, srv, "internal", "platform", "identity", "new.go"), []byte("package identity\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, stdout, stderr = executeLogged(t, "verify", "--project", e.out, "--format", "json")
+	code, stdout, stderr = executeLogged(t, "verify", e.out, "--format", "json")
 	var report struct {
 		OK          bool
 		Differences []struct{ Code, Path, Message string }
@@ -364,7 +364,7 @@ func TestVerifyExitCodes(t *testing.T) {
 	if err := os.Remove(filepath.Join(e.out, "initializer.lock.json")); err != nil {
 		t.Fatal(err)
 	}
-	if code, _, _ := execute(t, "verify", "--project", e.out); code != exitInternal {
+	if code, _, _ := execute(t, "verify", e.out); code != exitInternal {
 		t.Fatalf("missing lock: exit %d", code)
 	}
 }

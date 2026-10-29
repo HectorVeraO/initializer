@@ -27,7 +27,7 @@ type Command struct {
 	// Flags registers the flags and returns the bound options.
 	Flags func(set *flagSet) any
 	// Check returns the command-line problems that need the whole line: required
-	// flags, exclusive flags and aliases given with their new spelling.
+	// flags and exclusive flags.
 	Check func(set *flagSet, opts any, positionals []string) []Problem
 	// Bind copies what the scan saw (which flags were given) into the options.
 	Bind func(set *flagSet, opts any)
@@ -48,21 +48,13 @@ func commandTable() []*Command {
 }
 
 type generateOptions struct {
-	root, catalog, out, file, selection, name, goModule, stacks, modules string
-	allModules, dryRun                                                   bool
-	components                                                           []componentEntry
-	dbName, dbUser, displayName, portBand                                string
-	services                                                             []serviceEntry
+	root, catalog, file, name, goModule, stacks, modules string
+	allModules, dryRun                                   bool
+	components                                           []componentEntry
+	dbName, dbUser, displayName, portBand                string
+	services                                             []serviceEntry
 	// given counts how many times the scan saw each flag, by long name.
 	given map[string]int
-}
-
-// filePath returns the selection file, from -f or its hidden alias.
-func (o *generateOptions) filePath() string {
-	if o.file != "" {
-		return o.file
-	}
-	return o.selection
 }
 
 func generateCommand() *Command {
@@ -104,10 +96,6 @@ func generateCommand() *Command {
 				Usage: "Host port band 1NNxx, from 100 to 654", Default: "101"})
 			set.boolean(&o.dryRun, flagSpec{Name: "dry-run", Usage: "Print what would be generated and write nothing", Default: "false"})
 			registerSourceFlags(set, &o.root, &o.catalog)
-			set.str(&o.out, flagSpec{Name: "out", Placeholder: "DIR", Hidden: true,
-				Deprecated: "pass the folder as an argument: initializer generate <dir>"})
-			set.str(&o.selection, flagSpec{Name: "selection", Placeholder: "PATH", Hidden: true,
-				Deprecated: "use -f <file>"})
 			return o
 		},
 		Check:  checkGenerate,
@@ -172,17 +160,9 @@ func checkGenerate(set *flagSet, opts any, positionals []string) []Problem {
 	var problems []Problem
 	problems = append(problems, duplicateComponentProblems(o.components)...)
 	problems = append(problems, duplicateServiceProblems(o.services)...)
-	if set.given["out"] > 0 && len(positionals) > 0 {
-		problems = append(problems, Problem{Arg: "--out", Message: "pass the folder once"})
-	}
-	if set.given["selection"] > 0 && set.given["file"] > 0 {
-		problems = append(problems, Problem{Arg: "--selection", Message: "pass the file once"})
-	}
-	for _, input := range []struct{ flag, path string }{{"--file", o.file}, {"--selection", o.selection}} {
-		if input.path != "" && !isKnownPath(input.path) {
-			problems = append(problems, Problem{Arg: input.flag,
-				Message: fmt.Sprintf("%q has an unsupported input format", input.path), Code: codeInputFormatUnknown})
-		}
+	if o.file != "" && !isKnownPath(o.file) {
+		problems = append(problems, Problem{Arg: "--file",
+			Message: fmt.Sprintf("%q has an unsupported input format", o.file), Code: codeInputFormatUnknown})
 	}
 	if o.allModules && set.given["modules"] > 0 {
 		problems = append(problems, Problem{Arg: "--all-modules", Message: "cannot be combined with --modules"})
@@ -201,8 +181,6 @@ func requiredFlags(set *flagSet, names ...string) []Problem {
 	return problems
 }
 
-type verifyOptions struct{ project string }
-
 func verifyCommand() *Command {
 	return &Command{
 		Path:    []string{"verify"},
@@ -212,18 +190,6 @@ func verifyCommand() *Command {
 		Description: "Compare the files of a generated project with the hashes recorded in its\n" +
 			"initializer.lock.json. DIR defaults to the working directory.",
 		MaxArgs: 1,
-		Flags: func(set *flagSet) any {
-			o := &verifyOptions{}
-			set.str(&o.project, flagSpec{Name: "project", Placeholder: "DIR", Hidden: true,
-				Deprecated: "pass the folder as an argument: initializer verify <dir>"})
-			return o
-		},
-		Check: func(set *flagSet, _ any, positionals []string) []Problem {
-			if set.given["project"] > 0 && len(positionals) > 0 {
-				return []Problem{{Arg: "--project", Message: "pass the folder once"}}
-			}
-			return nil
-		},
 		Examples: []Example{
 			{"in a generated project", "initializer verify"},
 			{"in ./acme", "initializer verify acme"},

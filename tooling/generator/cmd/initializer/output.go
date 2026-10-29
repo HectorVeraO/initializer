@@ -25,9 +25,6 @@ const (
 // member bumps it, an added member does not.
 const documentSchema = 1
 
-// codeFlagDeprecated is the warning code of a hidden alias that was used.
-const codeFlagDeprecated = "FLAG_DEPRECATED"
-
 // Exit-3 codes.
 const (
 	codeInputUnreadable   = "INPUT_UNREADABLE"
@@ -187,6 +184,8 @@ func reportProblemsAndIssues(ctx *Context, problems []Problem, issues []issue.Is
 			fmt.Fprintf(ctx.Stderr, "error: %s: %s\n", problem.Arg, message)
 		}
 		switch {
+		case problem.Retired:
+			fmt.Fprintf(ctx.Stderr, "  hint: %s\n", problem.Suggestion)
 		case problem.Suggestion != "":
 			fmt.Fprintf(ctx.Stderr, "  hint: did you mean %q?\n", problem.Suggestion)
 		case problem.Hint != "":
