@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,5 +199,23 @@ func TestABinaryAtTheCurrentGeneratorOrWithoutACommitDoesNotWarn(t *testing.T) {
 	build := generator.Build{Version: generator.Version, Commit: c.commit, Origin: generator.OriginDevel}
 	if _, _, stderr := executeAs(t, host, build, away, "stack", "ls"); strings.Contains(stderr, "GENERATOR_STALE") {
 		t.Fatalf("a commit outside tooling/generator made the binary stale: %q", stderr)
+	}
+}
+
+func TestVersionNotesAFailedStaleCheckInsteadOfStayingSilent(t *testing.T) {
+	c, built := staleClone(t)
+	build := generator.Build{Version: generator.Version, Commit: built, Origin: generator.OriginDevel}
+	host := hostAt(c.dir, filepath.Join(t.TempDir(), "initializer"), nil)
+	realGit := source.DefaultHost().Git
+	host.Git = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "cat-file" {
+			return nil, errors.New("signal: killed")
+		}
+		return realGit(ctx, dir, args...)
+	}
+
+	code, _, stderr := executeAs(t, host, build, t.TempDir(), "version")
+	if code != exitOK || !strings.Contains(stderr, "note: could not check whether this initializer is current") {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
 }

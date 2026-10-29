@@ -105,6 +105,10 @@ func runVersion(ctx *Context, _ any, _ []string) int {
 		if staleErr == nil {
 			announceWarnings(ctx, revision, warnings)
 			ctx.Notes = notes
+		} else {
+			// version stays exit 0 like its other lookups, but says the
+			// build was not checked.
+			ctx.Notes = []string{"could not check whether this initializer is current: " + staleErr.Error()}
 		}
 		ctx.Logger.Info("sources_resolved",
 			"how", found.How, "dir", found.Dir, "commit", found.Commit, "catalog_from", "none")

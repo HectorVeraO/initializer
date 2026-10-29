@@ -177,6 +177,17 @@ func TestReadRevisionCountsAnUntrackedCataloguedFile(t *testing.T) {
 	}
 }
 
+func TestReadRevisionCountsARenamedCataloguedFile(t *testing.T) {
+	dir := newRepo(t)
+	writeRepoFile(t, dir, "owned.txt", "one")
+	commitAll(t, dir, "files")
+	runGitCmd(t, dir, "mv", "owned.txt", "moved.txt")
+	got, err := ReadRevision(background(), Root{Dir: dir}, realHost(dir), []string{"owned.txt"})
+	if err != nil || !got.Modified {
+		t.Fatalf("revision = %+v err = %v", got, err)
+	}
+}
+
 func TestReadRevisionCountsADeletedCataloguedFile(t *testing.T) {
 	dir := newRepo(t)
 	writeRepoFile(t, dir, "owned.txt", "one")
