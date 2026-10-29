@@ -337,7 +337,7 @@ func FuzzParseYAML(f *testing.F) {
 	})
 }
 
-func FuzzParseYAMLIssuesCarryTheirLine(f *testing.F) {
+func FuzzYAMLIssueLines(f *testing.F) {
 	for _, seed := range []string{"a: 1\na: 2\n", "[", "a: &x 1\n", "a: 1\n---\nb: 1\n", "a: 010\n"} {
 		f.Add([]byte(seed))
 	}
