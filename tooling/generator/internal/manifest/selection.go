@@ -15,10 +15,61 @@ type Project struct {
 }
 
 // Component is one components[] entry as given. Name is empty when the entry
-// does not name the component.
+// does not name the component; every other empty field takes the top-level
+// value or the derived default.
 type Component struct {
-	Stack string `json:"stack"`
-	Name  string `json:"name,omitempty"`
+	Stack    string            `json:"stack"`
+	Name     string            `json:"name,omitempty"`
+	Backend  string            `json:"backend,omitempty"`
+	Modules  []string          `json:"modules,omitempty"`
+	GoModule string            `json:"goModule,omitempty"`
+	Database *Database         `json:"database,omitempty"`
+	Services map[string]string `json:"services,omitempty"`
+	// HasModules is true when modules was given, also as an empty list.
+	HasModules bool `json:"-"`
+}
+
+// componentDocument is the wire shape of Component: modules is a pointer so an
+// empty list differs from an absent one.
+type componentDocument struct {
+	Stack    string            `json:"stack"`
+	Name     string            `json:"name,omitempty"`
+	Backend  string            `json:"backend,omitempty"`
+	Modules  *[]string         `json:"modules,omitempty"`
+	GoModule string            `json:"goModule,omitempty"`
+	Database *Database         `json:"database,omitempty"`
+	Services map[string]string `json:"services,omitempty"`
+}
+
+// MarshalJSON writes modules when HasModules is true, also as [].
+func (c Component) MarshalJSON() ([]byte, error) {
+	document := componentDocument{
+		Stack: c.Stack, Name: c.Name, Backend: c.Backend, GoModule: c.GoModule,
+		Database: c.Database, Services: c.Services,
+	}
+	if c.HasModules || len(c.Modules) > 0 {
+		modules := nonNil(c.Modules)
+		document.Modules = &modules
+	}
+	return json.Marshal(document)
+}
+
+// UnmarshalJSON reads a component strictly and records whether modules was given.
+func (c *Component) UnmarshalJSON(data []byte) error {
+	var document componentDocument
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&document); err != nil {
+		return err
+	}
+	*c = Component{
+		Stack: document.Stack, Name: document.Name, Backend: document.Backend, GoModule: document.GoModule,
+		Database: document.Database, Services: document.Services,
+	}
+	if document.Modules != nil {
+		c.Modules, c.HasModules = *document.Modules, true
+	}
+	return nil
 }
 
 // Database names the database and its owner role, as given.

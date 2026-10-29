@@ -207,7 +207,6 @@ func TestSelectionIssuesExitOneWithSortedArray(t *testing.T) {
 		"#/modules/0":        "SELECTION_INVALID",
 		"#/project/goModule": "SELECTION_INVALID",
 		"#/project/name":     "NAME_INVALID",
-		"#/stacks":           "SELECTION_INVALID",
 	}
 	if len(issues) != len(wantCodes) {
 		t.Fatalf("want %d issues, got %v", len(wantCodes), issues)

@@ -47,8 +47,11 @@ Flags:
         Modules to install; replaces the file's list; required modules are added (default: none)
   --all-modules
         Install every module of the backend stack (default: false)
-  --component STACK=NAME
-        Name the folder of STACK's component (repeatable) (default: <name>-<suffix>)
+  --component STACK[=NAME][,KEY=VALUE...]
+        Add or override a component of STACK (repeatable). Repeat with the same
+        STACK for several components; each then needs a NAME. Keys: modules
+        (ids joined by +), go-module, db-name, db-user, service.<key>, backend.
+        (default: one component per selected stack, named <name>-<suffix>)
   --db-name NAME
         Database name (default: <name> with - replaced by _)
   --db-user NAME
@@ -79,6 +82,10 @@ Examples:
   initializer generate acme --stacks go-srv,ng-web --display-name "Acme Shop"
   # run a second project beside the first on another port band
   initializer generate acme --port-band 103
+  # name the backend and bind the console to it
+  initializer generate acme --modules identity \
+    --component go-srv=acme-srv,modules=tenancy+api-keys \
+    --component ng-web=acme-web,backend=acme-srv
   # see the resolved values without writing anything
   initializer generate acme --modules tenancy --dry-run
 `

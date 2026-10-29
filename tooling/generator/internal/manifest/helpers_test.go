@@ -21,8 +21,6 @@ func decodeInputFile(source string, data []byte) (manifest.Input, []issue.Issue)
 		return manifest.Input{}, issues
 	}
 	input, issues := manifest.DecodeInput(source, tree)
-	merged, _ := manifest.Merge(&input, mustFlags(manifest.Flags{}))
-	issues = append(issues, manifest.CheckMerged(merged)...)
 	issue.Sort(issues)
 	return input, issues
 }

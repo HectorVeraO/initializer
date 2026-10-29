@@ -141,7 +141,7 @@ func TestAnUnselectedStackIsAnUnusedOverride(t *testing.T) {
 	if len(unused) != 2 {
 		t.Fatalf("issues = %+v", issues)
 	}
-	if unused[0].Message != "/components/0: stack ng-web is not selected" || unused[0].Hint != "" {
+	if unused[0].Message != "/components/0: stack ng-web is not selected" || unused[0].Hint != "add ng-web to stacks" {
 		t.Errorf("unselected stack: %+v", unused[0])
 	}
 	if unused[1].Message != `/components/1: stack "" is not selected` {

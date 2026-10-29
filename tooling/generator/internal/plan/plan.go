@@ -185,11 +185,9 @@ func (r *resolver) selectedStacks() []int {
 	start := len(r.issues)
 	var selected []int
 	seen := map[string]bool{}
-	backends, frontends := 0, 0
 	for i, name := range r.sel.Stacks {
 		pointer := fmt.Sprintf("/stacks/%d", i)
 		if seen[name] {
-			r.add(manifest.CodeSelectionInvalid, selectionSource, pointer, "stack is listed twice")
 			continue
 		}
 		seen[name] = true
@@ -203,23 +201,12 @@ func (r *resolver) selectedStacks() []int {
 			r.add(manifest.CodeSelectionInvalid, selectionSource, pointer, "stack has no modules in the catalog")
 			continue
 		}
-		switch r.cat.Stacks[index].Role {
-		case roleBackend:
-			backends++
-		case roleFrontend:
-			frontends++
-		}
 		selected = append(selected, index)
 	}
 	if len(r.issues) > start {
 		return nil
 	}
-	if backends != 1 {
-		r.add(manifest.CodeSelectionInvalid, selectionSource, "/stacks", "must contain exactly one backend stack")
-	}
-	if frontends > 1 {
-		r.add(manifest.CodeSelectionInvalid, selectionSource, "/stacks", "must contain at most one frontend stack")
-	}
+	r.issues = append(r.issues, checkStackRoles(r.sel, r.catalogRole)...)
 	if len(r.issues) > start {
 		return nil
 	}
@@ -284,17 +271,12 @@ func (r *resolver) checkPresence(backendEntry int, closure map[string]origin) {
 		if findModule(backend, id) >= 0 {
 			continue
 		}
-		code, message := CodeModuleUnknown, "module is not in the catalog"
-		for _, stack := range r.cat.Stacks {
-			if findModule(stack, id) >= 0 {
-				code, message = catalog.CodeModuleNotInBackend, "module has no manifest in the backend stack"
-			}
-		}
+		code, message, _ := moduleMissing(r.cat, backend, id)
 		path := closure[id].path
 		if path == "" {
 			path = issue.Path(catalogSource, fmt.Sprintf("/stacks/%d", backendEntry))
 		}
-		r.issues = append(r.issues, issue.Issue{Code: code, Path: path, Message: fmt.Sprintf("%s: %q", message, id)})
+		r.issues = append(r.issues, issue.Issue{Code: code, Path: path, Message: message})
 	}
 }
 
@@ -650,4 +632,14 @@ func Pulls(p Plan, sel manifest.Selection) []Pull {
 		pulls = append(pulls, found...)
 	}
 	return pulls
+}
+
+// catalogRole returns the role the catalog gives a stack, "" when it has none.
+func (r *resolver) catalogRole(stack string) string {
+	for _, entry := range r.cat.Stacks {
+		if entry.Stack == stack {
+			return entry.Role
+		}
+	}
+	return ""
 }

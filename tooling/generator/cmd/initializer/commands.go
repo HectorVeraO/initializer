@@ -83,9 +83,11 @@ func generateCommand() *Command {
 				Usage:   "Modules to install; replaces the file's list; required modules are added",
 				Default: "none"})
 			set.boolean(&o.allModules, flagSpec{Name: "all-modules", Usage: "Install every module of the backend stack", Default: "false"})
-			set.components(&o.components, flagSpec{Name: "component", Placeholder: "STACK=NAME",
-				Usage:   "Name the folder of STACK's component (repeatable)",
-				Default: "<name>-<suffix>"})
+			set.components(&o.components, flagSpec{Name: "component", Placeholder: "STACK[=NAME][,KEY=VALUE...]",
+				Usage: "Add or override a component of STACK (repeatable). Repeat with the same\n" +
+					"        STACK for several components; each then needs a NAME. Keys: modules\n" +
+					"        (ids joined by +), go-module, db-name, db-user, service.<key>, backend.",
+				Default: "one component per selected stack, named <name>-<suffix>"})
 			set.str(&o.dbName, flagSpec{Name: "db-name", Placeholder: "NAME", Usage: "Database name",
 				Default: "<name> with - replaced by _"})
 			set.str(&o.dbUser, flagSpec{Name: "db-user", Placeholder: "NAME", Usage: "Database user",
@@ -112,6 +114,10 @@ func generateCommand() *Command {
 				"initializer generate acme --stacks go-srv,ng-web --display-name \"Acme Shop\""},
 			{"run a second project beside the first on another port band",
 				"initializer generate acme --port-band 103"},
+			{"name the backend and bind the console to it",
+				"initializer generate acme --modules identity \\\n" +
+					"    --component go-srv=acme-srv,modules=tenancy+api-keys \\\n" +
+					"    --component ng-web=acme-web,backend=acme-srv"},
 			{"see the resolved values without writing anything",
 				"initializer generate acme --modules tenancy --dry-run"},
 		},

@@ -158,7 +158,8 @@ func dropOrigins(merged *Input, prefix string) {
 
 // mergeComponents applies the per-stack rule: with no file entry of a stack the
 // flags define its entries; with file entries every flag must name exactly one
-// of them, and the entries stay as the file gave them.
+// of them, and that entry takes the keys the flag sets over its own. Entries no
+// flag names stay as the file gave them.
 func mergeComponents(merged *Input, file *Input, flags Input) []issue.Issue {
 	fromFlags := flags.Selection.Components
 	if len(fromFlags) == 0 {
@@ -179,9 +180,75 @@ func mergeComponents(merged *Input, file *Input, flags Input) []issue.Issue {
 		}
 		if matches(existing, entry.Name) != 1 {
 			issues = append(issues, ambiguousIssue(file, flags, i, existing))
+			continue
 		}
+		overrideEntry(merged, flags, i)
 	}
 	return issues
+}
+
+// overrideEntry applies the keys flag i sets to the merged entry it names.
+func overrideEntry(merged *Input, flags Input, i int) {
+	flag := flags.Selection.Components[i]
+	at := -1
+	for position, entry := range merged.Selection.Components {
+		if entry.Stack == flag.Stack && entry.Name == flag.Name {
+			at = position
+		}
+	}
+	if at < 0 {
+		return
+	}
+	target := merged.Selection.Components[at]
+	from := "/components/" + strconv.Itoa(i)
+	to := "/components/" + strconv.Itoa(at)
+	take := func(field string) {
+		dropOrigins(merged, to+field)
+		for pointer, origin := range flags.Origins {
+			if pointer == from+field || strings.HasPrefix(pointer, from+field+"/") {
+				merged.Origins[to+pointer[len(from):]] = origin
+			}
+		}
+	}
+	if flag.HasModules {
+		target.Modules, target.HasModules = append([]string{}, flag.Modules...), true
+		take("/modules")
+	}
+	if flag.GoModule != "" {
+		target.GoModule = flag.GoModule
+		take("/goModule")
+	}
+	if flag.Backend != "" {
+		target.Backend = flag.Backend
+		take("/backend")
+	}
+	if flag.Database != nil {
+		database := Database{}
+		if target.Database != nil {
+			database = *target.Database
+		}
+		if flag.Database.Name != "" {
+			database.Name = flag.Database.Name
+			take("/database/name")
+		}
+		if flag.Database.User != "" {
+			database.User = flag.Database.User
+			take("/database/user")
+		}
+		target.Database = &database
+	}
+	if len(flag.Services) > 0 {
+		services := copyServices(target.Services)
+		if services == nil {
+			services = map[string]string{}
+		}
+		for key, value := range flag.Services {
+			services[key] = value
+			take("/services" + issue.Pointer(key))
+		}
+		target.Services = services
+	}
+	merged.Selection.Components[at] = target
 }
 
 // matches counts the entries that carry name; an empty name matches none.
@@ -201,9 +268,9 @@ func appendFlagEntry(merged *Input, flags Input, flagIndex int) {
 	at := strconv.Itoa(len(merged.Selection.Components))
 	from := "/components/" + strconv.Itoa(flagIndex)
 	merged.Selection.Components = append(merged.Selection.Components, flags.Selection.Components[flagIndex])
-	for _, suffix := range []string{"", "/stack", "/name"} {
-		if origin, has := flags.Origins[from+suffix]; has {
-			merged.Origins["/components/"+at+suffix] = origin
+	for pointer, origin := range flags.Origins {
+		if pointer == from || strings.HasPrefix(pointer, from+"/") {
+			merged.Origins["/components/"+at+pointer[len(from):]] = origin
 		}
 	}
 	if _, has := merged.Origins["/components"]; !has {

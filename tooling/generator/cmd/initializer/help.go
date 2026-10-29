@@ -84,6 +84,9 @@ func flagHead(spec flagSpec) string {
 
 // flagDescription renders the usage text followed by its default or "(required)".
 func flagDescription(spec flagSpec) string {
+	if strings.Contains(spec.Usage, "\n") && spec.Default != "" {
+		return spec.Usage + "\n        (default: " + spec.Default + ")"
+	}
 	switch spec.Default {
 	case "":
 		return spec.Usage

@@ -40,6 +40,15 @@ var Registry = []FieldSpec{
 	{Pointer: "/components/*", Kind: KindMap, Since: 2},
 	{Pointer: "/components/*/stack", Kind: KindString, Since: 2, Required: true},
 	{Pointer: "/components/*/name", Kind: KindString, Since: 2},
+	{Pointer: "/components/*/modules", Kind: KindSeq, Since: 2},
+	{Pointer: "/components/*/modules/*", Kind: KindString, Since: 2},
+	{Pointer: "/components/*/backend", Kind: KindString, Since: 2},
+	{Pointer: "/components/*/goModule", Kind: KindString, Since: 2},
+	{Pointer: "/components/*/database", Kind: KindMap, Since: 2},
+	{Pointer: "/components/*/database/name", Kind: KindString, Since: 2},
+	{Pointer: "/components/*/database/user", Kind: KindString, Since: 2},
+	{Pointer: "/components/*/services", Kind: KindMap, Since: 2},
+	{Pointer: "/components/*/services/*", Kind: KindString, Since: 2},
 	{Pointer: "/database", Kind: KindMap, Since: 2},
 	{Pointer: "/database/name", Kind: KindString, Since: 2},
 	{Pointer: "/database/user", Kind: KindString, Since: 2},
@@ -60,6 +69,12 @@ const (
 	patternStacksItem = "/stacks/*"
 	patternModuleItem = "/modules/*"
 	patternCompName   = "/components/*/name"
+	patternCompModule = "/components/*/modules/*"
+	patternCompBack   = "/components/*/backend"
+	patternCompGoMod  = "/components/*/goModule"
+	patternCompDBName = "/components/*/database/name"
+	patternCompDBUser = "/components/*/database/user"
+	patternCompSvc    = "/components/*/services/*"
 	patternDBName     = "/database/name"
 	patternDBUser     = "/database/user"
 	patternService    = "/services/*"
@@ -146,7 +161,7 @@ func kindMessage(row FieldSpec) string {
 // same function serves file and flag values.
 func valueProblem(pattern, value string) (code, message string, bad bool) {
 	switch pattern {
-	case patternName, patternCompName:
+	case patternName, patternCompName, patternCompBack, patternCompSvc:
 		if !names.ValidLabel(value) {
 			return CodeNameInvalid, names.LabelMessage(value), true
 		}
@@ -154,7 +169,7 @@ func valueProblem(pattern, value string) (code, message string, bad bool) {
 		if !names.ValidDisplay(value) {
 			return CodeNameInvalid, names.DisplayMessage(value), true
 		}
-	case patternDBName, patternDBUser:
+	case patternDBName, patternDBUser, patternCompDBName, patternCompDBUser:
 		if !names.ValidPGIdent(value) {
 			return CodeNameInvalid, names.PGIdentMessage(value), true
 		}
@@ -162,7 +177,7 @@ func valueProblem(pattern, value string) (code, message string, bad bool) {
 		if !names.ValidLabel(value) {
 			return CodeNameInvalid, names.LabelMessage(value), true
 		}
-	case patternGoModule:
+	case patternGoModule, patternCompGoMod:
 		if !validGoModulePath(value) {
 			return CodeSelectionInvalid, "must be a Go module path with a lowercase dotted first segment", true
 		}
@@ -170,7 +185,7 @@ func valueProblem(pattern, value string) (code, message string, bad bool) {
 		if !isKnownStack(value) {
 			return CodeSelectionInvalid, "stack is not in the stack table", true
 		}
-	case patternModuleItem:
+	case patternModuleItem, patternCompModule:
 		if !validID(value) {
 			return CodeSelectionInvalid, "must be a module id of at most 31 characters", true
 		}
@@ -356,6 +371,15 @@ func (w *inputDecoder) extract(root *Node) Selection {
 			if name, found := item.Member("name"); found && name.Kind == KindString {
 				component.Name = name.Value
 			}
+			if backend, found := item.Member("backend"); found && backend.Kind == KindString {
+				component.Backend = backend.Value
+			}
+			if module, found := item.Member("goModule"); found && module.Kind == KindString {
+				component.GoModule = module.Value
+			}
+			component.Modules, component.HasModules = stringList(item, "modules")
+			component.Database = extractDatabase(item)
+			component.Services = extractServices(item)
 			s.Components = append(s.Components, component)
 		}
 	}
