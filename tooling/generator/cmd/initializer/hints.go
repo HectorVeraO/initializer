@@ -9,10 +9,20 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/source"
 )
 
 // rebuildCatalogHint is what to do when the catalog does not match the sources.
 const rebuildCatalogHint = "rebuild the catalog: initializer catalog build"
+
+// codeStackUnknown is the code of a --stack that names no stack of the catalog.
+const codeStackUnknown = "STACK_UNKNOWN"
+
+// moduleListHint and stackListHint point at the commands that list what exists.
+const (
+	moduleListHint = "run 'initializer module ls'"
+	stackListHint  = "run 'initializer stack ls'"
+)
 
 // addHints returns a copy of issues in which every issue without a Hint gets
 // the one its code has in the hint table. moduleIDs are the catalog's module
@@ -46,9 +56,14 @@ func hintFor(found issue.Issue, moduleIDs []string) string {
 	case plan.CodeModuleUnknown:
 		closest := suggest(lastQuoted(found.Message), moduleIDs)
 		if closest == "" {
-			return ""
+			return moduleListHint
 		}
-		return fmt.Sprintf("did you mean %q?", closest)
+		return fmt.Sprintf("%s; did you mean %q?", moduleListHint, closest)
+	case codeStackUnknown:
+		return stackListHint
+	case source.CodeRootNotFound, source.CodeRootInvalid, source.CodeNotGit, source.CodeGitMissing,
+		source.CodeCatalogUnreadable, source.CodeUnreadable, source.CodeGeneratorStale:
+		return source.HintFor(found.Code)
 	}
 	return ""
 }

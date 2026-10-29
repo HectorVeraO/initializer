@@ -17,7 +17,10 @@ Usage:
 Commands:
   generate [DIR]   Create a project in DIR (default ./<name>)
   verify [DIR]     Compare a generated project with its initializer.lock.json
+  module ls        List the catalog's modules
+  stack ls         List the catalog's stacks
   catalog build    Build catalog.lock.json from a checkout (CI, module authors)
+  version          Print the generator version, build commit and source checkout
   help [COMMAND]   Show help for a command
 
 Run 'initializer help <command>' for details.
@@ -45,10 +48,12 @@ Flags:
         Install every module of the backend stack (default: false)
   --component STACK=NAME
         Name the folder of STACK's component (repeatable) (default: <name>-<suffix>)
+  --dry-run
+        Print what would be generated and write nothing (default: false)
   --root DIR
-        Source checkout (required)
+        Source checkout (default: INITIALIZER_ROOT, else the clone above the working directory, else the clone above this binary)
   --catalog FILE
-        Catalog file built by 'initializer catalog build' (required)
+        Catalog file to use instead of building one from the checkout
   --format text|json
         Result format (default: text)
   --log json
@@ -56,11 +61,13 @@ Flags:
 
 Examples:
   # a backend with identity, in ./acme
-  initializer generate acme --root . --catalog catalog.lock.json --go-module example.com/acme --stacks go-srv --modules identity
+  initializer generate acme --modules identity
   # backend and web console with every module
-  initializer generate acme --root . --catalog catalog.lock.json --go-module example.com/acme --stacks go-srv,ng-web --all-modules
+  initializer generate acme --stacks go-srv,ng-web --all-modules
   # from a file, overriding one value
   initializer generate -f acme.yaml --name acme-shop
+  # see the resolved values without writing anything
+  initializer generate acme --modules tenancy --dry-run
 `
 
 // linesWithPrefix returns the lines of text that start with prefix.
@@ -93,7 +100,7 @@ func TestOverviewOnRequestGoesToStdoutAndExitsZero(t *testing.T) {
 }
 
 func TestEveryCommandHelpIsTheSameFromEverySpelling(t *testing.T) {
-	commands := [][]string{{"generate"}, {"verify"}, {"catalog", "build"}, {"help"}}
+	commands := [][]string{{"generate"}, {"verify"}, {"module", "ls"}, {"stack", "ls"}, {"catalog", "build"}, {"version"}, {"help"}}
 	for _, words := range commands {
 		name := strings.Join(words, " ")
 		t.Run(name, func(t *testing.T) {
@@ -130,8 +137,9 @@ func TestOtherCommandHelpListsItsFlags(t *testing.T) {
 		"catalog build": {"catalog", "build"},
 	}
 	wants := map[string][]string{
-		"verify":        {"initializer verify [DIR] [flags]", "# in ./acme", "initializer verify acme"},
-		"catalog build": {"--root DIR", "--files PATH", "--out PATH", "(required)", "initializer catalog build --root . --files files.bin --out catalog.lock.json"},
+		"verify": {"initializer verify [DIR] [flags]", "# in ./acme", "initializer verify acme"},
+		"catalog build": {"--root DIR", "--files PATH", "--out PATH", "(required)", "initializer catalog build --out catalog.lock.json",
+			"initializer catalog build --root . --files files.bin --out catalog.lock.json"},
 	}
 	for name, words := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -214,10 +222,10 @@ func TestOneInvocationReportsEveryCommandLineProblem(t *testing.T) {
 			t.Errorf("stderr misses %q:\n%s", want, stderr)
 		}
 	}
-	if !strings.Contains(stderr, "8 problems.") {
-		t.Errorf("want the count of 8 problems (the five above, the two required flags and the invalid name):\n%s", stderr)
+	if !strings.Contains(stderr, "6 problems.") {
+		t.Errorf("want the count of 6 problems (the five above and the invalid name):\n%s", stderr)
 	}
-	if event := usageEvent(t, stderr); event["problem_count"] != float64(7) {
+	if event := usageEvent(t, stderr); event["problem_count"] != float64(5) {
 		t.Errorf("usage_error event = %v", event)
 	}
 }
@@ -396,6 +404,7 @@ func TestGenerateIntoANonEmptyFolderIsRefusedWithAHint(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, stdout, stderr := execute(t, append([]string{"generate", "acme"}, e.flagSelection()...)...)
+	stderr = withoutSources(stderr)
 	wantText := "note: project name \"acme\" comes from the folder; pass --name to set it\n" +
 		"error: ./acme: output directory is not empty [OUTPUT_NOT_EMPTY]\n" +
 		"  hint: choose another folder: initializer generate <dir>\n" +

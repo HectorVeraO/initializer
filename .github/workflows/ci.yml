@@ -228,6 +228,14 @@ jobs:
           mise install
           test -x tooling/generator/bin/initializer
           mise exec -- initializer --help
+      - name: generate finds its sources from the binary's clone
+        run: |
+          set -euo pipefail
+          bin="${GITHUB_WORKSPACE}/tooling/generator/bin/initializer"
+          cd "${RUNNER_TEMP}"
+          "${bin}" generate "${RUNNER_TEMP}/demo2" --modules identity
+          test -f "${RUNNER_TEMP}/demo2/initializer.lock.json"
+          jq -e '.source.commit | test("^[0-9a-f]{40}$")' "${RUNNER_TEMP}/demo2/initializer.lock.json"
       - name: A generated project's mise install runs no hook
         run: |
           set -euo pipefail

@@ -273,6 +273,7 @@ var flagPointers = map[string]string{
 	"/stacks":           "--stacks",
 	"/modules":          "--modules",
 	"/components":       "--component",
+	"/stack":            "--stack",
 }
 
 // flagForPointer returns the flag whose value sits at pointer.
@@ -331,17 +332,27 @@ func typedComponentAt(pointer string, typed []string) (string, bool) {
 	return typed[index], true
 }
 
-// reportFailure writes an exit-3 failure and returns the internal exit code.
+// reportFailure writes an exit-3 failure with the hint of its code and returns
+// the internal exit code.
 func reportFailure(ctx *Context, code, message string) int {
+	return reportFailureWithHint(ctx, code, message, hintFor(issue.Issue{Code: code}, nil))
+}
+
+// reportFailureWithHint writes an exit-3 failure and returns the internal exit
+// code; hint may be empty.
+func reportFailureWithHint(ctx *Context, code, message, hint string) int {
 	if ctx.isJSON() {
 		doc := struct {
 			Schema int     `json:"schema"`
 			OK     bool    `json:"ok"`
 			Error  failure `json:"error"`
-		}{documentSchema, false, failure{Code: code, Message: message}}
+		}{documentSchema, false, failure{Code: code, Message: message, Hint: hint}}
 		return emitDocument(ctx, ctx.Stderr, doc, exitInternal)
 	}
 	fmt.Fprintf(ctx.Stderr, "error: %s [%s]\n", message, code)
+	if hint != "" {
+		fmt.Fprintf(ctx.Stderr, "  hint: %s\n", hint)
+	}
 	return exitInternal
 }
 
@@ -382,6 +393,7 @@ type componentInstalled struct {
 type generateResult struct {
 	project, path string
 	files         int
+	source        sourceRef
 	catalog       catalogRef
 	components    []componentInstalled
 	modules       []moduleInstalled
@@ -397,13 +409,14 @@ func writeGenerate(ctx *Context, result generateResult) int {
 			Project    string               `json:"project"`
 			Path       string               `json:"path"`
 			Files      int                  `json:"files"`
+			Source     sourceRef            `json:"source"`
 			Catalog    catalogRef           `json:"catalog"`
 			Components []componentInstalled `json:"components"`
 			Modules    []moduleInstalled    `json:"modules"`
 			Added      []moduleAdded        `json:"added"`
 			Notes      []string             `json:"notes"`
 			Warnings   []Warning            `json:"warnings"`
-		}{documentSchema, true, result.project, filepath.ToSlash(result.path), result.files, result.catalog,
+		}{documentSchema, true, result.project, filepath.ToSlash(result.path), result.files, result.source, result.catalog,
 			list(result.components), list(result.modules), list(result.added), list(ctx.Notes), ctx.warnings()}
 		return emitDocument(ctx, ctx.Stdout, doc, exitOK)
 	}
@@ -469,7 +482,7 @@ func writeVerify(ctx *Context, project string, differences []issue.Issue) int {
 }
 
 // writeCatalogBuilt prints the result of catalog build and returns the exit code.
-func writeCatalogBuilt(ctx *Context, out, sha256 string) int {
+func writeCatalogBuilt(ctx *Context, out, sha256 string, ref sourceRef) int {
 	slashed := filepath.ToSlash(out)
 	if ctx.isJSON() {
 		doc := struct {
@@ -477,8 +490,9 @@ func writeCatalogBuilt(ctx *Context, out, sha256 string) int {
 			OK       bool      `json:"ok"`
 			Catalog  string    `json:"catalog"`
 			SHA256   string    `json:"sha256"`
+			Source   sourceRef `json:"source"`
 			Warnings []Warning `json:"warnings"`
-		}{documentSchema, true, slashed, sha256, ctx.warnings()}
+		}{documentSchema, true, slashed, sha256, ref, ctx.warnings()}
 		return emitDocument(ctx, ctx.Stdout, doc, exitOK)
 	}
 	return emitText(ctx, fmt.Sprintf("Catalog written to %s (sha256 %s).\n", slashed, sha256[:12]))

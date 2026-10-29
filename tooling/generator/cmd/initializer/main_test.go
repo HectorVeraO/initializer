@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -104,9 +105,7 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 		"unknown flag":             {[]string{"verify", "--nope"}, "unknown flag"},
 		"unexpected argument":      {[]string{"verify", "p", "extra"}, "unexpected argument"},
 		"folder twice":             {[]string{"verify", "p", "--project", "p"}, "pass the folder once"},
-		"missing catalog flags":    {[]string{"catalog", "build", "--root", "."}, "--files: is required"},
-		"generate missing root":    {[]string{"generate", "--catalog", "c.json", "--selection", sel}, "--root: is required"},
-		"generate missing catalog": {[]string{"generate", "--root", ".", "--selection", sel}, "--catalog: is required"},
+		"missing catalog out flag": {[]string{"catalog", "build", "--root", "."}, "--out: is required"},
 		"all-modules plus modules": {append(append([]string{}, common...), "--all-modules", "--modules", "a", "--name", "n"), "cannot be combined"},
 		"selection plus file":      {append(append([]string{}, common...), "--selection", sel, "-f", sel), "pass the file once"},
 	}
@@ -274,11 +273,13 @@ func TestValidFlagSelectionAndAllModules(t *testing.T) {
 	}
 }
 
+var sourcesLinePattern = regexp.MustCompile(`^Sources: \S.* (\(not a git checkout\)|at [0-9a-f]{7}( \(modified\))?)$`)
+
 func TestProgressLinesAreStructuredJSON(t *testing.T) {
 	_, _, stderr := executeLogged(t, "generate", "o", "--root", ".", "--catalog", "c.json", "-f", writeSelection(t, validSelection))
 	events := 0
 	for _, line := range strings.Split(strings.TrimSpace(stderr), "\n") {
-		if strings.HasPrefix(line, "error:") {
+		if strings.HasPrefix(line, "error:") || strings.HasPrefix(line, "  hint:") || sourcesLinePattern.MatchString(line) {
 			continue
 		}
 		var record map[string]any
@@ -362,7 +363,7 @@ func TestCatalogBuildIssueExit(t *testing.T) {
 	}
 	out := filepath.Join(t.TempDir(), "c.json")
 	code, stdout, stderr := executeJSON(t, "catalog", "build", "--root", repo, "--files", list, "--out", out)
-	if code != exitIssues || stderr != "" {
+	if code != exitIssues || withoutSources(stderr) != "" {
 		t.Fatalf("exit %d stderr %q", code, stderr)
 	}
 	hasUnowned := false
@@ -394,7 +395,6 @@ func TestCatalogBuildInputErrorsExitThree(t *testing.T) {
 		"unreadable list": {"--root", root, "--files", filepath.Join(t.TempDir(), "missing.bin"), "--out", out},
 		"escaping path":   {"--root", root, "--files", badList, "--out", out},
 		"empty element":   {"--root", root, "--files", emptyElement, "--out", out},
-		"root not a dir":  {"--root", filepath.Join(t.TempDir(), "none"), "--files", writeFileList(t), "--out", out},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -422,9 +422,9 @@ func TestCatalogBuildFileListSizeLimit(t *testing.T) {
 	}
 }
 
-func TestCatalogBuildRequiresFilesFlag(t *testing.T) {
-	code, _, stderr := execute(t, "catalog", "build", "--root", ".", "--out", "c.json")
-	if code != exitUsage || !strings.Contains(stderr, "files") {
+func TestCatalogBuildRequiresOutFlag(t *testing.T) {
+	code, _, stderr := execute(t, "catalog", "build", "--root", ".", "--files", "f.bin")
+	if code != exitUsage || !strings.Contains(stderr, "--out: is required") {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
 }
