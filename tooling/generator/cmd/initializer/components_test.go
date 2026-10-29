@@ -360,6 +360,22 @@ func TestComponentNameProblemsRenderTheFlagAsTyped(t *testing.T) {
 	}
 }
 
+func TestAConflictWithADefaultedFolderRendersTheStacksFlag(t *testing.T) {
+	e := newEnv(t)
+	code, _, stderr := execute(t, e.fullstackArgs("--component", "go-srv=ng-web")...)
+	if code != exitIssues {
+		t.Fatalf("exit %d", code)
+	}
+	for _, want := range []string{
+		`error: --component go-srv=ng-web: component go-srv and component ng-web both resolve to "ng-web" [NAME_CONFLICT]`,
+		`error: --stacks: component go-srv and component ng-web both resolve to "ng-web" [NAME_CONFLICT]`,
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, stderr)
+		}
+	}
+}
+
 func TestAnInvalidComponentNameIsNameInvalidWithTheExampleHint(t *testing.T) {
 	e := newEnv(t)
 	code, stdout, stderr := executeJSON(t, e.fullstackArgs("--component", "go-srv=Acme_API", "--component", "ng-web=abc-")...)

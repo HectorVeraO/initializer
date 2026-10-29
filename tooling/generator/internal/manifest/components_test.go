@@ -70,6 +70,12 @@ func TestDecodeSelectionComponentProblems(t *testing.T) {
 			manifest.CodeNameInvalid, "#/components/0/name", `"abc-" must be`},
 		{"empty name", 2, []any{map[string]any{"stack": "go-srv", "name": ""}},
 			manifest.CodeNameInvalid, "#/components/0/name", `"" must be`},
+		{"name with a slash", 2, []any{map[string]any{"stack": "go-srv", "name": "a/b"}},
+			manifest.CodeNameInvalid, "#/components/0/name", `"a/b" must be`},
+		{"name of dot-dot", 2, []any{map[string]any{"stack": "go-srv", "name": ".."}},
+			manifest.CodeNameInvalid, "#/components/0/name", `".." must be`},
+		{"name escaping upward", 2, []any{map[string]any{"stack": "go-srv", "name": "../etc"}},
+			manifest.CodeNameInvalid, "#/components/0/name", `"../etc" must be`},
 		{"name of five digits", 2, []any{map[string]any{"stack": "go-srv", "name": "app10132"}},
 			manifest.CodeNameInvalid, "#/components/0/name", "five digits"},
 	}
@@ -135,6 +141,8 @@ func TestSelectionFromFlagsComponents(t *testing.T) {
 
 func FuzzDecodeSelectionComponents(f *testing.F) {
 	f.Add([]byte(`{"schema":2,"project":{"name":"acme-backend","goModule":"example.com/acme/backend"},"stacks":["go-srv"],"modules":[],"components":[{"stack":"go-srv","name":"acme-srv"}]}`))
+	f.Add([]byte(`{"schema":2,"project":{"name":"acme-backend","goModule":"example.com/acme/backend"},"stacks":["go-srv"],"modules":[],"components":[{"stack":"go-srv","name":"../x"}]}`))
+	f.Add([]byte(`{"schema":2,"project":{"name":"acme-backend","goModule":"example.com/acme/backend"},"stacks":["go-srv"],"modules":[],"components":[{"stack":"go-srv","name":"a/b"}]}`))
 	f.Add([]byte(`{"schema":1,"components":[{}]}`))
 	f.Add([]byte(`{"schema":2,"components":[{"stack":1,"name":[]},"x",null]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
