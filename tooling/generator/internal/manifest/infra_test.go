@@ -2,6 +2,7 @@ package manifest_test
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
@@ -40,10 +41,14 @@ func TestDecodeRefusesInfrastructureKeysAtSchema1(t *testing.T) {
 	if len(issues) != 2 {
 		t.Fatalf("issues: %v", issues)
 	}
+	messages := []string{}
 	for _, found := range issues {
-		if found.Message != "database needs schema 2" && found.Message != "services needs schema 2" {
-			t.Errorf("issue = %+v", found)
-		}
+		messages = append(messages, found.Message)
+	}
+	sort.Strings(messages)
+	want := []string{"database needs schema 2", "services needs schema 2"}
+	if !reflect.DeepEqual(messages, want) {
+		t.Errorf("messages = %v, want %v", messages, want)
 	}
 }
 
