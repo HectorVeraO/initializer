@@ -19,12 +19,10 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/lockfile"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/markers"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/render"
 )
-
-// composeFile is the compose file whose line 1 names the compose project.
-const composeFile = ".deploy/local/docker-compose.yml"
 
 // readmeName is the rendered project README.
 const readmeName = "README.md"
@@ -87,6 +85,8 @@ type builder struct {
 	target  string
 	project string
 	files   map[string][]byte
+	// rules maps a source path to the name rules of the installed modules.
+	rules map[string][]names.Rule
 }
 
 // Build produces the whole project in memory. Nothing touches the disk. An
@@ -103,8 +103,6 @@ func Build(opts BuildOptions) (Project, error) {
 		return Project{}, errors.New("plan has no project name")
 	case opts.Plan.GoModule == "" || selection.Project.GoModule == "":
 		return Project{}, errors.New("plan has no Go module path")
-	case opts.Plan.ComposeName == "":
-		return Project{}, errors.New("plan has no compose name")
 	case len(opts.CatalogSHA256) != sha256.Size*2:
 		return Project{}, errors.New("catalog hash is malformed")
 	}
@@ -114,6 +112,7 @@ func Build(opts BuildOptions) (Project, error) {
 		target:  selection.Project.GoModule,
 		project: selection.Project.Name,
 		files:   map[string][]byte{},
+		rules:   nameRules(opts.Plan),
 	}
 	return b.run()
 }
@@ -126,7 +125,7 @@ func (b *builder) run() (Project, error) {
 		CatalogSHA256: b.opts.CatalogSHA256,
 		Source:        b.opts.Source,
 		Selection:     b.recorded(),
-		Names:         map[string]string{"project": b.project},
+		Names:         p.LockNames(),
 		TCKTags:       p.TCKTags,
 		TCKGrep:       p.TCKGrep,
 		TCKGrepInvert: p.TCKGrepInvert,
@@ -134,7 +133,6 @@ func (b *builder) run() (Project, error) {
 	}
 	for _, component := range p.Components {
 		lock.Components = append(lock.Components, lockfile.Component{Stack: component.Stack, Name: component.Name})
-		lock.Names["component."+component.Stack] = component.Name
 	}
 	for _, spec := range p.Specs {
 		entry := lockfile.Spec{Spec: spec.Spec, Version: spec.Version}
@@ -228,8 +226,17 @@ func (b *builder) copyFile(file catalog.File, owner string) (lockfile.File, erro
 	return entry, nil
 }
 
-// transform applies the copy rule of the source path.
+// transform applies the copy rules of the source path.
 func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byte, error) {
+	if rules := b.rules[sourcePath]; len(rules) > 0 {
+		renamed, err := names.Apply(data, rules, b.opts.Plan.Reference, b.opts.Plan.Slots)
+		if err != nil {
+			return nil, fmt.Errorf("%s: name rules: %w", sourcePath, err)
+		}
+		data = renamed
+	}
+	// Order: name rules on the source bytes, then the marker drop, then the
+	// port band substitution (none yet), then the go.mod and import rewrite.
 	if _, hasMarkers := markers.SyntaxFor(sourcePath); hasMarkers && owner == manifest.CoreModule {
 		dropped, err := markers.Drop(sourcePath, data, markers.Keep{Module: b.hasModule, Stack: b.hasStack})
 		if err != nil {
@@ -244,8 +251,6 @@ func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byt
 			return nil, fmt.Errorf("%s: %w", sourcePath, err)
 		}
 		return out, nil
-	case sourcePath == composeFile:
-		return rewriteComposeName(data, b.opts.Plan.ComposeName, b.project)
 	case gorewrite.ShouldRewrite(sourcePath):
 		out, _, err := gorewrite.RewriteImports(sourcePath, data, b.source, b.target)
 		if err != nil {
@@ -286,21 +291,18 @@ func (b *builder) hasStack(id string) bool {
 	return false
 }
 
-// rewriteComposeName replaces line 1 "name: <from>" by "name: <to>".
-func rewriteComposeName(data []byte, from, to string) ([]byte, error) {
-	want := "name: " + from
-	first := data
-	if end := bytes.IndexByte(data, '\n'); end >= 0 {
-		first = data[:end]
+// nameRules collects the name rules of the installed modules by source path,
+// in the catalog order of (path, text).
+func nameRules(p plan.Plan) map[string][]names.Rule {
+	rules := map[string][]names.Rule{}
+	for _, stack := range p.Stacks {
+		for _, module := range stack.Modules {
+			for _, rule := range module.Names {
+				rules[rule.Path] = append(rules[rule.Path], names.Rule{Path: rule.Path, Text: rule.Text})
+			}
+		}
 	}
-	if string(first) != want {
-		return nil, fmt.Errorf("%s line 1 must be exactly %q", composeFile, want)
-	}
-	out := make([]byte, 0, len(data)+len(to))
-	out = append(out, "name: "...)
-	out = append(out, to...)
-	out = append(out, data[len(first):]...)
-	return out, nil
+	return rules
 }
 
 // render writes the README, the selection and the composition roots, and

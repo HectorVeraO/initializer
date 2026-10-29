@@ -1,0 +1,21 @@
+{
+  "schema": 2,
+  "project": {
+    "name": "initializer"
+  },
+  "stacks": [
+    "go-srv",
+    "ng-web"
+  ],
+  "modules": [],
+  "components": [
+    {
+      "stack": "go-srv",
+      "name": "go-srv"
+    },
+    {
+      "stack": "ng-web",
+      "name": "ng-web"
+    }
+  ]
+}

@@ -195,7 +195,7 @@ func TestRegenerationFromTheRecordedSelectionIsByteIdentical(t *testing.T) {
 	compareTrees(t, readTree(t, mustWrite(t, second)), readTree(t, mustWrite(t, first)))
 }
 
-func TestImportsModuleLineAndComposeNameAreRewritten(t *testing.T) {
+func TestImportsModuleLineAndProjectNameRuleAreRewritten(t *testing.T) {
 	repo := fixture.Load(t)
 	project := mustBuild(t, repo, selection(targetModule, "parameters"))
 
@@ -468,20 +468,6 @@ func copyTree(t *testing.T, from, to string) {
 	})
 	if err != nil {
 		t.Fatalf("copy tree: %v", err)
-	}
-}
-
-func TestComposeFileWhoseNameLineDiffersFromTheCatalogIsRefused(t *testing.T) {
-	repo := fixture.Load(t)
-	crafted := repo.Catalog
-	crafted.ComposeName = "other-name"
-	encoded, err := catalog.Encode(crafted)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = build(t, os.DirFS(repo.Root), crafted, encoded, selection(targetModule, "parameters"))
-	if err == nil || !strings.Contains(err.Error(), "line 1 must be exactly") {
-		t.Fatalf("want a compose name error, got %v", err)
 	}
 }
 

@@ -58,9 +58,17 @@ type Plan struct {
 	// sorted; "" when every cooperating tag is installed.
 	TCKGrepInvert string
 	// TCKEnv is the union of the copied specs' tckEnv.
-	TCKEnv      map[string]string
-	GoModule    string
-	ComposeName string
+	TCKEnv   map[string]string
+	GoModule string
+	// Reference is the slot map of the catalog: the value every name rule
+	// matches in the source files.
+	Reference map[string]string
+	// Slots holds a value for every slot a rule of a delivered file uses, live
+	// or not, plus the project, component and derived slots.
+	Slots map[string]string
+	// Live is the set of live slots: the project, the component slot of every
+	// selected stack and the slots of every live rule.
+	Live map[string]bool
 }
 
 // Component is one delivered stack and the name of its project folder,
@@ -529,6 +537,7 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 	for _, stack := range stacks {
 		stackNames = append(stackNames, stack.Stack)
 	}
+	slots, live := r.slots(stacks)
 	return Plan{
 		Selection:     r.recordedSelection(stackNames, recorded),
 		Stacks:        stacks,
@@ -539,7 +548,9 @@ func (r *resolver) assemble(stacks []StackPlan, backend StackPlan) Plan {
 		TCKGrepInvert: Grep(sortedKeys(invertSet)),
 		TCKEnv:        env,
 		GoModule:      r.cat.GoModule,
-		ComposeName:   r.cat.ComposeName,
+		Reference:     r.cat.Reference,
+		Slots:         slots,
+		Live:          live,
 	}
 }
 

@@ -1,8 +1,13 @@
 {
-  "schema": 1,
+  "schema": 2,
   "generator": "0.1.0",
   "goModule": "example.com/fixture/srv",
-  "composeName": "fixture-app",
+  "reference": {
+    "component.go-srv": "go-srv",
+    "component.ng-web": "ng-web",
+    "envPrefix": "FIXTURE_APP",
+    "project": "fixture-app"
+  },
   "specs": [
     {
       "spec": "core",
@@ -96,6 +101,15 @@
           "tablePrefixes": [
             "cor"
           ],
+          "names": [
+            {
+              "path": ".deploy/local/docker-compose.yml",
+              "text": "name: %{project}",
+              "blocks": [
+                ""
+              ]
+            }
+          ],
           "files": [
             {
               "path": ".deploy/local/docker-compose.yml",
@@ -123,7 +137,7 @@
             },
             {
               "path": "go-srv/internal/platform/core/module.manifest.json",
-              "sha256": "0301655fcfab21a3a2eb517975d47e45acb257ad6b43a59fd9e593a858bb71ae"
+              "sha256": "cd6719436cf64764aa94e67e7215cc43b4b5c5e4b6f75947fca746f29343915c"
             },
             {
               "path": "go-srv/internal/platform/core/testdata/sample.go",

@@ -6,6 +6,7 @@
 .gitattributes
 .gitignore
 .initializer/project/flags.yaml
+.initializer/reference.json
 README.md
 flags.yaml
 go-srv/AGENTS.md

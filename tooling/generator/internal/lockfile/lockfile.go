@@ -115,10 +115,9 @@ type File struct {
 }
 
 var (
-	idPattern      = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
-	sha256Pattern  = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	commitPattern  = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
-	fixedNameSlots = map[string]bool{"project": true, "displayName": true, "database": true, "dbUser": true, "envPrefix": true}
+	idPattern     = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+	sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	commitPattern = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 )
 
 // ModuleFolder returns the folder name of a module inside its stack's modules
@@ -342,26 +341,19 @@ func checkSchema2(lock Lock) error {
 }
 
 func checkNames(slots map[string]string, byStack map[string]string) error {
+	var stackIDs []string
+	for _, info := range manifest.Stacks() {
+		stackIDs = append(stackIDs, info.ID)
+	}
 	for key, value := range slots {
 		if value == "" {
 			return fmt.Errorf("names: %q has an empty value", key)
 		}
-		switch {
-		case fixedNameSlots[key]:
-		case strings.HasPrefix(key, "service."):
-			if !names.ValidLabel(strings.TrimPrefix(key, "service.")) {
-				return fmt.Errorf("names: %q is not a slot name", key)
-			}
-		case strings.HasPrefix(key, "component."):
-			stack := strings.TrimPrefix(key, "component.")
-			if _, known := manifest.LookupStack(stack); !known {
-				return fmt.Errorf("names: %q is not a slot name", key)
-			}
-			if byStack[stack] != value {
-				return fmt.Errorf("names: %q must equal the name of the %s component", key, stack)
-			}
-		default:
+		if !names.IsSlot(key, stackIDs) {
 			return fmt.Errorf("names: %q is not a slot name", key)
+		}
+		if stack, isComponent := strings.CutPrefix(key, "component."); isComponent && byStack[stack] != value {
+			return fmt.Errorf("names: %q must equal the name of the %s component", key, stack)
 		}
 	}
 	for stack := range byStack {

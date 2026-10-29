@@ -153,7 +153,7 @@ func TestResolveSourceRefusesAnUnreadableCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	wrongSchema := filepath.Join(dir, "schema.json")
-	if err := os.WriteFile(wrongSchema, bytes.Replace(repo.CatalogBytes, []byte(`"schema": 1`), []byte(`"schema": 9`), 1), 0o644); err != nil {
+	if err := os.WriteFile(wrongSchema, bytes.Replace(repo.CatalogBytes, []byte(`"schema": 2`), []byte(`"schema": 9`), 1), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	oversized := filepath.Join(dir, "oversized.json")

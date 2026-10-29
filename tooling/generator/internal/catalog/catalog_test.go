@@ -37,7 +37,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 }
 
 func TestEncodeWritesEmptyListsNotNull(t *testing.T) {
-	encoded, err := Encode(Catalog{Schema: 1, Generator: "0.1.0", ComposeName: "x"})
+	encoded, err := Encode(Catalog{Schema: 2, Generator: "0.1.0"})
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
@@ -59,14 +59,17 @@ func TestDecodeRefusesBadCatalogs(t *testing.T) {
 		path    string
 		message string
 	}{
-		{"unknown key", strings.Replace(text, `"schema": 1,`, `"schema": 1, "extra": 2,`, 1), "catalog.lock.json#", `unknown field "extra"`},
-		{"schema 2", strings.Replace(text, `"schema": 1,`, `"schema": 2,`, 1), "catalog.lock.json#/schema", "must be the number 1"},
+		{"unknown key", strings.Replace(text, `"schema": 2,`, `"schema": 2, "extra": 2,`, 1), "catalog.lock.json#", `unknown field "extra"`},
+		{"schema 1", strings.Replace(text, `"schema": 2,`, `"schema": 1,`, 1), "catalog.lock.json#/schema", "must be the number 2"},
 		{"trailing data", text + "{}", "catalog.lock.json#", "unexpected data after the JSON value"},
 		{"empty", "", "catalog.lock.json#", "EOF"},
 		{"not an object", "[]", "catalog.lock.json#", "cannot unmarshal array"},
 		{"bad version", strings.Replace(text, `"version": "1.0.0"`, `"version": "1.0"`, 1), "catalog.lock.json#/specs/0/version", "MAJOR.MINOR.PATCH"},
 		{"short hash", strings.Replace(text, `"sha256": "`, `"sha256": "zz`, 1), "catalog.lock.json#/specs/0/files/0/sha256", "64 lowercase hex digits"},
-		{"bad compose name", strings.Replace(text, `"composeName": "fixture-app"`, `"composeName": "Bad"`, 1), "catalog.lock.json#/composeName", "must match"},
+		{"unknown reference slot", strings.Replace(text, `"project": "fixture-app"`, `"bogus": "x", "project": "fixture-app"`, 1), "catalog.lock.json#/reference/bogus", "not a slot name"},
+		{"empty reference value", strings.Replace(text, `"project": "fixture-app"`, `"project": ""`, 1), "catalog.lock.json#/reference/project", "must not be empty"},
+		{"rule with a bad slot", strings.Replace(text, `"text": "name: %{project}"`, `"text": "name: %{bogus}"`, 1), "catalog.lock.json#/stacks/0/modules/0/names/0/text", "unknown slot"},
+		{"rule with a bad block", strings.Replace(text, "\n                \"\"\n", "\n                \"x\"\n", 1), "catalog.lock.json#/stacks/0/modules/0/names/0/blocks/0", "module:<id>"},
 		{"traversal path", strings.Replace(text, `"path": "specs/core/openapi.yaml"`, `"path": "../openapi.yaml"`, 1), "catalog.lock.json#/specs/0/files/0/path", "repo-relative path"},
 		{"unsorted specs", strings.Replace(text, `"spec": "core",`, `"spec": "zzz",`, 1), "catalog.lock.json#/specs/1", "sorted bytewise and unique"},
 	}

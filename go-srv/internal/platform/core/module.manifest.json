@@ -24,5 +24,8 @@
   "exclude": [
     "go-srv/AGENTS.md",
     "go-srv/cookbooks/"
+  ],
+  "names": [
+    { "path": ".deploy/local/docker-compose.yml", "text": "name: %{project}" }
   ]
 }
