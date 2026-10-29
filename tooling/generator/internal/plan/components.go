@@ -57,6 +57,29 @@ func NameTooLong(source, pointer, what, value string) (issue.Issue, bool) {
 	return found, true
 }
 
+// defaultComponentName returns the name of the component of stack when no
+// entry names it: "<project>-<suffix>" with the suffix of the stack table.
+func defaultComponentName(project, stack string) string {
+	info, known := manifest.LookupStack(stack)
+	if !known {
+		return stack
+	}
+	return project + "-" + info.Suffix
+}
+
+// derivedNameTooLong reports NAME_TOO_LONG at /project/name for a default
+// component name that passes the limit.
+func derivedNameTooLong(source, stack, value string) (issue.Issue, bool) {
+	found, isLong := NameTooLong(source, "/project/name", "component folder", value)
+	if !isLong {
+		return found, false
+	}
+	info, _ := manifest.LookupStack(stack)
+	limit := maxNameLength - len("-"+info.Suffix)
+	found.Hint = fmt.Sprintf("shorten the name to %d characters or fewer, or pass --component %s=NAME", limit, stack)
+	return found, true
+}
+
 // componentInput is the effective component of one selected stack and the
 // pointer of the input the name comes from.
 type componentInput struct {
@@ -98,7 +121,7 @@ func (r *resolver) componentInputs() []componentInput {
 			continue
 		}
 		seen[stack] = true
-		input := componentInput{stack: stack, name: stack, namePointer: fmt.Sprintf("/stacks/%d", position)}
+		input := componentInput{stack: stack, name: defaultComponentName(r.sel.Project.Name, stack), namePointer: fmt.Sprintf("/stacks/%d", position)}
 		if index, hasEntry := entries[stack]; hasEntry {
 			input.namePointer = fmt.Sprintf("/components/%d", index)
 			if name := r.sel.Components[index].Name; name != "" {
@@ -130,6 +153,15 @@ func (r *resolver) checkNames() {
 		}
 		if input.given && names.IsDeviceName(input.name) {
 			r.add(CodeNameReserved, selectionSource, input.namePointer, deviceMessage(input.name))
+		}
+		if !input.given {
+			if !names.ValidLabel(project) {
+				continue
+			}
+			if tooLong, isLong := derivedNameTooLong(selectionSource, input.stack, input.name); isLong {
+				r.issues = append(r.issues, tooLong)
+				continue
+			}
 		}
 		if tooLong, isLong := NameTooLong(selectionSource, input.namePointer, "component folder", input.name); isLong {
 			r.issues = append(r.issues, tooLong)
@@ -276,7 +308,7 @@ func (r *resolver) checkFolders(stacks []StackPlan, specs []catalog.SpecEntry) {
 	}
 }
 
-// components returns the plan's components: the given name or the stack id,
+// components returns the plan's components: the given name or the default name,
 // one per stack, sorted by stack.
 func (r *resolver) components(stacks []StackPlan) []Component {
 	given := map[string]string{}
@@ -287,7 +319,7 @@ func (r *resolver) components(stacks []StackPlan) []Component {
 	for _, stack := range stacks {
 		name := given[stack.Stack]
 		if name == "" {
-			name = stack.Stack
+			name = defaultComponentName(r.sel.Project.Name, stack.Stack)
 		}
 		components = append(components, Component{Stack: stack.Stack, Name: name})
 	}

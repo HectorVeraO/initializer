@@ -19,16 +19,16 @@
   "components": [
     {
       "stack": "go-srv",
-      "name": "go-srv"
+      "name": "acme-backend-srv"
     },
     {
       "stack": "ng-web",
-      "name": "ng-web"
+      "name": "acme-backend-web"
     }
   ],
   "names": {
-    "component.go-srv": "go-srv",
-    "component.ng-web": "ng-web",
+    "component.go-srv": "acme-backend-srv",
+    "component.ng-web": "acme-backend-web",
     "project": "acme-backend"
   },
   "tckTags": [
@@ -86,26 +86,31 @@
           "sha256": "4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97"
         },
         {
-          "path": "go-srv/cmd/server/main.go",
+          "path": "acme-backend-srv/cmd/server/main.go",
           "sha256": "4a6dbe06d7c724277d44b14054f8aa04de01bdeffa5f6bc3fd13c4874c609ddd",
-          "sourceSha256": "c9813d7b7f4a1d1662295ec5962aba530f8d8d5b06296797ab98d4db288f66dc"
+          "sourceSha256": "c9813d7b7f4a1d1662295ec5962aba530f8d8d5b06296797ab98d4db288f66dc",
+          "sourcePath": "go-srv/cmd/server/main.go"
         },
         {
-          "path": "go-srv/go.mod",
+          "path": "acme-backend-srv/go.mod",
           "sha256": "e89e75e8b5a9fe5c7ea5c5e900d754102c12f4646742c9a7dbee27a393829f2b",
-          "sourceSha256": "597fb3bb55c2b0f6092731ec09f748cdef795e166dfdbafa3718da1e47f8b5c3"
+          "sourceSha256": "597fb3bb55c2b0f6092731ec09f748cdef795e166dfdbafa3718da1e47f8b5c3",
+          "sourcePath": "go-srv/go.mod"
         },
         {
-          "path": "go-srv/internal/platform/core/core.go",
-          "sha256": "b115c3aed45ee55aacd6eae3a55109823238ae84b705ca0bb6fff67c882262a8"
+          "path": "acme-backend-srv/internal/platform/core/core.go",
+          "sha256": "b115c3aed45ee55aacd6eae3a55109823238ae84b705ca0bb6fff67c882262a8",
+          "sourcePath": "go-srv/internal/platform/core/core.go"
         },
         {
-          "path": "go-srv/internal/platform/core/module.manifest.json",
-          "sha256": "42e8a506b0cbc86c56bf1f1992daa5a4e4c3247725e31751cffa890c62069707"
+          "path": "acme-backend-srv/internal/platform/core/module.manifest.json",
+          "sha256": "42e8a506b0cbc86c56bf1f1992daa5a4e4c3247725e31751cffa890c62069707",
+          "sourcePath": "go-srv/internal/platform/core/module.manifest.json"
         },
         {
-          "path": "go-srv/internal/platform/core/testdata/sample.go",
-          "sha256": "aac68f0046ac661942bdae56845c0b6f3400f17e5c0bfa8e8feb1fe9a31936aa"
+          "path": "acme-backend-srv/internal/platform/core/testdata/sample.go",
+          "sha256": "aac68f0046ac661942bdae56845c0b6f3400f17e5c0bfa8e8feb1fe9a31936aa",
+          "sourcePath": "go-srv/internal/platform/core/testdata/sample.go"
         },
         {
           "path": "specs/package.json",
@@ -126,30 +131,36 @@
       },
       "files": [
         {
-          "path": "ng-web/nginx.conf.template",
+          "path": "acme-backend-web/nginx.conf.template",
           "sha256": "f1d71da5b8b913c808d04a41c20d9ac18c3715d3cdd6108b72db050e586cdb30",
-          "sourceSha256": "ed514ac9357bf89a83e94ea8419b792f7a5611204d25c1b6c900c1c417b0d148"
+          "sourceSha256": "ed514ac9357bf89a83e94ea8419b792f7a5611204d25c1b6c900c1c417b0d148",
+          "sourcePath": "ng-web/nginx.conf.template"
         },
         {
-          "path": "ng-web/package.json",
-          "sha256": "674047c836f60375432bb3fbeb30b1d694bd8e04d44f9727f9deeb19333e6865"
+          "path": "acme-backend-web/package.json",
+          "sha256": "674047c836f60375432bb3fbeb30b1d694bd8e04d44f9727f9deeb19333e6865",
+          "sourcePath": "ng-web/package.json"
         },
         {
-          "path": "ng-web/proxy.conf.json",
+          "path": "acme-backend-web/proxy.conf.json",
           "sha256": "b97e7ab9565f578da457e4f35a731ac5997a2ef768bbfff13a317f3bbec595ce",
-          "sourceSha256": "914867e79176b1b8450fcd99322e6942c8c70ec366f998a21f995b7f09232323"
+          "sourceSha256": "914867e79176b1b8450fcd99322e6942c8c70ec366f998a21f995b7f09232323",
+          "sourcePath": "ng-web/proxy.conf.json"
         },
         {
-          "path": "ng-web/src/app/platform/core/index.ts",
-          "sha256": "b31b4ff44bd4781d6a29b41ff8df681739d26ab0bb62928b056a25412a431596"
+          "path": "acme-backend-web/src/app/platform/core/index.ts",
+          "sha256": "b31b4ff44bd4781d6a29b41ff8df681739d26ab0bb62928b056a25412a431596",
+          "sourcePath": "ng-web/src/app/platform/core/index.ts"
         },
         {
-          "path": "ng-web/src/app/platform/core/module.manifest.json",
-          "sha256": "717b84626a565180ae800e1b689eb142c1d3cb4b100dad167ea31371e7c7d50d"
+          "path": "acme-backend-web/src/app/platform/core/module.manifest.json",
+          "sha256": "717b84626a565180ae800e1b689eb142c1d3cb4b100dad167ea31371e7c7d50d",
+          "sourcePath": "ng-web/src/app/platform/core/module.manifest.json"
         },
         {
-          "path": "ng-web/src/app/platform/core/module.ts",
-          "sha256": "005a9dafda7551bc23cb368fbf7a796ec8321cd616e49ce817335ce7524cd97f"
+          "path": "acme-backend-web/src/app/platform/core/module.ts",
+          "sha256": "005a9dafda7551bc23cb368fbf7a796ec8321cd616e49ce817335ce7524cd97f",
+          "sourcePath": "ng-web/src/app/platform/core/module.ts"
         }
       ]
     }
@@ -157,19 +168,19 @@
   "generated": [
     {
       "path": "README.md",
-      "sha256": "6e244a3654c2acfc74125a06d3dccbb49f7694bfb118a650a91cfb1a9168dfb4"
+      "sha256": "e57eb75c13204e993bda0733ca0dac1eb5fa39d6137e2ee73108bc4e61d3f350"
     },
     {
-      "path": "go-srv/cmd/server/modules.go",
+      "path": "acme-backend-srv/cmd/server/modules.go",
       "sha256": "56a85dfd10466e6c5697e17ebf3c31c677891aa9d6adf0b72d221dd7d8ed3472"
+    },
+    {
+      "path": "acme-backend-web/src/app/platform/modules.ts",
+      "sha256": "145cbb249b225054a09dcbe3216c022a499b584fd1813f25bec77290e47dc3e9"
     },
     {
       "path": "initializer.selection.json",
       "sha256": "644b955f887d39a877ff84543642ff8fa6ef3fb5fc8244a655907c7a5bcda7db"
-    },
-    {
-      "path": "ng-web/src/app/platform/modules.ts",
-      "sha256": "145cbb249b225054a09dcbe3216c022a499b584fd1813f25bec77290e47dc3e9"
     }
   ]
 }

@@ -63,7 +63,7 @@ func TestGeneratedGoModIsTidyPerSelection(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			out := generateSelection(t, tc.modules)
-			goSrv := filepath.Join(out, "go-srv")
+			goSrv := filepath.Join(out, folderOf(t, out, "go-srv"))
 			gomod, err := os.ReadFile(filepath.Join(goSrv, "go.mod"))
 			if err != nil {
 				t.Fatal(err)
@@ -87,7 +87,7 @@ func TestGeneratedGoSumIsTheRepoCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := generateSelection(t, "")
-	got, err := os.ReadFile(filepath.Join(out, "go-srv", "go.sum"))
+	got, err := os.ReadFile(filepath.Join(out, folderOf(t, out, "go-srv"), "go.sum"))
 	if err != nil {
 		t.Fatal(err)
 	}

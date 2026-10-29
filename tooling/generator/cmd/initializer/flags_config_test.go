@@ -68,7 +68,7 @@ func TestGenerateReadmeFlagsFileResolvesFromGoSrv(t *testing.T) {
 	}
 	value := string(readme)[at+len(key):]
 	value = value[:strings.IndexAny(value, "`\n ")]
-	fromGoSrv := filepath.Join(out, "go-srv", filepath.FromSlash(value))
+	fromGoSrv := filepath.Join(out, folderOf(t, out, "go-srv"), filepath.FromSlash(value))
 	if _, err := os.Stat(fromGoSrv); err != nil {
 		t.Fatalf("README sets %s%s, which does not exist from the documented go-srv/ working directory: %v", key, value, err)
 	}

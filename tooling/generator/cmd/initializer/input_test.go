@@ -69,10 +69,25 @@ func lockedName(t *testing.T, dir string) string {
 	return name
 }
 
-// goModuleOf returns the module line of the project's go-srv/go.mod.
+// folderOf returns the component folder that the project's lock records for
+// stack.
+func folderOf(t *testing.T, dir, stack string) string {
+	t.Helper()
+	list, _ := projectLock(t, dir)["components"].([]any)
+	for _, raw := range list {
+		entry, _ := raw.(map[string]any)
+		if entry["stack"] == stack {
+			return entry["name"].(string)
+		}
+	}
+	t.Fatalf("the lock of %s has no component of stack %s", dir, stack)
+	return ""
+}
+
+// goModuleOf returns the module line of the project's backend go.mod.
 func goModuleOf(t *testing.T, dir string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, "go-srv", "go.mod"))
+	data, err := os.ReadFile(filepath.Join(dir, folderOf(t, dir, "go-srv"), "go.mod"))
 	if err != nil {
 		t.Fatal(err)
 	}

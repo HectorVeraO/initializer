@@ -2,12 +2,14 @@ package plan_test
 
 import (
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/fixture"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
 )
 
@@ -36,10 +38,10 @@ func issuesAt(issues []issue.Issue, code string) []issue.Issue {
 	return found
 }
 
-func TestComponentNamesComeFromTheEntriesElseTheStackId(t *testing.T) {
+func TestComponentNamesComeFromTheEntriesElseTheProjectName(t *testing.T) {
 	repo := fixture.Load(t)
 	p := mustResolve(t, repo.Catalog, fullstackSelection(manifest.Component{Stack: "go-srv", Name: "acme-srv"}))
-	want := []plan.Component{{Stack: "go-srv", Name: "acme-srv"}, {Stack: "ng-web", Name: "ng-web"}}
+	want := []plan.Component{{Stack: "go-srv", Name: "acme-srv"}, {Stack: "ng-web", Name: "acme-backend-web"}}
 	if !reflect.DeepEqual(p.Components, want) {
 		t.Fatalf("components = %+v, want %+v", p.Components, want)
 	}
@@ -74,8 +76,8 @@ func TestProjectPathLeavesAnUnselectedStackRootAlone(t *testing.T) {
 	if got := p.ProjectPath("ng-web/package.json"); got != "ng-web/package.json" {
 		t.Errorf("a path under an unselected stack root moved to %q", got)
 	}
-	if got := p.ProjectPath("go-srv/go.mod"); got != "go-srv/go.mod" {
-		t.Errorf("the default name must keep the folder, got %q", got)
+	if got := p.ProjectPath("go-srv/go.mod"); got != "acme-backend-srv/go.mod" {
+		t.Errorf("the default name must follow the project, got %q", got)
 	}
 }
 
@@ -167,7 +169,7 @@ func TestTwoComponentsWithOneNameConflictOnBothFields(t *testing.T) {
 
 func TestANameEqualToAnotherDefaultedFolderConflicts(t *testing.T) {
 	repo := fixture.Load(t)
-	sel := fullstackSelection(manifest.Component{Stack: "go-srv", Name: "ng-web"})
+	sel := fullstackSelection(manifest.Component{Stack: "go-srv", Name: "acme-backend-web"})
 	_, issues := plan.Resolve(repo.Catalog, sel)
 	conflicts := issuesAt(issues, plan.CodeNameConflict)
 	paths := []string{}
@@ -222,4 +224,97 @@ func TestNameTooLong(t *testing.T) {
 	if _, isLong := plan.NameTooLong("selection", "/project/name", "component folder", strings.Repeat("a", 63)); isLong {
 		t.Error("63 bytes is the limit and passes")
 	}
+}
+
+func TestADerivedNameTooLongIsReportedAtTheProjectName(t *testing.T) {
+	repo := fixture.Load(t)
+	cases := []struct {
+		length  int
+		wantErr bool
+	}{{2, false}, {59, false}, {60, true}, {63, true}}
+	for _, tc := range cases {
+		sel := fullstackSelection()
+		sel.Project.Name = strings.Repeat("a", tc.length)
+		p, issues := plan.Resolve(repo.Catalog, sel)
+		tooLong := issuesAt(issues, plan.CodeNameTooLong)
+		if !tc.wantErr {
+			if len(issues) != 0 {
+				t.Errorf("%d bytes: issues = %+v", tc.length, issues)
+			}
+			if got := p.Components[0].Name; got != sel.Project.Name+"-srv" {
+				t.Errorf("%d bytes: backend component = %q", tc.length, got)
+			}
+			continue
+		}
+		if len(tooLong) != 2 {
+			t.Fatalf("%d bytes: want one issue per derived name, got %+v", tc.length, issues)
+		}
+		for _, found := range tooLong {
+			if found.Path != "selection#/project/name" || !strings.HasPrefix(found.Message, "derived component folder ") ||
+				!strings.Contains(found.Hint, "shorten the name to 59 characters or fewer, or pass --component ") {
+				t.Errorf("%d bytes: issue %+v", tc.length, found)
+			}
+		}
+	}
+}
+
+func TestAGivenNameIsNotTooLongBecauseTheProjectIs(t *testing.T) {
+	repo := fixture.Load(t)
+	sel := fullstackSelection(
+		manifest.Component{Stack: "go-srv", Name: "acme-api"},
+		manifest.Component{Stack: "ng-web", Name: "acme-ui"})
+	sel.Project.Name = strings.Repeat("a", 63)
+	if _, issues := plan.Resolve(repo.Catalog, sel); len(issues) != 0 {
+		t.Fatalf("issues = %+v", issues)
+	}
+}
+
+func TestAnOverrideEqualToTheOtherDefaultConflictsOnBothFields(t *testing.T) {
+	repo := fixture.Load(t)
+	sel := fullstackSelection(manifest.Component{Stack: "ng-web", Name: "acme-backend-srv"})
+	_, issues := plan.Resolve(repo.Catalog, sel)
+	paths := []string{}
+	for _, found := range issuesAt(issues, plan.CodeNameConflict) {
+		paths = append(paths, found.Path)
+	}
+	want := []string{"selection#/components/0/name", "selection#/stacks/0"}
+	sort.Strings(want)
+	sort.Strings(paths)
+	if !reflect.DeepEqual(paths, want) {
+		t.Fatalf("conflict paths = %v, want %v", paths, want)
+	}
+}
+
+func FuzzDefaultComponentName(f *testing.F) {
+	f.Add("acme")
+	f.Add(strings.Repeat("a", 59))
+	f.Add(strings.Repeat("a", 60))
+	f.Fuzz(func(t *testing.T, raw string) {
+		name := strings.Map(func(r rune) rune {
+			if r >= 'a' && r <= 'z' {
+				return r
+			}
+			return -1
+		}, raw)
+		if len(name) < 2 || len(name) > 63 {
+			t.Skip()
+		}
+		repo := fixture.Load(t)
+		sel := fullstackSelection()
+		sel.Project.Name = name
+		p, issues := plan.Resolve(repo.Catalog, sel)
+		if len(name)+4 > 63 {
+			if len(issuesAt(issues, plan.CodeNameTooLong)) != 2 || len(issues) != 2 {
+				t.Fatalf("name of %d bytes: issues = %+v", len(name), issues)
+			}
+			return
+		}
+		if len(issues) != 0 {
+			t.Fatalf("name %q: issues = %+v", name, issues)
+		}
+		srv, web := p.Components[0].Name, p.Components[1].Name
+		if srv != name+"-srv" || web != name+"-web" || srv == web || !names.ValidLabel(srv) || !names.ValidLabel(web) {
+			t.Fatalf("components = %q %q", srv, web)
+		}
+	})
 }

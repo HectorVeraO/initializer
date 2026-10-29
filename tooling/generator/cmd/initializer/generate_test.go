@@ -324,14 +324,15 @@ func TestVerifyExitCodes(t *testing.T) {
 		t.Fatalf("fresh project: exit %d, stdout %q, stderr %s", code, stdout, stderr)
 	}
 
-	edited := filepath.Join(e.out, "go-srv", "internal", "platform", "core", "core.go")
+	srv := folderOf(t, e.out, "go-srv")
+	edited := filepath.Join(e.out, srv, "internal", "platform", "core", "core.go")
 	if err := os.WriteFile(edited, []byte("package core\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(filepath.Join(e.out, "go-srv", "internal", "platform", "parameters", "parameters.go")); err != nil {
+	if err := os.Remove(filepath.Join(e.out, srv, "internal", "platform", "parameters", "parameters.go")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(e.out, "go-srv", "internal", "platform", "identity", "new.go"), []byte("package identity\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(e.out, srv, "internal", "platform", "identity", "new.go"), []byte("package identity\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, stderr = executeLogged(t, "verify", "--project", e.out, "--format", "json")
@@ -356,7 +357,7 @@ func TestVerifyExitCodes(t *testing.T) {
 	code, stdout, _ = execute(t, "verify", e.out)
 	wantLines := 4
 	if code != exitIssues || strings.Count(stdout, "\n") != wantLines || !strings.HasSuffix(stdout, "3 differences\n") ||
-		!strings.Contains(stdout, "MODIFIED go-srv/internal/platform/core/core.go: ") {
+		!strings.Contains(stdout, "MODIFIED "+srv+"/internal/platform/core/core.go: ") {
 		t.Fatalf("text differences: exit %d, stdout %q", code, stdout)
 	}
 

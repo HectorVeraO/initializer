@@ -296,16 +296,17 @@ func TestVerifyTextAndJSONReportDifferences(t *testing.T) {
 	if code, _, stderr := execute(t, e.args("--selection", writeSelection(t, validSelection))...); code != exitOK {
 		t.Fatalf("generate: %d %s", code, stderr)
 	}
-	if err := os.Remove(filepath.Join(e.out, "go-srv", "internal", "platform", "parameters", "parameters.go")); err != nil {
+	srv := folderOf(t, e.out, "go-srv")
+	if err := os.Remove(filepath.Join(e.out, srv, "internal", "platform", "parameters", "parameters.go")); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, stderr := execute(t, "verify", e.out)
-	want := "MISSING go-srv/internal/platform/parameters/parameters.go: listed file does not exist\n1 difference\n"
+	want := "MISSING " + srv + "/internal/platform/parameters/parameters.go: listed file does not exist\n1 difference\n"
 	if code != exitIssues || stdout != want || stderr != "" {
 		t.Fatalf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 	code, stdout, _ = executeJSON(t, "verify", e.out)
-	wantJSON := `{"schema":1,"ok":false,"project":"acme-backend","differences":[{"code":"MISSING","path":"go-srv/internal/platform/parameters/parameters.go","message":"listed file does not exist"}],"warnings":[]}` + "\n"
+	wantJSON := `{"schema":1,"ok":false,"project":"acme-backend","differences":[{"code":"MISSING","path":"` + srv + `/internal/platform/parameters/parameters.go","message":"listed file does not exist"}],"warnings":[]}` + "\n"
 	if code != exitIssues || stdout != wantJSON {
 		t.Fatalf("exit %d, stdout %q", code, stdout)
 	}
