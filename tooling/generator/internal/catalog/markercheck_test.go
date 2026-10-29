@@ -75,6 +75,16 @@ func TestMarkerIssues(t *testing.T) {
 	}
 }
 
+func TestStackCoreMarkerReportsOnlyTheUnknownStack(t *testing.T) {
+	repo := cleanRepo(t)
+	put(repo, composeFile, "name: fixture-app\n# initializer:stack core\n# initializer:end core\n")
+	_, issues := buildRepo(t, repo)
+	want := []issue.Issue{{Code: "MARKER_STACK_UNKNOWN", Path: composeFile, Message: `marker names stack "core" (line 2), which is not a stack of the stack table`}}
+	if len(issues) != len(want) || issues[0] != want[0] {
+		t.Errorf("want exactly %+v, got %+v", want, issues)
+	}
+}
+
 func TestValidMarkersAndProseAreAccepted(t *testing.T) {
 	repo := cleanRepo(t)
 	put(repo, composeFile, "name: fixture-app\n\nservices: {}\n# initializer:module identity\n# initializer:end identity\n")
