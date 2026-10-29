@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "generator": "0.1.0",
   "catalogSha256": "6ce0b4195971420301c218faed224439b88e93565b98a977b9586f607fa9fdf7",
   "selection": {
@@ -14,6 +14,16 @@
     "modules": [
       "core"
     ]
+  },
+  "components": [
+    {
+      "stack": "go-srv",
+      "name": "go-srv"
+    }
+  ],
+  "names": {
+    "component.go-srv": "go-srv",
+    "project": "acme-backend"
   },
   "tckTags": [
     "@core",

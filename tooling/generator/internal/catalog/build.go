@@ -72,10 +72,22 @@ type stackInfo struct {
 	compositionRoot string
 }
 
-// stackTable is the built-in stack table, sorted by stack name.
-var stackTable = []stackInfo{
-	{name: manifest.StackGoSrv, root: "go-srv/", modulesRoot: "go-srv/internal/platform/", compositionRoot: "go-srv/cmd/server/modules.go"},
-	{name: manifest.StackNgWeb, root: "ng-web/", modulesRoot: "ng-web/src/app/platform/", compositionRoot: "ng-web/src/app/platform/modules.ts"},
+// stackTable is the built-in stack table of the manifest package, as source
+// paths, sorted by stack name.
+var stackTable = sourceStackTable()
+
+func sourceStackTable() []stackInfo {
+	rows := manifest.Stacks()
+	table := make([]stackInfo, len(rows))
+	for i, row := range rows {
+		table[i] = stackInfo{
+			name:            row.ID,
+			root:            row.Root,
+			modulesRoot:     row.Root + row.ModulesRoot,
+			compositionRoot: row.Root + row.CompositionRoot,
+		}
+	}
+	return table
 }
 
 // staticRoots are the managed roots that do not depend on a stack manifest.

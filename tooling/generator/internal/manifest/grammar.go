@@ -26,16 +26,21 @@ var (
 
 // IsBackendStack reports whether stack is a backend stack of the stack table.
 func IsBackendStack(stack string) bool {
-	return stack == StackGoSrv
+	info, ok := LookupStack(stack)
+	isBackend := ok && info.Role == RoleBackend
+	return isBackend
 }
 
 // IsFrontendStack reports whether stack is a frontend stack of the stack table.
 func IsFrontendStack(stack string) bool {
-	return stack == StackNgWeb
+	info, ok := LookupStack(stack)
+	isFrontend := ok && info.Role == RoleFrontend
+	return isFrontend
 }
 
 func isKnownStack(stack string) bool {
-	return IsBackendStack(stack) || IsFrontendStack(stack)
+	_, ok := LookupStack(stack)
+	return ok
 }
 
 func validID(id string) bool {
