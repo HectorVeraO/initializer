@@ -68,6 +68,19 @@ func TestParseJSONReportsEveryProblem(t *testing.T) {
 	}
 }
 
+func TestParseJSONNestingBoundary(t *testing.T) {
+	nested := func(levels int) []byte {
+		return []byte(strings.Repeat("[", levels) + strings.Repeat("]", levels))
+	}
+	if root, issues := manifest.ParseJSON("acme.json", nested(64)); root == nil || len(issues) != 0 {
+		t.Errorf("64 levels: want a tree, got %v %v", root, issues)
+	}
+	root, issues := manifest.ParseJSON("acme.json", nested(65))
+	if root != nil || len(issues) == 0 {
+		t.Errorf("65 levels: want issues and no tree, got %v %v", root, issues)
+	}
+}
+
 func TestParseJSONAcceptsTheRepoSelectionFiles(t *testing.T) {
 	for _, path := range ciSelectionPaths(t) {
 		data, err := os.ReadFile(path)

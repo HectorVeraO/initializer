@@ -94,6 +94,19 @@ func TestDecodeSelectionComponentProblems(t *testing.T) {
 	}
 }
 
+func TestDecodeSelectionComponentWithoutStackSaysRequired(t *testing.T) {
+	_, issues := decodeFile(t, selectionPath, withComponents(t, 2, []any{map[string]any{"name": "acme-srv"}}))
+	for _, got := range issues {
+		if got.Path == selectionPath+"#/components/0/stack" {
+			if got.Code != manifest.CodeSelectionInvalid || got.Message != "required" {
+				t.Fatalf("issue = %+v", got)
+			}
+			return
+		}
+	}
+	t.Fatalf("want an issue at #/components/0/stack, got %v", issues)
+}
+
 func TestDecodeSelectionCollectsEveryBadComponentName(t *testing.T) {
 	data := withComponents(t, 2, []any{
 		map[string]any{"stack": "go-srv", "name": "Bad"},
