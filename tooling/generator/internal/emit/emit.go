@@ -39,6 +39,9 @@ type BuildOptions struct {
 	CatalogSHA256 string
 	// Source is the commit of the source tree; nil omits it from the lock.
 	Source *lockfile.Source
+	// Recorded is the document initializer.selection.json and the lock's
+	// selection hold. A zero value (Schema 0) records Plan.Selection.
+	Recorded manifest.Selection
 }
 
 // File is one file of the generated project.
@@ -122,7 +125,7 @@ func (b *builder) run() (Project, error) {
 		Generator:     generator.Version,
 		CatalogSHA256: b.opts.CatalogSHA256,
 		Source:        b.opts.Source,
-		Selection:     p.Selection,
+		Selection:     b.recorded(),
 		Names:         map[string]string{"project": b.project},
 		TCKTags:       p.TCKTags,
 		TCKGrep:       p.TCKGrep,
@@ -253,6 +256,14 @@ func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byt
 	return data, nil
 }
 
+// recorded returns the selection the project records.
+func (b *builder) recorded() manifest.Selection {
+	if b.opts.Recorded.Schema == 0 {
+		return b.opts.Plan.Selection
+	}
+	return b.opts.Recorded
+}
+
 // hasModule reports whether any selected stack installs the module.
 func (b *builder) hasModule(id string) bool {
 	for _, stack := range b.opts.Plan.Stacks {
@@ -339,7 +350,7 @@ func (b *builder) render() ([]lockfile.File, error) {
 		return nil, err
 	}
 
-	selection, err := encodeSelection(p.Selection)
+	selection, err := encodeSelection(b.recorded())
 	if err != nil {
 		return nil, err
 	}
@@ -427,12 +438,6 @@ func (b *builder) assemble(lock []byte) (Project, error) {
 
 // encodeSelection returns the canonical bytes of the recorded selection.
 func encodeSelection(s manifest.Selection) ([]byte, error) {
-	if s.Stacks == nil {
-		s.Stacks = []string{}
-	}
-	if s.Modules == nil {
-		s.Modules = []string{}
-	}
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
 	encoder.SetEscapeHTML(false)

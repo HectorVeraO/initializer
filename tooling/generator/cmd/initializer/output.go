@@ -12,6 +12,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/emit"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 )
 
 // Result formats of --format.
@@ -156,28 +157,58 @@ func displayPath(path string) string {
 // reportProblems writes every command-line problem and the usage_error event;
 // it returns the usage exit code.
 func reportProblems(ctx *Context, problems []Problem) int {
+	return reportProblemsAndIssues(ctx, problems, nil, issueView{})
+}
+
+// reportProblemsAndIssues writes the command-line problems of a run and, with
+// them, the value problems found in the same run; it returns the usage exit code.
+func reportProblemsAndIssues(ctx *Context, problems []Problem, issues []issue.Issue, view issueView) int {
 	ctx.Logger.Error("usage_error", slog.Int("problem_count", len(problems)))
+	problems = hintProblems(problems)
+	sorted := addHints(issues, view.moduleIDs)
+	issue.Sort(sorted)
 	if ctx.isJSON() {
 		doc := struct {
 			Schema   int           `json:"schema"`
 			OK       bool          `json:"ok"`
 			Problems []Problem     `json:"problems"`
 			Issues   []issue.Issue `json:"issues"`
-		}{documentSchema, false, list(problems), []issue.Issue{}}
+		}{documentSchema, false, list(problems), list(sorted)}
 		return emitDocument(ctx, ctx.Stderr, doc, exitUsage)
 	}
 	for _, problem := range problems {
-		if problem.Arg == "" {
-			fmt.Fprintf(ctx.Stderr, "error: %s\n", problem.Message)
-		} else {
-			fmt.Fprintf(ctx.Stderr, "error: %s: %s\n", problem.Arg, problem.Message)
+		message := problem.Message
+		if problem.Code != "" {
+			message += " [" + problem.Code + "]"
 		}
-		if problem.Suggestion != "" {
+		if problem.Arg == "" {
+			fmt.Fprintf(ctx.Stderr, "error: %s\n", message)
+		} else {
+			fmt.Fprintf(ctx.Stderr, "error: %s: %s\n", problem.Arg, message)
+		}
+		switch {
+		case problem.Suggestion != "":
 			fmt.Fprintf(ctx.Stderr, "  hint: did you mean %q?\n", problem.Suggestion)
+		case problem.Hint != "":
+			fmt.Fprintf(ctx.Stderr, "  hint: %s\n", problem.Hint)
 		}
 	}
-	fmt.Fprintf(ctx.Stderr, "%d %s.\n", len(problems), plural(len(problems), "problem"))
+	writeIssueLines(ctx, sorted, view)
+	total := len(problems) + len(sorted)
+	fmt.Fprintf(ctx.Stderr, "%d %s.\n", total, plural(total, "problem"))
 	return exitUsage
+}
+
+// hintProblems returns problems with the table hint of each coded problem.
+func hintProblems(problems []Problem) []Problem {
+	hinted := make([]Problem, len(problems))
+	copy(hinted, problems)
+	for i := range hinted {
+		if hinted[i].Code != "" && hinted[i].Hint == "" {
+			hinted[i].Hint = hintFor(issue.Issue{Code: hinted[i].Code}, nil)
+		}
+	}
+	return hinted
 }
 
 // issueView is what rendering the issues of one run needs besides the issues.
@@ -186,8 +217,6 @@ type issueView struct {
 	dir string
 	// moduleIDs are the catalog's module ids, for MODULE_UNKNOWN hints.
 	moduleIDs []string
-	// selectionFile is the input file the selection came from; "" when flags built it.
-	selectionFile string
 	// components are the --component values as typed, in flag order, so an
 	// issue at flags#/components/<i> renders as the flag as typed.
 	components []string
@@ -217,6 +246,13 @@ func reportIssues(ctx *Context, issues []issue.Issue, view issueView) int {
 		}{documentSchema, false, sorted, ctx.warnings()}
 		return emitDocument(ctx, ctx.Stdout, doc, exitIssues)
 	}
+	writeIssueLines(ctx, sorted, view)
+	fmt.Fprintf(ctx.Stderr, "%d %s; nothing was written.\n", len(sorted), plural(len(sorted), "problem"))
+	return exitIssues
+}
+
+// writeIssueLines writes one error line per issue, with its hint.
+func writeIssueLines(ctx *Context, sorted []issue.Issue, view issueView) {
 	for _, found := range sorted {
 		place := whereOf(found, view)
 		if place != "" {
@@ -227,8 +263,6 @@ func reportIssues(ctx *Context, issues []issue.Issue, view issueView) int {
 			fmt.Fprintf(ctx.Stderr, "  hint: %s\n", found.Hint)
 		}
 	}
-	fmt.Fprintf(ctx.Stderr, "%d %s; nothing was written.\n", len(sorted), plural(len(sorted), "problem"))
-	return exitIssues
 }
 
 // flagPointers maps the leading pointer tokens of a flag-origin issue to the
@@ -261,7 +295,7 @@ func whereOf(found issue.Issue, view issueView) string {
 		return displayPath(found.Path)
 	case !hasPointer:
 		return found.Path
-	case source == "flags" || (source == "selection" && view.selectionFile == ""):
+	case source == manifest.FlagsSource || source == selectionSource:
 		if typed, ok := typedComponentAt(pointer, view.components); ok {
 			return "--component " + typed
 		}
@@ -269,8 +303,6 @@ func whereOf(found issue.Issue, view issueView) string {
 			return name
 		}
 		return found.Path
-	case source == "selection":
-		source = view.selectionFile
 	case source == "args":
 		if pointer == "/dir" && view.dir != "" {
 			return displayPath(view.dir)

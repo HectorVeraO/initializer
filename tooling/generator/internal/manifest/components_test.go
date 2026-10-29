@@ -24,7 +24,7 @@ func TestDecodeSelectionSchema2ReadsComponents(t *testing.T) {
 		map[string]any{"stack": "go-srv", "name": "acme-srv"},
 		map[string]any{"stack": "ng-web"},
 	})
-	selection, issues := manifest.DecodeSelection(selectionPath, data)
+	selection, issues := decodeFile(t, selectionPath, data)
 	if len(issues) != 0 {
 		t.Fatalf("unexpected issues: %v", issues)
 	}
@@ -36,7 +36,7 @@ func TestDecodeSelectionSchema2ReadsComponents(t *testing.T) {
 
 func TestDecodeSelectionSchema2WithoutComponentsIsValid(t *testing.T) {
 	data := mutateFixture(t, "selection.valid.json", func(m map[string]any) { m["schema"] = 2 })
-	selection, issues := manifest.DecodeSelection(selectionPath, data)
+	selection, issues := decodeFile(t, selectionPath, data)
 	if len(issues) != 0 || selection.Schema != 2 || len(selection.Components) != 0 {
 		t.Fatalf("selection %+v issues %v", selection, issues)
 	}
@@ -53,11 +53,11 @@ func TestDecodeSelectionComponentProblems(t *testing.T) {
 		{"schema 1 refuses components", 1, []any{map[string]any{"stack": "go-srv"}},
 			manifest.CodeSelectionInvalid, "#/components", "components needs schema 2"},
 		{"components is not an array", 2, "go-srv",
-			manifest.CodeSelectionInvalid, "#/components", "must be an array"},
+			manifest.CodeSelectionInvalid, "#/components", "must be a list of objects"},
 		{"entry is not an object", 2, []any{"go-srv"},
 			manifest.CodeSelectionInvalid, "#/components/0", "must be an object"},
 		{"entry without stack", 2, []any{map[string]any{"name": "acme-srv"}},
-			manifest.CodeSelectionInvalid, "#/components/0/stack", "required key is missing"},
+			manifest.CodeSelectionInvalid, "#/components/0/stack", "required"},
 		{"stack is not a string", 2, []any{map[string]any{"stack": 7}},
 			manifest.CodeSelectionInvalid, "#/components/0/stack", "must be a string"},
 		{"name is not a string", 2, []any{map[string]any{"stack": "go-srv", "name": 7}},
@@ -81,7 +81,7 @@ func TestDecodeSelectionComponentProblems(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, issues := manifest.DecodeSelection(selectionPath, withComponents(t, tc.schema, tc.components))
+			_, issues := decodeFile(t, selectionPath, withComponents(t, tc.schema, tc.components))
 			found := false
 			for _, got := range issues {
 				isMatch := got.Code == tc.code && got.Path == selectionPath+tc.path && strings.Contains(got.Message, tc.message)
@@ -94,12 +94,25 @@ func TestDecodeSelectionComponentProblems(t *testing.T) {
 	}
 }
 
+func TestDecodeSelectionComponentWithoutStackSaysRequired(t *testing.T) {
+	_, issues := decodeFile(t, selectionPath, withComponents(t, 2, []any{map[string]any{"name": "acme-srv"}}))
+	for _, got := range issues {
+		if got.Path == selectionPath+"#/components/0/stack" {
+			if got.Code != manifest.CodeSelectionInvalid || got.Message != "required" {
+				t.Fatalf("issue = %+v", got)
+			}
+			return
+		}
+	}
+	t.Fatalf("want an issue at #/components/0/stack, got %v", issues)
+}
+
 func TestDecodeSelectionCollectsEveryBadComponentName(t *testing.T) {
 	data := withComponents(t, 2, []any{
 		map[string]any{"stack": "go-srv", "name": "Bad"},
 		map[string]any{"stack": "ng-web", "name": "worse_"},
 	})
-	_, issues := manifest.DecodeSelection(selectionPath, data)
+	_, issues := decodeFile(t, selectionPath, data)
 	if !hasIssue(issues, manifest.CodeNameInvalid, selectionPath+"#/components/0/name") ||
 		!hasIssue(issues, manifest.CodeNameInvalid, selectionPath+"#/components/1/name") {
 		t.Fatalf("want both names reported, got %v", issues)
@@ -108,34 +121,9 @@ func TestDecodeSelectionCollectsEveryBadComponentName(t *testing.T) {
 
 func TestDecodeSelectionKeepsAnUnknownStackForThePlan(t *testing.T) {
 	data := withComponents(t, 2, []any{map[string]any{"stack": "rust-srv", "name": "acme-srv"}})
-	selection, issues := manifest.DecodeSelection(selectionPath, data)
+	selection, issues := decodeFile(t, selectionPath, data)
 	if len(issues) != 0 || len(selection.Components) != 1 || selection.Components[0].Stack != "rust-srv" {
 		t.Fatalf("selection %+v issues %v", selection, issues)
-	}
-}
-
-func TestSelectionFromFlagsComponents(t *testing.T) {
-	base := manifest.SelectionFlags{
-		Name: "acme-backend", GoModule: "example.com/acme/backend",
-		Stacks: []string{"go-srv"}, Modules: []string{"parameters"},
-	}
-	good := base
-	good.Components = []manifest.Component{{Stack: "go-srv", Name: "acme-srv"}}
-	selection, issues := manifest.SelectionFromFlags(good)
-	if len(issues) != 0 || selection.Schema != 2 || !reflect.DeepEqual(selection.Components, good.Components) {
-		t.Fatalf("selection %+v issues %v", selection, issues)
-	}
-
-	plain, issues := manifest.SelectionFromFlags(base)
-	if len(issues) != 0 || plain.Schema != 1 || plain.Components != nil {
-		t.Fatalf("a selection without components must stay schema 1: %+v %v", plain, issues)
-	}
-
-	bad := base
-	bad.Components = []manifest.Component{{Stack: "go-srv", Name: "acme-srv"}, {Stack: "ng-web", Name: "Web_"}}
-	_, issues = manifest.SelectionFromFlags(bad)
-	if len(issues) != 1 || !hasIssue(issues, manifest.CodeNameInvalid, "flags#/components/1") {
-		t.Fatalf("want one NAME_INVALID at flags#/components/1, got %v", issues)
 	}
 }
 
@@ -146,7 +134,7 @@ func FuzzDecodeSelectionComponents(f *testing.F) {
 	f.Add([]byte(`{"schema":1,"components":[{}]}`))
 	f.Add([]byte(`{"schema":2,"components":[{"stack":1,"name":[]},"x",null]}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
-		selection, issues := manifest.DecodeSelection(selectionPath, data)
+		selection, issues := decodeFile(t, selectionPath, data)
 		if len(issues) == 0 && selection.Schema == 1 && len(selection.Components) > 0 {
 			t.Fatalf("schema 1 decoded components: %+v", selection)
 		}

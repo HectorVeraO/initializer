@@ -91,7 +91,11 @@ func Check(dir string) (Report, error) {
 	}
 	differences = append(differences, untracked...)
 	issue.Sort(differences)
-	return Report{Project: lock.Selection.Project.Name, Differences: differences}, nil
+	project := lock.Names["project"]
+	if project == "" {
+		project = lock.Selection.Project.Name
+	}
+	return Report{Project: project, Differences: differences}, nil
 }
 
 func readLock(path string) (lockfile.Lock, error) {

@@ -32,7 +32,7 @@ from the input file (-f), then from defaults.
 
 Flags:
   -f, --file PATH
-        Input file: .json (default: none)
+        Input file: .json; - reads stdin (default: none)
   --name NAME
         Project name (default: the folder's name, else "demo")
   --go-module PATH
@@ -212,8 +212,8 @@ func TestOneInvocationReportsEveryCommandLineProblem(t *testing.T) {
 			t.Errorf("stderr misses %q:\n%s", want, stderr)
 		}
 	}
-	if !strings.Contains(stderr, "7 problems.") {
-		t.Errorf("want the count of 7 problems (the five above plus the two required flags):\n%s", stderr)
+	if !strings.Contains(stderr, "8 problems.") {
+		t.Errorf("want the count of 8 problems (the five above, the two required flags and the invalid name):\n%s", stderr)
 	}
 	if event := usageEvent(t, stderr); event["problem_count"] != float64(7) {
 		t.Errorf("usage_error event = %v", event)
@@ -273,17 +273,24 @@ func (e env) flagSelection(extra ...string) []string {
 	return append(base, extra...)
 }
 
+// recordedName returns the effective project name the lock holds; the
+// recorded selection carries a name only when the input gave one.
 func recordedName(t *testing.T, project string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(project, "initializer.selection.json"))
+	data, err := os.ReadFile(filepath.Join(project, "initializer.lock.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, after, found := strings.Cut(string(data), `"name": "`)
-	if !found {
-		t.Fatalf("no project name in %s", data)
+	var lock struct {
+		Names map[string]string `json:"names"`
 	}
-	name, _, _ := strings.Cut(after, `"`)
+	if err := json.Unmarshal(data, &lock); err != nil {
+		t.Fatal(err)
+	}
+	name, found := lock.Names["project"]
+	if !found {
+		t.Fatalf("no names.project in %s", data)
+	}
 	return name
 }
 
@@ -427,7 +434,7 @@ func TestGenerateRefusesAFolderNameThatIsNotAProjectName(t *testing.T) {
 func TestFolderNameIssueKeepsTheOtherSelectionIssues(t *testing.T) {
 	e := newEnv(t)
 	inFreshDir(t)
-	code, stdout, _ := executeJSON(t, "generate", "My App", "--root", e.root, "--catalog", e.catalog, "--stacks", "go-srv", "--modules", "parameters")
+	code, stdout, _ := executeJSON(t, "generate", "My App", "--root", e.root, "--catalog", e.catalog, "--stacks", "go-srv", "--modules", "nope")
 	if code != exitIssues {
 		t.Fatalf("exit %d", code)
 	}
@@ -435,8 +442,8 @@ func TestFolderNameIssueKeepsTheOtherSelectionIssues(t *testing.T) {
 	for _, found := range issueArray(t, stdout) {
 		paths[found["path"]] = true
 	}
-	if !paths["args#/dir"] || !paths["flags#/project/goModule"] {
-		t.Fatalf("want the folder and the Go module issues, got %v", paths)
+	if !paths["args#/dir"] || !paths["flags#/modules/0"] {
+		t.Fatalf("want the folder and the module issues, got %v", paths)
 	}
 }
 

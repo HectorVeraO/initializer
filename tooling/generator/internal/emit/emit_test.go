@@ -183,11 +183,15 @@ func TestLockRecordsGrepInvertOfAnUninstalledCooperatingSpec(t *testing.T) {
 func TestRegenerationFromTheRecordedSelectionIsByteIdentical(t *testing.T) {
 	repo := fixture.Load(t)
 	first := mustBuild(t, repo, selection(targetModule, "feature-flags"))
-	recorded, issues := manifest.DecodeSelection("initializer.selection.json", []byte(projectFile(t, first, lockfile.SelectionName)))
+	tree, issues := manifest.ParseJSON("initializer.selection.json", []byte(projectFile(t, first, lockfile.SelectionName)))
+	if len(issues) > 0 {
+		t.Fatalf("parse recorded selection: %v", issues)
+	}
+	recorded, issues := manifest.DecodeInput("initializer.selection.json", tree)
 	if len(issues) > 0 {
 		t.Fatalf("decode recorded selection: %v", issues)
 	}
-	second := mustBuild(t, repo, recorded)
+	second := mustBuild(t, repo, recorded.Selection)
 	compareTrees(t, readTree(t, mustWrite(t, second)), readTree(t, mustWrite(t, first)))
 }
 

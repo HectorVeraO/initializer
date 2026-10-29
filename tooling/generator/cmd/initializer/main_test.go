@@ -107,10 +107,6 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 		"missing catalog flags":    {[]string{"catalog", "build", "--root", "."}, "--files: is required"},
 		"generate missing root":    {[]string{"generate", "--catalog", "c.json", "--selection", sel}, "--root: is required"},
 		"generate missing catalog": {[]string{"generate", "--root", ".", "--selection", sel}, "--catalog: is required"},
-		"no selection":             {common, "a selection is required"},
-		"file plus flag":           {append(append([]string{}, common...), "--selection", sel, "--name", "acme-backend"), "cannot be combined"},
-		"file plus all-modules":    {append(append([]string{}, common...), "--selection", sel, "--all-modules"), "cannot be combined"},
-		"flags without modules":    {append(append([]string{}, common...), "--name", "n", "--stacks", "go-srv"), "requires --modules or --all-modules"},
 		"all-modules plus modules": {append(append([]string{}, common...), "--all-modules", "--modules", "a", "--name", "n"), "cannot be combined"},
 		"selection plus file":      {append(append([]string{}, common...), "--selection", sel, "-f", sel), "pass the file once"},
 	}

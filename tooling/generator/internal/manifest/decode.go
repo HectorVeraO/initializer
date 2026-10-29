@@ -41,6 +41,12 @@ func (d *decoder) add(pointer, message string) {
 }
 
 func (d *decoder) addCode(code, pointer, message string) {
+	d.addAt(code, pointer, 0, message, "")
+}
+
+// addAt adds an issue with the source line of the value and a hint; 0 and ""
+// omit them.
+func (d *decoder) addAt(code, pointer string, line int, message, hint string) {
 	if d.seen[pointer] {
 		return
 	}
@@ -48,7 +54,9 @@ func (d *decoder) addCode(code, pointer, message string) {
 	d.issues = append(d.issues, issue.Issue{
 		Code:    code,
 		Path:    issue.Path(d.source, pointer),
+		Line:    line,
 		Message: message,
+		Hint:    hint,
 	})
 }
 
@@ -142,23 +150,6 @@ func (d *decoder) schema(members map[string]json.RawMessage) {
 	if string(bytes.TrimSpace(raw)) != "1" {
 		d.add("/schema", "must be the number 1")
 	}
-}
-
-// selectionSchema reads the schema member of a selection: 1 or 2. It returns 0
-// after reporting a missing or unsupported schema.
-func (d *decoder) selectionSchema(members map[string]json.RawMessage) int {
-	raw, ok := d.required(members, "", "schema")
-	if !ok {
-		return 0
-	}
-	switch string(bytes.TrimSpace(raw)) {
-	case "1":
-		return 1
-	case "2":
-		return 2
-	}
-	d.add("/schema", "must be the number 1 or 2")
-	return 0
 }
 
 func (d *decoder) str(raw json.RawMessage, pointer string) (string, bool) {

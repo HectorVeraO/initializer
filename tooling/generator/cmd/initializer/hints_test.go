@@ -14,6 +14,8 @@ func TestAddHintsKeepsAProducerHintAndFillsTheRest(t *testing.T) {
 		{Code: "CATALOG_FILE_MISMATCH", Path: "a", Message: "m"},
 		{Code: "CATALOG_GENERATOR_MISMATCH", Path: "a", Message: "m"},
 		{Code: "SELECTION_INVALID", Path: "a", Message: "m"},
+		{Code: "INPUT_FORMAT_UNKNOWN", Path: "a", Message: "m"},
+		{Code: "COMPONENT_MERGE_AMBIGUOUS", Path: "a", Message: "m"},
 	}
 	got := addHints(in, nil)
 	want := []string{
@@ -22,6 +24,8 @@ func TestAddHintsKeepsAProducerHintAndFillsTheRest(t *testing.T) {
 		"rebuild the catalog: initializer catalog build",
 		"rebuild the catalog: initializer catalog build",
 		"",
+		"use .json",
+		"To add, remove or rename a component, edit the input file",
 	}
 	for i, hint := range want {
 		if got[i].Hint != hint {
@@ -65,7 +69,6 @@ func TestWhereOfRendersTheRightPlace(t *testing.T) {
 		{"modules element", issue.Issue{Path: "flags#/modules/0"}, issueView{}, "--modules"},
 		{"unknown flag pointer", issue.Issue{Path: "flags#/other"}, issueView{}, "flags#/other"},
 		{"flag-built selection", issue.Issue{Path: "selection#/modules/1"}, issueView{}, "--modules"},
-		{"file-built selection", issue.Issue{Path: "selection#/modules/1"}, issueView{selectionFile: "acme.json"}, "acme.json /modules/1"},
 		{"file", issue.Issue{Path: "acme.json#/modules/0"}, issueView{}, "acme.json /modules/0"},
 		{"file with line", issue.Issue{Path: "acme.yaml#/modules/0", Line: 9}, issueView{}, "acme.yaml:9 /modules/0"},
 		{"folder argument", issue.Issue{Path: "args#/dir"}, issueView{dir: "My App"}, "./My App"},
