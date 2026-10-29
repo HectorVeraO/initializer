@@ -143,3 +143,16 @@ func TestFilesOutsideThePortFilesKeepTheirTokens(t *testing.T) {
 		t.Errorf("an undeclared file changed: %q", got)
 	}
 }
+
+func TestALockOfACatalogWithoutPortsOmitsThePortsMember(t *testing.T) {
+	repo := fixture.Load(t)
+	portless := repo.Catalog
+	portless.PortBand = 0
+	project, err := build(t, os.DirFS(repo.Root), portless, repo.CatalogBytes, selection(targetModule, "tenancy"))
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if lock := decodeLock(t, project); lock.Ports != nil {
+		t.Errorf("lock ports = %+v, want none", lock.Ports)
+	}
+}
