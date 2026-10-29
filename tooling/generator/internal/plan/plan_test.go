@@ -742,16 +742,16 @@ func TestCooperationFilesShipOnlyWithTheirTag(t *testing.T) {
 	}
 }
 
-func TestComponentsAreOnePerSelectedStackNamedAfterIt(t *testing.T) {
+func TestComponentsAreOnePerSelectedStackNamedAfterTheProject(t *testing.T) {
 	cat := load(t, "fullstack.json")
 	both := selection()
 	both.Stacks = []string{"ng-web", "go-srv"}
 	p := mustResolve(t, cat, both)
-	want := []plan.Component{{Stack: "go-srv", Name: "go-srv"}, {Stack: "ng-web", Name: "ng-web"}}
+	want := []plan.Component{{Stack: "go-srv", Name: "acme-backend-srv"}, {Stack: "ng-web", Name: "acme-backend-web"}}
 	if !reflect.DeepEqual(p.Components, want) {
 		t.Fatalf("components = %+v", p.Components)
 	}
-	if component, ok := p.Component("ng-web"); !ok || component.Name != "ng-web" {
+	if component, ok := p.Component("ng-web"); !ok || component.Name != "acme-backend-web" {
 		t.Errorf("Component(ng-web) = %+v %v", component, ok)
 	}
 	backendOnly := mustResolve(t, cat, selection())

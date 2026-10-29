@@ -18,11 +18,11 @@
   "components": [
     {
       "stack": "go-srv",
-      "name": "go-srv"
+      "name": "acme-backend-srv"
     }
   ],
   "names": {
-    "component.go-srv": "go-srv",
+    "component.go-srv": "acme-backend-srv",
     "project": "acme-backend"
   },
   "tckTags": [
@@ -80,26 +80,31 @@
           "sha256": "4d56952b0fb13bf8f9b6c13a6d4c34a075bac3af447636a1df4335d7576e2f97"
         },
         {
-          "path": "go-srv/cmd/server/main.go",
+          "path": "acme-backend-srv/cmd/server/main.go",
           "sha256": "4a6dbe06d7c724277d44b14054f8aa04de01bdeffa5f6bc3fd13c4874c609ddd",
-          "sourceSha256": "c9813d7b7f4a1d1662295ec5962aba530f8d8d5b06296797ab98d4db288f66dc"
+          "sourceSha256": "c9813d7b7f4a1d1662295ec5962aba530f8d8d5b06296797ab98d4db288f66dc",
+          "sourcePath": "go-srv/cmd/server/main.go"
         },
         {
-          "path": "go-srv/go.mod",
+          "path": "acme-backend-srv/go.mod",
           "sha256": "e89e75e8b5a9fe5c7ea5c5e900d754102c12f4646742c9a7dbee27a393829f2b",
-          "sourceSha256": "597fb3bb55c2b0f6092731ec09f748cdef795e166dfdbafa3718da1e47f8b5c3"
+          "sourceSha256": "597fb3bb55c2b0f6092731ec09f748cdef795e166dfdbafa3718da1e47f8b5c3",
+          "sourcePath": "go-srv/go.mod"
         },
         {
-          "path": "go-srv/internal/platform/core/core.go",
-          "sha256": "b115c3aed45ee55aacd6eae3a55109823238ae84b705ca0bb6fff67c882262a8"
+          "path": "acme-backend-srv/internal/platform/core/core.go",
+          "sha256": "b115c3aed45ee55aacd6eae3a55109823238ae84b705ca0bb6fff67c882262a8",
+          "sourcePath": "go-srv/internal/platform/core/core.go"
         },
         {
-          "path": "go-srv/internal/platform/core/module.manifest.json",
-          "sha256": "42e8a506b0cbc86c56bf1f1992daa5a4e4c3247725e31751cffa890c62069707"
+          "path": "acme-backend-srv/internal/platform/core/module.manifest.json",
+          "sha256": "42e8a506b0cbc86c56bf1f1992daa5a4e4c3247725e31751cffa890c62069707",
+          "sourcePath": "go-srv/internal/platform/core/module.manifest.json"
         },
         {
-          "path": "go-srv/internal/platform/core/testdata/sample.go",
-          "sha256": "aac68f0046ac661942bdae56845c0b6f3400f17e5c0bfa8e8feb1fe9a31936aa"
+          "path": "acme-backend-srv/internal/platform/core/testdata/sample.go",
+          "sha256": "aac68f0046ac661942bdae56845c0b6f3400f17e5c0bfa8e8feb1fe9a31936aa",
+          "sourcePath": "go-srv/internal/platform/core/testdata/sample.go"
         },
         {
           "path": "specs/package.json",
@@ -115,10 +120,10 @@
   "generated": [
     {
       "path": "README.md",
-      "sha256": "fea914fdbd959ac8fd0ae30e11d0dc036beaba37b7ec44ab60b583f0894295d2"
+      "sha256": "23ec2fc4cc570b3f0d9a587b577a3684229d5c7a29007e72f02bc165ab5db8c9"
     },
     {
-      "path": "go-srv/cmd/server/modules.go",
+      "path": "acme-backend-srv/cmd/server/modules.go",
       "sha256": "56a85dfd10466e6c5697e17ebf3c31c677891aa9d6adf0b72d221dd7d8ed3472"
     },
     {

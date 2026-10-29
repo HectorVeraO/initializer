@@ -71,23 +71,23 @@ func TestFreshProjectHasNoDifferences(t *testing.T) {
 
 func TestModifiedMissingAndUntrackedAreReported(t *testing.T) {
 	dir := generated(t)
-	write(t, dir, "go-srv/internal/platform/parameters/parameters.go", "package parameters\n")
-	if err := os.Remove(filepath.Join(dir, "go-srv", "internal", "platform", "core", "core.go")); err != nil {
+	write(t, dir, "acme-backend-srv/internal/platform/parameters/parameters.go", "package parameters\n")
+	if err := os.Remove(filepath.Join(dir, "acme-backend-srv", "internal", "platform", "core", "core.go")); err != nil {
 		t.Fatal(err)
 	}
-	write(t, dir, "go-srv/internal/platform/identity/extra.go", "package identity\n")
+	write(t, dir, "acme-backend-srv/internal/platform/identity/extra.go", "package identity\n")
 	write(t, dir, "specs/parameters/extra.yaml", "x: 1\n")
 	// The project's own code outside the delivered folders is never reported.
-	write(t, dir, "go-srv/internal/app/app.go", "package app\n")
+	write(t, dir, "acme-backend-srv/internal/app/app.go", "package app\n")
 
 	differences, err := verify.Project(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
-		"MISSING go-srv/internal/platform/core/core.go",
-		"UNTRACKED go-srv/internal/platform/identity/extra.go",
-		"MODIFIED go-srv/internal/platform/parameters/parameters.go",
+		"MISSING acme-backend-srv/internal/platform/core/core.go",
+		"UNTRACKED acme-backend-srv/internal/platform/identity/extra.go",
+		"MODIFIED acme-backend-srv/internal/platform/parameters/parameters.go",
 		"UNTRACKED specs/parameters/extra.yaml",
 	}
 	if strings.Join(codes(differences), "\n") != strings.Join(want, "\n") {

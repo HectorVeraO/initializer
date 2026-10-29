@@ -88,7 +88,7 @@ func generateCommand() *Command {
 			set.boolean(&o.allModules, flagSpec{Name: "all-modules", Usage: "Install every module of the backend stack", Default: "false"})
 			set.components(&o.components, flagSpec{Name: "component", Placeholder: "STACK=NAME",
 				Usage:   "Name the folder of STACK's component (repeatable)",
-				Default: "the stack id"})
+				Default: "<name>-<suffix>"})
 			set.str(&o.root, flagSpec{Name: "root", Placeholder: "DIR", Usage: "Source checkout", Default: "required"})
 			set.str(&o.catalog, flagSpec{Name: "catalog", Placeholder: "FILE",
 				Usage: "Catalog file built by 'initializer catalog build'", Default: "required"})

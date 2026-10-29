@@ -273,7 +273,7 @@ At most one installed module binds a port, else `PLATFORM_DUPLICATE_PORT:<port>:
 ### Copy-and-own and `initializer.lock.json`
 
 - A generated project owns the code the generator copied into it and may change it; this repository never ships empty interfaces reserved for modules that do not exist yet.
-- Module paths are stable: `go-srv/internal/platform/{core,identity,tenancy,apikeys,parameters,featureflags}/` (Go), `ng-web/src/app/platform/{core,identity,tenancy,api-keys,parameters,feature-flags}/` (Angular), and the module's migrations `<timestamp>_<prefix>_<name>.sql`.
+- Module paths are stable: `go-srv/internal/platform/{core,identity,tenancy,apikeys,parameters,featureflags}/` (Go), `ng-web/src/app/platform/{core,identity,tenancy,api-keys,parameters,feature-flags}/` (Angular), and the module's migrations `<timestamp>_<prefix>_<name>.sql`. In a generated project each stack root sits in its component folder (`<name>-srv/`, `<name>-web/` by default, recorded in `initializer.lock.json` `components`); never rename a component folder there; regenerate instead.
 - A generated project records, per module, the base version it copied and the SHA-256 hash of every delivered file in `initializer.lock.json`. An agent upgrading a module compares the project against that file, keeps the local changes, and runs the module's TCK.
 
 ### Trace correlation

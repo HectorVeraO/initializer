@@ -195,7 +195,7 @@ func TestGeneratedComponentLockDecodesAndVerifies(t *testing.T) {
 
 func TestLockEntriesKeepTheSourcePathOfAMovedFile(t *testing.T) {
 	e := newEnv(t)
-	if code, _, stderr := execute(t, e.fullstackArgs("--component", "go-srv=acme-srv")...); code != exitOK {
+	if code, _, stderr := execute(t, e.fullstackArgs("--component", "go-srv=acme-srv", "--component", "ng-web=ng-web")...); code != exitOK {
 		t.Fatalf("exit %d: %s", code, stderr)
 	}
 	data, err := os.ReadFile(filepath.Join(e.out, lockfile.Name))
@@ -222,7 +222,7 @@ func TestLockEntriesKeepTheSourcePathOfAMovedFile(t *testing.T) {
 	}
 }
 
-func TestWithoutComponentsTheFoldersAreTheStackIds(t *testing.T) {
+func TestWithoutComponentsTheFoldersFollowTheProjectName(t *testing.T) {
 	e := newEnv(t)
 	code, stdout, stderr := executeJSON(t, e.fullstackArgs()...)
 	if code != exitOK {
@@ -230,13 +230,21 @@ func TestWithoutComponentsTheFoldersAreTheStackIds(t *testing.T) {
 	}
 	var doc generateDocument
 	decodeDocument(t, stdout, &doc)
-	want := []manifest.Component{{Stack: "go-srv", Name: "go-srv"}, {Stack: "ng-web", Name: "ng-web"}}
+	want := []manifest.Component{{Stack: "go-srv", Name: "acme-backend-srv"}, {Stack: "ng-web", Name: "acme-backend-web"}}
 	if !reflect.DeepEqual(doc.Components, want) {
 		t.Fatalf("components = %+v", doc.Components)
 	}
 	files := tree(t, e.out)
-	if _, found := files["go-srv/cmd/server/modules.go"]; !found {
-		t.Error("the default composition root moved")
+	if _, found := files["acme-backend-srv/cmd/server/modules.go"]; !found {
+		t.Error("the default composition root is not under the project-named folder")
+	}
+	for path := range files {
+		if strings.HasPrefix(path, "go-srv/") || strings.HasPrefix(path, "ng-web/") {
+			t.Errorf("%s stayed under a stack id", path)
+		}
+	}
+	if !strings.Contains(files["README.md"], "`acme-backend-srv/`") {
+		t.Errorf("README does not name the default folder:\n%s", files["README.md"])
 	}
 	var recorded map[string]any
 	if err := json.Unmarshal([]byte(files["initializer.selection.json"]), &recorded); err != nil {
@@ -354,13 +362,13 @@ func TestComponentNameProblemsRenderTheFlagAsTyped(t *testing.T) {
 
 func TestAConflictWithADefaultedFolderRendersTheStacksFlag(t *testing.T) {
 	e := newEnv(t)
-	code, _, stderr := execute(t, e.fullstackArgs("--component", "go-srv=ng-web")...)
+	code, _, stderr := execute(t, e.fullstackArgs("--component", "go-srv=acme-backend-web")...)
 	if code != exitIssues {
 		t.Fatalf("exit %d", code)
 	}
 	for _, want := range []string{
-		`error: --component go-srv=ng-web: component go-srv and component ng-web both resolve to "ng-web" [NAME_CONFLICT]`,
-		`error: --stacks: component go-srv and component ng-web both resolve to "ng-web" [NAME_CONFLICT]`,
+		`error: --component go-srv=acme-backend-web: component go-srv and component ng-web both resolve to "acme-backend-web" [NAME_CONFLICT]`,
+		`error: --stacks: component go-srv and component ng-web both resolve to "acme-backend-web" [NAME_CONFLICT]`,
 	} {
 		if !strings.Contains(stderr, want) {
 			t.Errorf("stderr lacks %q:\n%s", want, stderr)
@@ -425,8 +433,8 @@ func TestAFileWithComponentsGenerates(t *testing.T) {
 	if _, found := files["acme-srv/go.mod"]; !found {
 		t.Error("the named component did not move")
 	}
-	if _, found := files["ng-web/package.json"]; !found {
-		t.Error("the unnamed component must keep the stack id")
+	if _, found := files["acme-backend-web/package.json"]; !found {
+		t.Error("the unnamed component must take the default name")
 	}
 	recorded := files["initializer.selection.json"]
 	var recordedSelection struct {

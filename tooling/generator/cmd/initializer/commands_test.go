@@ -44,7 +44,7 @@ Flags:
   --all-modules
         Install every module of the backend stack (default: false)
   --component STACK=NAME
-        Name the folder of STACK's component (repeatable) (default: the stack id)
+        Name the folder of STACK's component (repeatable) (default: <name>-<suffix>)
   --root DIR
         Source checkout (required)
   --catalog FILE
