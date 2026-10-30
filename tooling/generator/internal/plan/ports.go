@@ -1,43 +1,63 @@
 package plan
 
 import (
+	"fmt"
+	"sort"
+	"strconv"
+
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/ports"
 )
 
-// PortPlan is the effective port layout of a project.
+// CodePortBandExhausted reports a computed port offset that clashes with
+// another one or passes the band.
+const CodePortBandExhausted = "PORT_BAND_EXHAUSTED"
+
+// highestOffset is the last offset an instance port may use; 99 is the band bound.
+const highestOffset = 98
+
+// PortPlan is the effective port band of a project.
 type PortPlan struct {
 	// RefBand is the catalog's reference band (101); 0 when the catalog
 	// declares no ports.
 	RefBand int
 	// Band is the effective band: selection ports.band, else 101.
 	Band int
-	// Offsets is the origin-rule map applied with the band ({20: 0} without a frontend).
-	Offsets map[int]int
-	// Origin is the public origin host port (Band*100 + the selected origin offset).
-	Origin int
 }
 
-// originOffsets returns the offset of the origin port of each stack of the
-// catalog that declares one.
-func (r *resolver) originOffsets() map[string]int {
-	origins := map[string]int{}
+// catalogPort is one declared port of the catalog with its owning stack.
+type catalogPort struct {
+	stack string
+	ports.Port
+}
+
+// catalogPorts returns every port the catalog declares, sorted by offset.
+func (r *resolver) catalogPorts() []catalogPort {
+	var declared []catalogPort
 	for _, stack := range r.cat.Stacks {
 		for _, module := range stack.Modules {
 			for _, port := range module.Ports {
-				if port.Origin {
-					origins[stack.Stack] = port.Offset
-				}
+				declared = append(declared, catalogPort{stack: stack.Stack, Port: port})
 			}
 		}
 	}
-	return origins
+	sort.Slice(declared, func(i, j int) bool { return declared[i].Offset < declared[j].Offset })
+	return declared
 }
 
-// portPlan applies the origin rule: the origin port is the origin of the
-// selected frontend stack, else of the backend stack, and the origin offset of
-// every unselected stack maps to it.
-func (r *resolver) portPlan(stacks []ComponentPlan) PortPlan {
+// originOf returns the origin port of a stack.
+func originOf(declared []catalogPort, stack string) (catalogPort, bool) {
+	for _, port := range declared {
+		if port.stack == stack && port.Origin {
+			return port, true
+		}
+	}
+	return catalogPort{}, false
+}
+
+// portBand returns the effective band, reporting a band outside the range.
+func (r *resolver) portBand() PortPlan {
 	band := ports.DefaultBand
 	if r.sel.Ports != nil {
 		band = r.sel.Ports.Band
@@ -46,31 +66,117 @@ func (r *resolver) portPlan(stacks []ComponentPlan) PortPlan {
 			band = ports.DefaultBand
 		}
 	}
-	plan := PortPlan{RefBand: r.cat.PortBand, Band: band}
-	origins := r.originOffsets()
-	selected := map[string]bool{}
-	originStack := ""
-	for _, stack := range stacks {
-		selected[stack.Stack] = true
-		_, hasOrigin := origins[stack.Stack]
-		isBetter := hasOrigin && (originStack == "" || stack.Role == roleFrontend)
-		if isBetter {
-			originStack = stack.Stack
+	return PortPlan{RefBand: r.cat.PortBand, Band: band}
+}
+
+// tokenOffsets maps every declared offset to the offset a token carries in the
+// context of one component: a port of its own stack at its index, a port of the
+// bound partner's stack at the partner's index, the origin port of a stack
+// that is not present at the component's own origin, any other port of a
+// stack that is not present at its offset.
+func tokenOffsets(declared []catalogPort, component ComponentPlan, partner *ComponentPlan) map[int]int {
+	offsets := map[int]int{}
+	own, hasOwnOrigin := originOf(declared, component.Stack)
+	for _, port := range declared {
+		switch {
+		case port.stack == component.Stack:
+			offsets[port.Offset] = port.OffsetAt(component.Index)
+		case partner != nil && port.stack == partner.Stack:
+			offsets[port.Offset] = port.OffsetAt(partner.Index)
+		case port.Origin && hasOwnOrigin:
+			offsets[port.Offset] = own.OffsetAt(component.Index)
+		default:
+			offsets[port.Offset] = port.Offset
 		}
 	}
-	originOffset := 0
-	if originStack != "" {
-		originOffset = origins[originStack]
+	return offsets
+}
+
+// partnerOf returns the bound partner of component among components.
+func partnerOf(components []ComponentPlan, component ComponentPlan) *ComponentPlan {
+	for i := range components {
+		if components[i].Name == component.Partner && component.Partner != "" {
+			return &components[i]
+		}
 	}
-	for stack, offset := range origins {
-		if selected[stack] || offset == originOffset {
+	return nil
+}
+
+// fillPorts sets the host ports, the token offsets and the public origin of
+// every component.
+func (r *resolver) fillPorts(components []ComponentPlan, layout PortPlan) {
+	declared := r.catalogPorts()
+	for i := range components {
+		component := &components[i]
+		partner := partnerOf(components, *component)
+		component.Ports = map[string]int{}
+		for _, module := range component.Modules {
+			for _, port := range module.Ports {
+				component.Ports[port.Name] = layout.Band*100 + port.OffsetAt(component.Index)
+			}
+		}
+		component.TokenOffsets = tokenOffsets(declared, *component, partner)
+		if component.Role != roleBackend {
 			continue
 		}
-		if plan.Offsets == nil {
-			plan.Offsets = map[int]int{}
+		originPort, hasOrigin := originOf(declared, component.Stack)
+		if partner != nil {
+			if partnerOrigin, hasPartnerOrigin := originOf(declared, partner.Stack); hasPartnerOrigin {
+				originPort, hasOrigin = partnerOrigin, true
+				component.Origin = "http://localhost:" + strconv.Itoa(layout.Band*100+originPort.OffsetAt(partner.Index))
+				continue
+			}
 		}
-		plan.Offsets[offset] = originOffset
+		if hasOrigin {
+			component.Origin = "http://localhost:" + strconv.Itoa(layout.Band*100+originPort.OffsetAt(component.Index))
+		}
 	}
-	plan.Origin = band*100 + originOffset
-	return plan
+}
+
+// checkPortBand reports PORT_BAND_EXHAUSTED once per clash or overflow: a
+// computed offset of an installed port that another port already uses or that
+// passes the band. It runs only when no stack passes MaxBackendComponents.
+func (r *resolver) checkPortBand(components []ComponentPlan) {
+	counts := map[string]int{}
+	for _, component := range components {
+		counts[component.Stack]++
+		if counts[component.Stack] > MaxBackendComponents {
+			return
+		}
+	}
+	type user struct {
+		component string
+		index     int
+		port      string
+	}
+	used := map[int]user{}
+	for _, component := range components {
+		for _, module := range component.Modules {
+			for _, port := range module.Ports {
+				offset := port.OffsetAt(component.Index)
+				here := user{component: component.Name, index: component.Index, port: port.Name}
+				if offset > highestOffset {
+					r.addPortBand(here.port, here.component, here.index,
+						fmt.Sprintf("would use offset %d; the band has 0-%d", offset, highestOffset))
+					continue
+				}
+				if first, taken := used[offset]; taken {
+					r.addPortBand(here.port, here.component, here.index,
+						fmt.Sprintf("would use offset %d, which port %s of %s (index %d) uses", offset, first.port, first.component, first.index))
+					continue
+				}
+				used[offset] = here
+			}
+		}
+	}
+}
+
+// addPortBand records one PORT_BAND_EXHAUSTED issue.
+func (r *resolver) addPortBand(port, component string, index int, detail string) {
+	r.issues = append(r.issues, issue.Issue{
+		Code:    CodePortBandExhausted,
+		Path:    issue.Path(selectionSource, "/components"),
+		Message: fmt.Sprintf("port %s of %s (index %d) %s", port, component, index, detail),
+		Hint:    "use fewer components, or a catalog whose port strides fit the band",
+	})
 }

@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -125,11 +126,13 @@ func TestMultiLockRecordsEveryComponentAndItsModules(t *testing.T) {
 	if first.TCK == nil {
 		t.Fatal("the first backend has no tck member")
 	}
-	if len(first.Ports) != 0 {
-		t.Errorf("first ports = %v, want none", first.Ports)
+	wantFirst := map[string]int{"srv": 10100, "postgres": 10132, "kratos-public": 10133}
+	wantSecond := map[string]int{"srv": 10101, "postgres": 10142, "kratos-public": 10143}
+	if !reflect.DeepEqual(first.Ports, wantFirst) || !reflect.DeepEqual(second.Ports, wantSecond) || !reflect.DeepEqual(web.Ports, map[string]int{"web": 10120}) {
+		t.Errorf("ports = %v %v %v", first.Ports, second.Ports, web.Ports)
 	}
-	if first.Origin != "" {
-		t.Errorf("first origin = %q, want none", first.Origin)
+	if first.Origin != "http://localhost:10100" || second.Origin != "http://localhost:10120" || web.Origin != "" {
+		t.Errorf("origins = %q %q %q", first.Origin, second.Origin, web.Origin)
 	}
 	if strings.Join(lock.TCKTags, ",") != strings.Join(first.TCK.Tags, ",") || lock.TCKGrep != first.TCK.Grep {
 		t.Error("the top-level tck is not the first backend's")
@@ -277,13 +280,19 @@ func TestAComponentKeepingTheSourceModulePathIsRefusedThroughTheLock(t *testing.
 	}
 }
 
-func TestMultiReadmeRunSectionNamesTheFirstBackendWithoutAFrontend(t *testing.T) {
+func TestMultiReadmeRunSectionNamesEveryBackendAndOnlyTheBoundFrontend(t *testing.T) {
 	readme := projectFile(t, mustBuildMulti(t, fixture.Load(t)), "README.md")
-	if !strings.Contains(readme, "stop acme-srv-first\n") {
-		t.Errorf("README misses the first backend's host-edit command:\n%s", readme)
+	for _, want := range []string{
+		"stop acme-srv-first\n", "stop acme-srv-second acme-web\n", "mise run dev:acme-srv-first\n", "mise run dev:acme-web\n",
+		"- acme-srv-first: http://localhost:10100;", "- acme-srv-second: http://localhost:10120 (console acme-web);",
+		"mise run tck:acme-srv-first\n", "mise run tck:acme-srv-second\n",
+	} {
+		if !strings.Contains(readme, want) {
+			t.Errorf("README lacks %q:\n%s", want, readme)
+		}
 	}
-	if strings.Contains(readme, "acme-web") {
-		t.Errorf("README names the frontend bound to the second backend:\n%s", readme)
+	if strings.Contains(readme, "stop acme-srv-first acme-web") {
+		t.Errorf("README binds the frontend to the first backend:\n%s", readme)
 	}
 }
 

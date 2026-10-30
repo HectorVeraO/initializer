@@ -321,32 +321,33 @@ func TestTheRecordedSelectionHoldsTheComponentsAsGivenAndReplays(t *testing.T) {
 	}
 }
 
-func TestSeveralComponentsOfOneStackAreRefused(t *testing.T) {
+func TestSeveralComponentsOfOneStackAreGenerated(t *testing.T) {
 	e := newEnv(t)
-	code, stdout, _ := executeJSON(t, e.fullstackArgs("--component", "go-srv=acme-srv", "--component", "go-srv=other-srv", "--component", "ng-web=acme-web,backend=acme-srv")...)
-	found := issueArray(t, stdout)
-	if code != exitIssues || len(found) != 1 {
-		t.Fatalf("exit %d issues %v", code, found)
+	code, stdout, stderr := executeJSON(t, e.fullstackArgs("--component", "go-srv=acme-srv", "--component", "go-srv=other-srv", "--component", "ng-web=acme-web,backend=acme-srv")...)
+	if code != exitOK {
+		t.Fatalf("exit %d: %s %s", code, stdout, stderr)
 	}
-	if found[0]["code"] != "COMPONENT_MULTI_UNSUPPORTED" || found[0]["path"] != "flags#/components" ||
-		found[0]["message"] != "several backend components are not supported by this generator yet" {
-		t.Fatalf("issue %v", found[0])
+	files := tree(t, e.out)
+	for _, want := range []string{"acme-srv/go.mod", "other-srv/go.mod", "acme-web/package.json", ".deploy/local/acme-srv/.example.env", ".deploy/local/other-srv/.example.env"} {
+		if _, found := files[want]; !found {
+			t.Errorf("%s was not delivered", want)
+		}
 	}
-	if _, err := os.Stat(e.out); err == nil {
-		t.Error("a refused run wrote the output")
+	if code, stdout, stderr := execute(t, "verify", e.out); code != exitOK {
+		t.Fatalf("verify: %d %s %s", code, stdout, stderr)
 	}
 }
 
-func TestSeveralComponentsOfOneStackInAFileAreRefused(t *testing.T) {
+func TestSeveralComponentsOfOneStackInAFileAreGenerated(t *testing.T) {
 	e := newEnv(t)
 	body := `{"schema":2,"project":{"name":"acme-backend","goModule":"example.com/acme/backend"},"stacks":["go-srv"],"modules":["parameters"],
 "components":[{"stack":"go-srv","name":"acme-srv"},{"stack":"go-srv","name":"other-srv"}]}`
 	file := writeSelection(t, body)
-	code, stdout, _ := executeJSON(t, e.args("-f", file)...)
-	found := issueArray(t, stdout)
-	if code != exitIssues || len(found) != 1 || found[0]["code"] != "COMPONENT_MULTI_UNSUPPORTED" ||
-		found[0]["path"] != filepath.ToSlash(file)+"#/components" {
-		t.Fatalf("exit %d issues %v", code, found)
+	if code, stdout, stderr := executeJSON(t, e.args("-f", file)...); code != exitOK {
+		t.Fatalf("exit %d: %s %s", code, stdout, stderr)
+	}
+	if _, found := tree(t, e.out)["other-srv/go.mod"]; !found {
+		t.Error("the second backend was not delivered")
 	}
 }
 

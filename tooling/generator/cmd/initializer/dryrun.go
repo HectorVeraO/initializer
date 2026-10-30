@@ -205,8 +205,7 @@ func serviceNames(services map[string]string) []string {
 }
 
 // dryRunComponent is one entry of the components member of a multi project's
-// dry-run document: the multi fields of the lock that the plan fills. Ports and
-// origin are left out until the ports are computed per component.
+// dry-run document: the multi fields of the lock that the plan fills.
 type dryRunComponent struct {
 	Stack    string             `json:"stack"`
 	Name     string             `json:"name"`
@@ -214,6 +213,8 @@ type dryRunComponent struct {
 	GoModule string             `json:"goModule,omitempty"`
 	Database *manifest.Database `json:"database,omitempty"`
 	Modules  []string           `json:"modules"`
+	Ports    map[string]int     `json:"ports,omitempty"`
+	Origin   string             `json:"origin,omitempty"`
 	TCK      *dryRunTCK         `json:"tck,omitempty"`
 	Backend  string             `json:"backend,omitempty"`
 	Names    map[string]string  `json:"names"`
@@ -237,7 +238,10 @@ func (d dryRun) componentsDocument(lock lockfile.Lock) any {
 	for _, component := range d.plan.Components {
 		entry := dryRunComponent{
 			Stack: component.Stack, Name: component.Name, Index: component.Index, GoModule: component.GoModule,
-			Modules: moduleIDsOf(component), Names: componentNames(component),
+			Modules: moduleIDsOf(component), Ports: component.Ports, Names: componentNames(component),
+		}
+		if component.Role == manifest.RoleBackend {
+			entry.Origin = component.Origin
 		}
 		if component.Role == manifest.RoleFrontend {
 			entry.Backend = component.Partner
@@ -282,10 +286,24 @@ func componentNames(component plan.ComponentPlan) map[string]string {
 	return found
 }
 
+// portsText lists the host ports of a component by ascending port, as
+// "srv 10101, postgres 10142".
+func portsText(host map[string]int) string {
+	labels := make([]string, 0, len(host))
+	for name := range host {
+		labels = append(labels, name)
+	}
+	sort.Slice(labels, func(i, j int) bool { return host[labels[i]] < host[labels[j]] })
+	for i, name := range labels {
+		labels[i] = name + " " + strconv.Itoa(host[name])
+	}
+	return strings.Join(labels, ", ")
+}
+
 // writeMultiTable writes the component table of a multi project, one row per
 // component in lock order, then one line per derived default.
 func (d dryRun) writeMultiTable(text *strings.Builder) {
-	rows := [][]string{{"COMPONENT", "STACK", "INDEX", "BACKEND", "GO MODULE", "DATABASE", "MODULES"}}
+	rows := [][]string{{"COMPONENT", "STACK", "INDEX", "BACKEND", "GO MODULE", "DATABASE", "PORTS", "MODULES"}}
 	for _, component := range d.plan.Components {
 		backend := ""
 		if component.Role == manifest.RoleFrontend {
@@ -297,7 +315,7 @@ func (d dryRun) writeMultiTable(text *strings.Builder) {
 		}
 		rows = append(rows, []string{
 			component.Name, component.Stack, strconv.Itoa(component.Index), backend, component.GoModule, database,
-			strings.Join(moduleIDsOf(component), ", "),
+			portsText(component.Ports), strings.Join(moduleIDsOf(component), ", "),
 		})
 	}
 	writeTable(text, rows)

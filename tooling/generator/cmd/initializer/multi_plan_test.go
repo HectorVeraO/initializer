@@ -180,10 +180,10 @@ func TestADryRunOfAMultiPlanListsEveryComponentWithItsBackend(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}
 	want := "Project acme in ./acme (dry run, nothing written)\n" +
-		"COMPONENT         STACK    INDEX   BACKEND          GO MODULE                          DATABASE                          MODULES\n" +
-		"acme-srv-first    go-srv   0                        example.com/acme/acme-srv-first    acme_srv_first/acme_srv_first     core, identity, parameters\n" +
-		"acme-srv-second   go-srv   1                        example.com/acme/acme-srv-second   acme_srv_second/acme_srv_second   core, identity, tenancy\n" +
-		"acme-web          ng-web   0       acme-srv-first                                                                        core, identity, parameters\n" +
+		"COMPONENT         STACK    INDEX   BACKEND          GO MODULE                          DATABASE                          PORTS                                            MODULES\n" +
+		"acme-srv-first    go-srv   0                        example.com/acme/acme-srv-first    acme_srv_first/acme_srv_first     srv 10100, postgres 10132, kratos-public 10133   core, identity, parameters\n" +
+		"acme-srv-second   go-srv   1                        example.com/acme/acme-srv-second   acme_srv_second/acme_srv_second   srv 10101, postgres 10142, kratos-public 10143   core, identity, tenancy\n" +
+		"acme-web          ng-web   0       acme-srv-first                                                                        web 10120                                        core, identity, parameters\n" +
 		"note: go modules derived from example.com/acme; pass go-module= per component to change them\n" +
 		"1 file\n"
 	if out.String() != want {
@@ -225,8 +225,9 @@ func TestADryRunDocumentOfAMultiPlanHasComponentsAndTheComponentOfEachAddition(t
 	if grep, _ := second["tck"].(map[string]any)["grep"].(string); !strings.HasPrefix(grep, "@(") || !strings.Contains(grep, "identity") {
 		t.Fatalf("a backend carries its tck grep: %v", second)
 	}
-	if _, hasPorts := second["ports"]; hasPorts {
-		t.Fatalf("ports arrive with the per-component strides: %v", second)
+	ports, _ := second["ports"].(map[string]any)
+	if ports["srv"] != float64(10101) || ports["postgres"] != float64(10142) || second["origin"] != "http://localhost:10101" {
+		t.Fatalf("a backend carries its ports and origin: %v", second)
 	}
 	if doc.Components[2]["backend"] != "acme-srv-first" || doc.Components[0]["backend"] != nil {
 		t.Fatalf("backend bindings = %v %v", doc.Components[2]["backend"], doc.Components[0]["backend"])
@@ -291,25 +292,29 @@ func TestAnInheritedMissingModuleIsReportedPerBackendComponent(t *testing.T) {
 	}
 }
 
-// Two backends with distinct go modules reach the multi guard through generate
-// with no other issue; the per-entry values themselves are covered by the plan
-// tests (TestEntryValuesOverrideTheDerivedDefaults).
-func TestSeveralBackendsWithOwnGoModulesStopOnlyAtTheMultiGuard(t *testing.T) {
+// Two backends with distinct go modules generate through the command; the
+// per-entry values themselves are covered by the plan tests
+// (TestEntryValuesOverrideTheDerivedDefaults).
+func TestSeveralBackendsWithOwnGoModulesGenerate(t *testing.T) {
 	e := newEnv(t)
 	args := e.fullstackArgs(
 		"--component", "go-srv=acme-srv-first,go-module=example.org/first",
 		"--component", "go-srv=acme-srv-second,go-module=example.org/second",
 		"--component", "ng-web=acme-web,backend=acme-srv-first")
 	code, stdout, _ := executeJSON(t, args...)
-	if got := issuesOf(t, stdout).codes(); code != exitIssues || !reflect.DeepEqual(got, []string{"COMPONENT_MULTI_UNSUPPORTED"}) {
-		t.Fatalf("exit %d codes %v", code, got)
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, stdout)
+	}
+	files := tree(t, e.out)
+	if !strings.HasPrefix(files["acme-srv-first/go.mod"], "module example.org/first\n") || !strings.HasPrefix(files["acme-srv-second/go.mod"], "module example.org/second\n") {
+		t.Errorf("go.mod lines: %q %q", files["acme-srv-first/go.mod"], files["acme-srv-second/go.mod"])
 	}
 }
 
 // A backend's go-module stays its own: the other backend derives its module
 // from the project base, not from the first backend's value. Folding the
 // first value into the project would make the two collide and be reported
-// as NAME_CONFLICT instead of reaching the multi guard alone.
+// as NAME_CONFLICT instead of generating.
 func TestABackendGoModuleDoesNotBecomeTheBaseOfTheOthers(t *testing.T) {
 	e := newEnv(t)
 	args := e.fullstackArgs(
@@ -317,7 +322,13 @@ func TestABackendGoModuleDoesNotBecomeTheBaseOfTheOthers(t *testing.T) {
 		"--component", "go-srv=acme-srv-second",
 		"--component", "ng-web=acme-web,backend=acme-srv-first")
 	code, stdout, _ := executeJSON(t, args...)
-	if got := issuesOf(t, stdout).codes(); code != exitIssues || !reflect.DeepEqual(got, []string{"COMPONENT_MULTI_UNSUPPORTED"}) {
-		t.Fatalf("exit %d codes %v", code, got)
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, stdout)
+	}
+	files := tree(t, e.out)
+	firstLine := strings.SplitN(files["acme-srv-first/go.mod"], "\n", 2)[0]
+	secondLine := strings.SplitN(files["acme-srv-second/go.mod"], "\n", 2)[0]
+	if firstLine != "module example.com/acme/acme-srv-second" || secondLine == firstLine || !strings.HasPrefix(secondLine, "module ") {
+		t.Errorf("go.mod lines: %q %q", firstLine, secondLine)
 	}
 }

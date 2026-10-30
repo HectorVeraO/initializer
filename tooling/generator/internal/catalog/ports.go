@@ -20,6 +20,8 @@ const (
 	CodePortBandMixed       = "PORT_BAND_MIXED"
 	CodePortUndeclared      = "PORT_UNDECLARED"
 	CodePortRangeInRun      = "PORT_RANGE_IN_RUN"
+	CodePortStrideInvalid   = "PORT_STRIDE_INVALID"
+	CodePortUnscoped        = "PORT_UNSCOPED"
 )
 
 // Offsets 00 and 99 are the bounds of a band: a token may always carry them.
@@ -29,6 +31,9 @@ const (
 	// maxPortOffset is the highest offset a module may declare.
 	maxPortOffset = 98
 )
+
+// strideMessage is the text of a missing or out-of-range stride.
+const strideMessage = "stride must be an integer of at least 1"
 
 const portsReferenceMissing = "some manifest declares ports and the reference file is not tracked"
 
@@ -90,6 +95,9 @@ func (b *builder) checkPortDeclarations() {
 				b.add(CodePortInvalid, doc.path, pointer+"/name", fmt.Sprintf("name repeats %s/ports/%d/name", first.doc.path, first.index))
 			} else {
 				firstName[port.Name] = here
+			}
+			if port.Stride < 1 {
+				b.add(CodePortStrideInvalid, doc.path, pointer+"/stride", strideMessage)
 			}
 			isInRange := port.Offset >= bandLowOffset && port.Offset <= maxPortOffset
 			if !isInRange {
@@ -168,13 +176,19 @@ func (b *builder) checkPortTokens() error {
 				continue
 			}
 			b.checkPortRange(path, data)
+			isProject := b.isProjectScope(path)
+			layout := newLineLayout(path, data)
 			for _, token := range ports.Scan(data) {
 				text := string(data[token.Start:token.End])
 				isBound := token.Offset == bandLowOffset || token.Offset == bandHighOffset
 				switch {
 				case token.Band != b.portBand:
 					b.addPlain(CodePortBandMixed, path, fmt.Sprintf("line %d: token %s has band %d, the reference band is %d", token.Line, text, token.Band, b.portBand))
-				case isBound || declared[token.Offset]:
+				case isBound:
+				case declared[token.Offset]:
+					if isProject && !layout.inRun(token.Start) {
+						b.addPlain(CodePortUnscoped, path, fmt.Sprintf("line %d: token %s has offset %d, a port of one instance, outside every run of a project-scope file", token.Line, text, token.Offset))
+					}
 				default:
 					b.addPlain(CodePortUndeclared, path, fmt.Sprintf("line %d: token %s has offset %d, which no module declares", token.Line, text, token.Offset))
 				}
@@ -192,7 +206,7 @@ func (b *builder) checkPortRange(path string, data []byte) {
 	if !bytes.Contains(data, needle) {
 		return
 	}
-	isComponentScope := false
+	isComponentScope := b.isPerComponentPath(path)
 	for _, stack := range stackTable {
 		isComponentScope = isComponentScope || strings.HasPrefix(path, stack.root)
 	}
@@ -257,6 +271,9 @@ func (v *validator) modulePorts(pointer string, module ModuleEntry) {
 		if port.Offset < bandLowOffset || port.Offset > maxPortOffset {
 			v.add(at+"/offset", "must be from 0 to 98")
 		}
+		if port.Stride < 1 {
+			v.add(at+"/stride", "must be an integer of at least 1")
+		}
 	}
 	for i, path := range module.PortFiles {
 		if !validTrackedPath(path) {
@@ -264,4 +281,10 @@ func (v *validator) modulePorts(pointer string, module ModuleEntry) {
 		}
 	}
 	v.sortedStrings(pointer+"/portFiles", module.PortFiles)
+	for i, path := range module.PerComponent {
+		if !validTrackedPath(strings.TrimSuffix(path, "/")) {
+			v.add(fmt.Sprintf("%s/perComponent/%d", pointer, i), "must be a repo-relative path")
+		}
+	}
+	v.sortedStrings(pointer+"/perComponent", module.PerComponent)
 }

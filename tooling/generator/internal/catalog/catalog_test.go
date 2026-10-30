@@ -162,6 +162,7 @@ func FuzzBuildManifests(f *testing.F) {
 	f.Add(string(repo[coreManifest].Data), string(repo["specs/core/spec.manifest.json"].Data))
 	f.Add(`{`, `[]`)
 	f.Add(`{"schema":1,"files":["../x"]}`, ``)
+	f.Add(`{"schema":1,"stack":"go-srv","module":"parameters","version":"0.1.0","implied":false,"implementsSpec":{"parameters":"0.1.0"},"requiresCore":"^0.1.0","requiresModules":[],"tablePrefixes":["par"],"ports":[{"name":"p","offset":50,"stride":0}],"perComponent":[".deploy/local/","../x","go-srv/a"],"files":[]}`, ``)
 	f.Fuzz(func(t *testing.T, moduleText, specText string) {
 		r := cleanRepo(t)
 		put(r, paramsManifest, moduleText)

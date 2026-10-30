@@ -5,9 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
-	"github.com/HectorVeraO/initializer/tooling/generator/internal/plan"
 )
 
 // componentKeys is the key table of the --component tail: the keys a pair may
@@ -229,15 +227,6 @@ func componentFlags(entries []componentEntry) []manifest.ComponentFlag {
 		flags = append(flags, manifest.ComponentFlag{Index: i, Arg: entry.raw, Entry: entry.Component, Set: entry.set})
 	}
 	return flags
-}
-
-// multiComponentIssue is the refusal of a plan with several backend components.
-func multiComponentIssue() issue.Issue {
-	return issue.Issue{
-		Code:    plan.CodeComponentMultiUnsupported,
-		Path:    issue.Path(selectionSource, "/components"),
-		Message: "several backend components are not supported by this generator yet",
-	}
 }
 
 // hasSeveralBackends reports two or more backend entries.

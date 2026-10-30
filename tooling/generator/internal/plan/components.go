@@ -17,9 +17,6 @@ const (
 	CodeNameConflict       = "NAME_CONFLICT"
 	CodeNameTooLong        = "NAME_TOO_LONG"
 	CodeNameOverrideUnused = "NAME_OVERRIDE_UNUSED"
-	// CodeComponentMultiUnsupported is raised by the command after Resolve for
-	// a plan with several backend components; Resolve never raises it.
-	CodeComponentMultiUnsupported = "COMPONENT_MULTI_UNSUPPORTED"
 	// CodeInternalError reports an input that the command should have refused.
 	CodeInternalError = "INTERNAL_ERROR"
 )
@@ -294,15 +291,52 @@ func (r *resolver) wantedSpecs(components []ComponentPlan) []catalog.SpecEntry {
 	return specs
 }
 
+// localDeployPrefix is the folder the per-component files of a multi project
+// land under, in a folder named after their component.
+const localDeployPrefix = ".deploy/local/"
+
+// localFolders returns the first path segment of every file the installed
+// modules deliver under .deploy/local/.
+func localFolders(components []ComponentPlan) map[string]bool {
+	folders := map[string]bool{}
+	for _, component := range components {
+		for _, module := range component.Modules {
+			for _, file := range module.Files {
+				dest := file.Path
+				if file.Target != "" {
+					dest = file.Target
+				}
+				rest, isLocal := strings.CutPrefix(dest, localDeployPrefix)
+				if !isLocal {
+					continue
+				}
+				first, _, _ := strings.Cut(rest, "/")
+				folders[first] = true
+			}
+		}
+	}
+	return folders
+}
+
 // checkFolders reports NAME_RESERVED for a component name that equals the first
-// segment of a path delivered outside the component folders.
+// segment of a path delivered outside the component folders, and, in a multi
+// project where per-component files land in .deploy/local/<component>/, the
+// first segment of a path delivered under .deploy/local/.
 func (r *resolver) checkFolders(components []ComponentPlan, specs []catalog.SpecEntry) {
 	folders := projectScopeFolders(components, specs)
+	local := map[string]bool{}
+	if r.multi {
+		local = localFolders(components)
+	}
 	for _, input := range r.componentInputs() {
 		isChecked := input.given && names.ValidLabel(input.name)
-		if isChecked && folders[input.name] {
+		switch {
+		case isChecked && folders[input.name]:
 			r.add(CodeNameReserved, selectionSource, input.namePointer,
 				fmt.Sprintf("%q is already a folder of the project", input.name))
+		case isChecked && local[input.name]:
+			r.add(CodeNameReserved, selectionSource, input.namePointer,
+				fmt.Sprintf("%q is already a path under %s, where each component's files go", input.name, localDeployPrefix))
 		}
 	}
 }

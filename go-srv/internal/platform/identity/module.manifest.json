@@ -9,10 +9,11 @@
   "requiresModules": [],
   "tablePrefixes": ["iam"],
   "ports": [
-    { "name": "kratos-public", "offset": 33 },
-    { "name": "kratos-admin", "offset": 34 }
+    { "name": "kratos-public", "offset": 33, "stride": 10 },
+    { "name": "kratos-admin", "offset": 34, "stride": 10 }
   ],
   "portFiles": [".deploy/local/kratos/kratos.yml"],
+  "perComponent": [".deploy/local/kratos/"],
   "files": [
     ".deploy/local/kratos/",
     ".deploy/local/postgres-init/",

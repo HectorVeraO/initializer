@@ -87,6 +87,9 @@ func ModulesGo(goModule string, folders []string) ([]byte, error) {
 
 // ReadmeModule is one row of the modules table.
 type ReadmeModule struct {
+	// Component is the component the module belongs to; set only in a multi
+	// project, where the table has one row per component and module.
+	Component              string
 	Stack, Module, Version string
 }
 
@@ -165,6 +168,27 @@ func (run ReadmeRun) validate() error {
 	return nil
 }
 
+// ReadmeComponent is one component of a multi project as the README shows it.
+type ReadmeComponent struct {
+	// Name and Stack identify the component.
+	Name, Stack string
+	// Backend is the bound backend of a frontend; "" for a backend.
+	Backend string
+	// Origin is the public base URL of a backend; "" for a frontend.
+	Origin string
+	// Ports holds the host ports of the component, sorted by port.
+	Ports []ReadmePort
+	// TCKTags and TCKEnv are the TCK selection of a backend, sorted.
+	TCKTags []string
+	TCKEnv  []EnvPair
+}
+
+// ReadmePort is one host port of a component.
+type ReadmePort struct {
+	Name string
+	Port int
+}
+
 // ReadmeInput is the data of the project README. The caller sorts every list;
 // the template does not.
 type ReadmeInput struct {
@@ -174,6 +198,9 @@ type ReadmeInput struct {
 	TCKTags          []string
 	TCKEnv           []EnvPair
 	Run              ReadmeRun
+	// Components is set only in a multi project (two or more backends) and
+	// selects the multi README; empty renders the single README.
+	Components []ReadmeComponent
 }
 
 // Readme renders the project README.md.
@@ -204,8 +231,64 @@ func Readme(in ReadmeInput) ([]byte, error) {
 			return nil, errors.New("TCK env pairs must not contain a backtick")
 		}
 	}
+	if len(in.Components) > 0 {
+		return readmeMulti(in)
+	}
 	in.TCKEnv = goSrvEnv(in.TCKEnv)
 	return execute("README.md.tmpl", in)
+}
+
+// multiInstance is one backend instance of the multi README: the run data of
+// the instance and the port and TCK data of its backend component.
+type multiInstance struct {
+	ReadmeInstance
+	Ports   string
+	TCKTags []string
+	TCKEnv  []EnvPair
+}
+
+// readmeMulti renders the README of a project with several backends. Every
+// instance of Run must have a backend entry in Components.
+func readmeMulti(in ReadmeInput) ([]byte, error) {
+	byName := map[string]ReadmeComponent{}
+	for _, component := range in.Components {
+		for _, field := range []string{component.Name, component.Stack, component.Backend, component.Origin} {
+			if strings.ContainsAny(field, "\r\n\x00") {
+				return nil, errors.New("README fields must not contain line breaks or NUL")
+			}
+		}
+		byName[component.Name] = component
+	}
+	var instances []multiInstance
+	identities := 0
+	for _, instance := range in.Run.Instances {
+		backend, found := byName[instance.Backend]
+		if !found {
+			return nil, fmt.Errorf("instance %q has no component", instance.Backend)
+		}
+		for _, pair := range backend.TCKEnv {
+			if strings.Contains(pair.Key, "`") || strings.Contains(pair.Value, "`") || strings.ContainsAny(pair.Key+pair.Value, "\r\n\x00") {
+				return nil, errors.New("TCK env pairs must not contain a backtick or a line break")
+			}
+		}
+		labels := make([]string, 0, len(backend.Ports))
+		for _, port := range backend.Ports {
+			labels = append(labels, fmt.Sprintf("%s %d", port.Name, port.Port))
+		}
+		if instance.HasIdentity {
+			identities++
+		}
+		instances = append(instances, multiInstance{
+			ReadmeInstance: instance, Ports: strings.Join(labels, ", "), TCKTags: backend.TCKTags, TCKEnv: goSrvEnv(backend.TCKEnv),
+		})
+	}
+	return execute("README.multi.md.tmpl", struct {
+		Name, GeneratorVersion string
+		Modules                []ReadmeModule
+		Run                    ReadmeRun
+		Instances              []multiInstance
+		CookieNote             bool
+	}{in.Name, in.GeneratorVersion, in.Modules, in.Run, instances, identities > 1})
 }
 
 // moduleIDPattern is the module id grammar shared by both stacks.

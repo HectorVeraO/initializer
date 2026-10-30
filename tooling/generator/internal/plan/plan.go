@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
@@ -107,8 +106,12 @@ type ComponentPlan struct {
 	Slots map[string]string
 	// Ports maps each declared port of the installed modules to its host port.
 	Ports map[string]int
-	// Origin is the public base URL of a backend.
+	// Origin is the public base URL of a backend: the bound frontend's port,
+	// else its own origin port.
 	Origin string
+	// TokenOffsets maps each declared port offset to the offset a port token
+	// carries in a file delivered for this component (and its partner).
+	TokenOffsets map[int]int
 	// TCK is the TCK selection of a backend with at least one spec, else nil.
 	TCK *TCKPlan
 }
@@ -244,6 +247,7 @@ func (r *resolver) run() Plan {
 		r.nameSlots(&pairs[i], components)
 	}
 	r.checkInfraNames(pairs)
+	r.checkPortBand(components)
 	if len(r.issues) > 0 {
 		return Plan{}
 	}
@@ -653,7 +657,7 @@ func (r *resolver) assemble(pairs []pairPlan) Plan {
 		}
 	}
 	components := flatten(pairs)
-	portPlan := r.portPlan(components)
+	portPlan := r.portBand()
 	r.fillPorts(components, portPlan)
 	tags, grep, invert, env := []string{}, "", "", map[string]string{}
 	if firstTCK != nil {
@@ -679,23 +683,6 @@ func (r *resolver) assemble(pairs []pairPlan) Plan {
 		Live:          pairs[0].live,
 		Ports:         portPlan,
 		Notes:         r.derivedNotes(pairs),
-	}
-}
-
-// fillPorts sets the host ports and the public origin of every component from
-// the effective band.
-func (r *resolver) fillPorts(components []ComponentPlan, layout PortPlan) {
-	for i := range components {
-		component := &components[i]
-		component.Ports = map[string]int{}
-		for _, module := range component.Modules {
-			for _, port := range module.Ports {
-				component.Ports[port.Name] = layout.Band*100 + port.Offset
-			}
-		}
-		if component.Role == roleBackend {
-			component.Origin = "http://localhost:" + strconv.Itoa(layout.Origin)
-		}
 	}
 }
 

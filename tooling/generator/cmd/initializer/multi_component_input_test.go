@@ -40,15 +40,14 @@ func (d issueDocument) codes() []string {
 	return codes
 }
 
-func TestAValidTwoBackendSelectionStopsAtTheGuard(t *testing.T) {
+func TestAValidTwoBackendSelectionGenerates(t *testing.T) {
 	e := newEnv(t)
 	args := e.fullstackArgs("--component", "go-srv=acme-srv-first", "--component", "go-srv=acme-srv-second,modules=parameters",
 		"--component", "ng-web=acme-web,backend=acme-srv-second")
-	for _, extra := range [][]string{nil, {"--dry-run"}} {
+	for _, extra := range [][]string{{"--dry-run"}, nil} {
 		code, stdout, stderr := executeJSON(t, append(append([]string{}, args...), extra...)...)
-		doc := issuesOf(t, stdout)
-		if code != exitIssues || !reflect.DeepEqual(doc.codes(), []string{"COMPONENT_MULTI_UNSUPPORTED"}) {
-			t.Fatalf("extra %v: exit %d codes %v %s", extra, code, doc.codes(), stderr)
+		if code != exitOK {
+			t.Fatalf("extra %v: exit %d %s %s", extra, code, stdout, stderr)
 		}
 	}
 }

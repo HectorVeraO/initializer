@@ -21,21 +21,27 @@ func validMulti() lockfile.Lock {
 		Generator:     "0.1.0",
 		CatalogSHA256: hash,
 		Selection:     manifest.Selection{Schema: 2, Project: manifest.Project{Name: "acme", GoModule: "example.com/acme"}, Stacks: []string{"go-srv", "ng-web"}},
+		Ports:         &lockfile.Ports{Band: 101},
 		Components: []lockfile.Component{
 			{
 				Stack: "go-srv", Name: "acme-srv-first", Index: intPtr(0), GoModule: "example.com/acme/acme-srv-first",
 				Database: &lockfile.Database{Name: "acme_first", User: "acme_first"},
 				Modules:  []string{"core"},
+				Ports:    map[string]int{"srv": 10100, "postgres": 10132},
+				Origin:   "http://localhost:10100",
 				TCK:      &lockfile.TCK{Tags: []string{"@core"}, Grep: "@(core)"},
 				Names:    map[string]string{"component.go-srv": "acme-srv-first", "database": "acme_first", "dbUser": "acme_first"},
 			},
 			{
 				Stack: "go-srv", Name: "acme-srv-second", Index: intPtr(1), GoModule: "example.com/acme/acme-srv-second",
 				Modules: []string{"core", "tenancy"},
+				Ports:   map[string]int{"srv": 10101, "postgres": 10142},
+				Origin:  "http://localhost:10120",
 				Names:   map[string]string{"component.go-srv": "acme-srv-second"},
 			},
 			{
 				Stack: "ng-web", Name: "acme-web", Index: intPtr(0), Modules: []string{"core"}, Backend: "acme-srv-second",
+				Ports: map[string]int{"web": 10120},
 				Names: map[string]string{"component.ng-web": "acme-web"},
 			},
 		},
@@ -152,11 +158,17 @@ func TestDecodeRefusesAMultiLockThatBreaksAStrictRule(t *testing.T) {
 		"backend named twice": {func(l *lockfile.Lock) {
 			l.Components = append(l.Components, lockfile.Component{
 				Stack: "ng-web", Name: "acme-admin", Index: intPtr(1), Modules: []string{"core"}, Backend: "acme-srv-second",
+				Ports: map[string]int{"web": 10121},
 				Names: map[string]string{"component.ng-web": "acme-admin"},
 			})
 		}, "is also the backend of"},
-		"backend on a backend": {func(l *lockfile.Lock) { l.Components[0].Backend = "acme-srv-second" }, "only for frontend"},
-		"tck without tags":     {func(l *lockfile.Lock) { l.Components[0].TCK.Tags = nil }, "tck needs tags and grep"},
+		"backend on a backend":   {func(l *lockfile.Lock) { l.Components[0].Backend = "acme-srv-second" }, "only for frontend"},
+		"tck without tags":       {func(l *lockfile.Lock) { l.Components[0].TCK.Tags = nil }, "tck needs tags and grep"},
+		"entry without ports":    {func(l *lockfile.Lock) { l.Components[1].Ports = nil }, "ports is missing"},
+		"frontend without ports": {func(l *lockfile.Lock) { l.Components[2].Ports = nil }, "ports is missing"},
+		"backend without origin": {func(l *lockfile.Lock) { l.Components[1].Origin = "" }, "origin is missing"},
+		"port out of range":      {func(l *lockfile.Lock) { l.Components[0].Ports["srv"] = 70000 }, "TCP port"},
+		"port name not a label":  {func(l *lockfile.Lock) { l.Components[0].Ports["Srv"] = 10100 }, "TCP port"},
 		"module without component": {func(l *lockfile.Lock) {
 			l.Modules[1].Component = ""
 		}, "is not a go-srv component"},
@@ -187,6 +199,17 @@ func TestDecodeRefusesAMultiLockThatBreaksAStrictRule(t *testing.T) {
 				t.Fatalf("error = %v, want one containing %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestAMultiLockWithoutAPortBandNeedsNoPortsOrOrigin(t *testing.T) {
+	lock := validMulti()
+	lock.Ports = nil
+	for i := range lock.Components {
+		lock.Components[i].Ports, lock.Components[i].Origin = nil, ""
+	}
+	if _, err := encodeAndDecode(t, lock); err != nil {
+		t.Fatalf("a catalog without ports records none: %v", err)
 	}
 }
 

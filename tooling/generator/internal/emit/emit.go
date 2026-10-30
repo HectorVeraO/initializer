@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
-	"strconv"
 	"strings"
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
@@ -29,6 +28,11 @@ import (
 
 // readmeName is the rendered project README.
 const readmeName = "README.md"
+
+// localDeploy is the folder of the compose project; a multi project delivers
+// the per-component files of each backend in a folder of it named after the
+// component.
+const localDeploy = ".deploy/local/"
 
 // BuildOptions are the inputs of one project build.
 type BuildOptions struct {
@@ -185,7 +189,7 @@ func (b *builder) run() (Project, error) {
 	for _, spec := range p.Specs {
 		entry := lockfile.Spec{Spec: spec.Spec, Version: spec.Version}
 		for _, file := range spec.Files {
-			delivered, _, err := b.copyFile(nil, "", file)
+			delivered, _, err := b.copyFile(nil, "", nil, file)
 			if err != nil {
 				return Project{}, err
 			}
@@ -206,7 +210,7 @@ func (b *builder) run() (Project, error) {
 				entry.Component = component.Name
 			}
 			for _, file := range module.Files {
-				delivered, isDelivered, err := b.copyFile(component, module.Module, file)
+				delivered, isDelivered, err := b.copyFile(component, module.Module, module.PerComponent, file)
 				if err != nil {
 					return Project{}, err
 				}
@@ -245,8 +249,11 @@ func (b *builder) add(p string, data []byte) error {
 // the source root of a stack goes into the folder of the component that
 // copies it (component scope); every other path stays as it is (project
 // scope). isProject reports the second case. A nil component is a spec file.
-func (b *builder) place(component *plan.ComponentPlan, delivered string) (dest string, isProject bool, err error) {
+func (b *builder) place(component *plan.ComponentPlan, delivered string, isPerComponent bool) (dest string, isProject bool, err error) {
 	p := b.opts.Plan
+	if isPerComponent && component != nil {
+		return b.placePerComponent(component, delivered), false, nil
+	}
 	for _, info := range manifest.Stacks() {
 		if !strings.HasPrefix(delivered, info.Root) {
 			continue
@@ -265,11 +272,32 @@ func (b *builder) place(component *plan.ComponentPlan, delivered string) (dest s
 	return delivered, true, nil
 }
 
+// placePerComponent maps a per-component file to its project path: the source
+// path in a single project, .deploy/local/<component>/<rest> in a multi one.
+func (b *builder) placePerComponent(component *plan.ComponentPlan, delivered string) string {
+	if !b.opts.Plan.Multi() {
+		return delivered
+	}
+	rest := strings.TrimPrefix(delivered, localDeploy)
+	return localDeploy + component.Name + "/" + rest
+}
+
+// isPerComponentPath reports whether path is, or sits under, an entry of the
+// per-component list of its module.
+func isPerComponentPath(entries []string, path string) bool {
+	for _, entry := range entries {
+		if path == entry || (strings.HasSuffix(entry, "/") && strings.HasPrefix(path, entry)) {
+			return true
+		}
+	}
+	return false
+}
+
 // copyFile reads one catalog file from the checkout, checks it against the
 // catalog, applies its transform and records it at its delivered path. The
 // bool is false when a project-scope file was already delivered by an earlier
 // component that installs the same module.
-func (b *builder) copyFile(component *plan.ComponentPlan, owner string, file catalog.File) (lockfile.File, bool, error) {
+func (b *builder) copyFile(component *plan.ComponentPlan, owner string, perComponent []string, file catalog.File) (lockfile.File, bool, error) {
 	delivered := file.Path
 	if file.Target != "" {
 		delivered = file.Target
@@ -277,7 +305,7 @@ func (b *builder) copyFile(component *plan.ComponentPlan, owner string, file cat
 	if !fs.ValidPath(file.Path) || !lockfile.ValidPath(file.Path) {
 		return lockfile.File{}, false, fmt.Errorf("catalog path %q is not a repo-relative path", file.Path)
 	}
-	dest, isProject, err := b.place(component, delivered)
+	dest, isProject, err := b.place(component, delivered, isPerComponentPath(perComponent, file.Path))
 	if err != nil {
 		return lockfile.File{}, false, err
 	}
@@ -377,15 +405,24 @@ func (b *builder) transform(sourcePath string, data []byte, owner, target string
 type context struct {
 	slots map[string]string
 	keep  markers.Keep
+	// offsets maps a declared port offset to the offset a token carries here;
+	// the project context uses the first component's, so the origin of an
+	// unselected stack maps to the selected origin.
+	offsets map[int]int
 }
 
 // projectContext is the context of project-scope text outside every run: the
 // slots of the index-0 instance, a module block kept when any component
 // installs the module, a stack block kept when the stack is selected.
 func (b *builder) projectContext() context {
+	var offsets map[int]int
+	if len(b.opts.Plan.Components) > 0 {
+		offsets = b.opts.Plan.Components[0].TokenOffsets
+	}
 	return context{
-		slots: b.opts.Plan.Slots,
-		keep:  markers.Keep{Module: b.hasModule, Stack: b.hasStack},
+		slots:   b.opts.Plan.Slots,
+		keep:    markers.Keep{Module: b.hasModule, Stack: b.hasStack},
+		offsets: offsets,
 	}
 }
 
@@ -406,8 +443,9 @@ func (b *builder) contextOf(component plan.ComponentPlan) context {
 		slots = b.opts.Plan.Slots
 	}
 	return context{
-		slots: slots,
-		keep:  markers.Keep{Module: func(id string) bool { return installed[id] }, Stack: func(id string) bool { return stacks[id] }},
+		slots:   slots,
+		keep:    markers.Keep{Module: func(id string) bool { return installed[id] }, Stack: func(id string) bool { return stacks[id] }},
+		offsets: component.TokenOffsets,
 	}
 }
 
@@ -463,7 +501,7 @@ func (b *builder) segment(sourcePath string, data []byte, hasMarkers bool, ctx c
 	}
 	if b.portFiles[sourcePath] {
 		p := b.opts.Plan.Ports
-		rewritten, err := ports.Rewrite(data, p.RefBand, p.Band, p.Offsets)
+		rewritten, err := ports.Rewrite(data, p.RefBand, p.Band, ctx.offsets)
 		if err != nil {
 			return nil, fmt.Errorf("%s: port band: %w", sourcePath, err)
 		}
@@ -480,8 +518,7 @@ type projectDelivery struct {
 }
 
 // lockComponent returns the lock entry of one component. A single lock keeps
-// the stack and the name; a multi lock adds the instance fields. Ports and
-// origin are not recorded yet.
+// the stack and the name; a multi lock adds the instance fields.
 func lockComponent(component plan.ComponentPlan, multi bool) lockfile.Component {
 	entry := lockfile.Component{Stack: component.Stack, Name: component.Name}
 	if !multi {
@@ -507,6 +544,15 @@ func lockComponent(component plan.ComponentPlan, multi bool) lockfile.Component 
 			GrepInvert: component.TCK.GrepInvert,
 			Env:        component.TCK.Env,
 		}
+	}
+	if len(component.Ports) > 0 {
+		entry.Ports = make(map[string]int, len(component.Ports))
+		for name, port := range component.Ports {
+			entry.Ports[name] = port
+		}
+	}
+	if component.Role == manifest.RoleBackend {
+		entry.Origin = component.Origin
 	}
 	entry.Names = map[string]string{names.ComponentSlot(component.Stack): component.Name}
 	if component.Database.Name != "" {
@@ -544,12 +590,11 @@ const (
 
 // readmeRun returns the run section data: one instance per backend component,
 // bound to its frontend component when it has one. Every instance shows the
-// plan's one origin until ports are planned per instance.
+// component's own origin.
 func (b *builder) readmeRun() render.ReadmeRun {
 	p := b.opts.Plan
 	band := p.Ports.Band
 	run := render.ReadmeRun{PortLow: band * 100, PortHigh: band*100 + 99}
-	originURL := "http://localhost:" + strconv.Itoa(p.Ports.Origin)
 	for _, component := range p.Components {
 		if component.Role != manifest.RoleBackend {
 			continue
@@ -561,7 +606,7 @@ func (b *builder) readmeRun() render.ReadmeRun {
 		instance := render.ReadmeInstance{
 			Backend:     component.Name,
 			Web:         component.Partner,
-			OriginURL:   originURL,
+			OriginURL:   component.Origin,
 			HasIdentity: hasIdentity,
 			DevSrvTask:  devSrvTaskName,
 			TCKTask:     tckTaskName,
@@ -569,9 +614,51 @@ func (b *builder) readmeRun() render.ReadmeRun {
 		if component.Partner != "" {
 			instance.DevWebTask = devWebTaskName
 		}
+		if p.Multi() {
+			instance.DevSrvTask = "dev:" + component.Name
+			instance.TCKTask = "tck:" + component.Name
+			if component.Partner != "" {
+				instance.DevWebTask = "dev:" + component.Partner
+			}
+		}
 		run.Instances = append(run.Instances, instance)
 	}
 	return run
+}
+
+// readmeComponents returns the components of a multi project for the README;
+// nil in a single project, which renders the single README.
+func (b *builder) readmeComponents() []render.ReadmeComponent {
+	p := b.opts.Plan
+	if !p.Multi() {
+		return nil
+	}
+	var components []render.ReadmeComponent
+	for _, component := range p.Components {
+		entry := render.ReadmeComponent{Name: component.Name, Stack: component.Stack}
+		if component.Role == manifest.RoleFrontend {
+			entry.Backend = component.Partner
+		} else {
+			entry.Origin = component.Origin
+		}
+		for name, port := range component.Ports {
+			entry.Ports = append(entry.Ports, render.ReadmePort{Name: name, Port: port})
+		}
+		sort.Slice(entry.Ports, func(i, j int) bool { return entry.Ports[i].Port < entry.Ports[j].Port })
+		if tck := component.TCK; tck != nil {
+			entry.TCKTags = tck.Tags
+			keys := make([]string, 0, len(tck.Env))
+			for key := range tck.Env {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				entry.TCKEnv = append(entry.TCKEnv, render.EnvPair{Key: key, Value: tck.Env[key]})
+			}
+		}
+		components = append(components, entry)
+	}
+	return components
 }
 
 // lockPorts returns the lock's ports member: the effective band whenever the
@@ -668,11 +755,15 @@ func (b *builder) render() ([]lockfile.File, error) {
 	for _, stack := range p.Components {
 		for _, module := range stack.Modules {
 			key := stack.Stack + "/" + module.Module
+			row := render.ReadmeModule{Stack: stack.Stack, Module: module.Module, Version: module.Version}
+			if p.Multi() {
+				key, row.Component = stack.Name+"/"+module.Module, stack.Name
+			}
 			if listed[key] {
 				continue
 			}
 			listed[key] = true
-			rows = append(rows, render.ReadmeModule{Stack: stack.Stack, Module: module.Module, Version: module.Version})
+			rows = append(rows, row)
 		}
 	}
 	keys := make([]string, 0, len(p.TCKEnv))
@@ -691,6 +782,7 @@ func (b *builder) render() ([]lockfile.File, error) {
 		TCKTags:          p.TCKTags,
 		TCKEnv:           env,
 		Run:              b.readmeRun(),
+		Components:       b.readmeComponents(),
 	})
 	if err != nil {
 		return nil, err

@@ -50,6 +50,8 @@ const (
 	CodeNameRuleForeign       = "NAME_RULE_FOREIGN"
 	CodeNameRuleUnmatched     = "NAME_RULE_UNMATCHED"
 	CodeNameRuleOverlap       = "NAME_RULE_OVERLAP"
+	CodeNameRuleUnscoped      = "NAME_RULE_UNSCOPED"
+	CodePerComponentInvalid   = "PER_COMPONENT_INVALID"
 	CodeReferenceInvalid      = names.CodeReferenceInvalid
 	CodeReferenceIncomplete   = "REFERENCE_INCOMPLETE"
 )
@@ -222,6 +224,7 @@ func (b *builder) run() error {
 	if err := b.assignOwnership(); err != nil {
 		return err
 	}
+	b.checkPerComponent()
 	if err := b.checkNameRules(); err != nil {
 		return err
 	}
@@ -714,6 +717,7 @@ func (b *builder) moduleEntry(doc *moduleDoc) ModuleEntry {
 		Names:           doc.recorded,
 		Ports:           append([]ports.Port(nil), m.Ports...),
 		PortFiles:       recordedPortFiles(m.PortFiles),
+		PerComponent:    recordedPortFiles(m.PerComponent),
 	}
 	for spec, version := range m.ImplementsSpec {
 		entry.ImplementsSpec[spec] = version.String()

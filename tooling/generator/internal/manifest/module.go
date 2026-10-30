@@ -44,6 +44,10 @@ type Module struct {
 	// PortFiles are the files whose port tokens the generator rewrites, in
 	// manifest order.
 	PortFiles []string
+	// PerComponent are the paths the module owns that the generator delivers
+	// once per backend component that installs the module: a file, or a
+	// directory with a trailing slash.
+	PerComponent []string
 }
 
 // NameRule is one element of names: a context-anchored text with %{slot}
@@ -56,7 +60,7 @@ type NameRule struct {
 var moduleKeys = []string{
 	"schema", "stack", "module", "version", "implied", "implementsSpec",
 	"requiresCore", "requiresModules", "tablePrefixes", "files", "exclude", "names",
-	"ports", "portFiles",
+	"ports", "portFiles", "perComponent",
 }
 
 // DecodeModule decodes and validates a module manifest. path is the manifest
@@ -85,6 +89,9 @@ func DecodeModule(path string, data []byte) (Module, []issue.Issue) {
 	}
 	if raw, present := members["portFiles"]; present {
 		module.PortFiles = d.portFiles(raw)
+	}
+	if raw, present := members["perComponent"]; present {
+		module.PerComponent = d.perComponent(raw)
 	}
 	return module, d.result()
 }
@@ -420,7 +427,7 @@ func (d *decoder) ports(raw json.RawMessage) []ports.Port {
 	declared := []ports.Port{}
 	for i, item := range items {
 		pointer := fmt.Sprintf("/ports/%d", i)
-		fields, ok := d.object(item, pointer, []string{"name", "offset", "origin"})
+		fields, ok := d.object(item, pointer, []string{"name", "offset", "origin", "stride"})
 		if !ok {
 			continue
 		}
@@ -445,11 +452,43 @@ func (d *decoder) ports(raw json.RawMessage) []ports.Port {
 			complete = complete && isBool
 			port.Origin = origin
 		}
+		if rawStride, found := fields["stride"]; found {
+			stride, isInteger := d.integer(rawStride, pointer+"/stride")
+			complete = complete && isInteger
+			port.Stride = stride
+		}
 		if complete {
 			declared = append(declared, port)
 		}
 	}
 	return declared
+}
+
+// perComponent decodes perComponent: repo-relative paths, each listed once; a
+// directory ends in "/". Whether the module owns them is a catalog check.
+func (d *decoder) perComponent(raw json.RawMessage) []string {
+	values, valid, ok := d.strings(raw, "/perComponent")
+	if !ok {
+		return nil
+	}
+	paths := []string{}
+	seen := map[string]bool{}
+	for i, value := range values {
+		if !valid[i] {
+			continue
+		}
+		pointer := fmt.Sprintf("/perComponent/%d", i)
+		switch {
+		case !validRepoPath(value):
+			d.add(pointer, "must be a repo-relative path with / separators and no empty, . or .. segment")
+		case seen[value]:
+			d.add(pointer, "duplicate entry")
+		default:
+			seen[value] = true
+			paths = append(paths, value)
+		}
+	}
+	return paths
 }
 
 // portFiles decodes portFiles: repo-relative file paths, each listed once.

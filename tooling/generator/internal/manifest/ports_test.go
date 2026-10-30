@@ -13,21 +13,25 @@ import (
 func TestDecodeModuleReadsPortsAndPortFiles(t *testing.T) {
 	data := mutateFixture(t, "module.valid.json", func(m map[string]any) {
 		m["ports"] = []any{
-			map[string]any{"name": "srv", "offset": 0, "origin": true},
-			map[string]any{"name": "postgres", "offset": 32},
+			map[string]any{"name": "srv", "offset": 0, "origin": true, "stride": 1},
+			map[string]any{"name": "postgres", "offset": 32, "stride": 10},
 		}
 		m["portFiles"] = []any{"mise.toml", ".deploy/local/README.md"}
+		m["perComponent"] = []any{".deploy/local/.example.env", ".deploy/local/kratos/"}
 	})
 	module, issues := manifest.DecodeModule(modulePath, data)
 	if len(issues) != 0 {
 		t.Fatalf("issues: %v", issues)
 	}
-	wantPorts := []ports.Port{{Name: "srv", Offset: 0, Origin: true}, {Name: "postgres", Offset: 32}}
+	wantPorts := []ports.Port{{Name: "srv", Offset: 0, Origin: true, Stride: 1}, {Name: "postgres", Offset: 32, Stride: 10}}
 	if !reflect.DeepEqual(module.Ports, wantPorts) {
 		t.Errorf("ports = %+v, want %+v", module.Ports, wantPorts)
 	}
 	if !reflect.DeepEqual(module.PortFiles, []string{"mise.toml", ".deploy/local/README.md"}) {
 		t.Errorf("portFiles = %v", module.PortFiles)
+	}
+	if !reflect.DeepEqual(module.PerComponent, []string{".deploy/local/.example.env", ".deploy/local/kratos/"}) {
+		t.Errorf("perComponent = %v", module.PerComponent)
 	}
 }
 
@@ -39,8 +43,19 @@ func TestDecodeModuleRefusesMalformedPorts(t *testing.T) {
 	}{
 		{"port is not an object", func(m map[string]any) { m["ports"] = []any{"srv"} }, "#/ports/0"},
 		{"unknown port key", func(m map[string]any) {
-			m["ports"] = []any{map[string]any{"name": "srv", "offset": 0, "stride": 1}}
+			m["ports"] = []any{map[string]any{"name": "srv", "offset": 0, "step": 1}}
+		}, "#/ports/0/step"},
+		{"stride is a string", func(m map[string]any) {
+			m["ports"] = []any{map[string]any{"name": "srv", "offset": 0, "stride": "1"}}
 		}, "#/ports/0/stride"},
+		{"stride is a fraction", func(m map[string]any) {
+			m["ports"] = []any{map[string]any{"name": "srv", "offset": 0, "stride": 1.5}}
+		}, "#/ports/0/stride"},
+		{"perComponent is not a list", func(m map[string]any) { m["perComponent"] = ".deploy/local/.example.env" }, "#/perComponent"},
+		{"perComponent escapes the repo", func(m map[string]any) { m["perComponent"] = []any{"../x"} }, "#/perComponent/0"},
+		{"perComponent repeats", func(m map[string]any) {
+			m["perComponent"] = []any{".deploy/local/kratos/", ".deploy/local/kratos/"}
+		}, "#/perComponent/1"},
 		{"missing name", func(m map[string]any) { m["ports"] = []any{map[string]any{"offset": 0}} }, "#/ports/0/name"},
 		{"missing offset", func(m map[string]any) { m["ports"] = []any{map[string]any{"name": "srv"}} }, "#/ports/0/offset"},
 		{"offset is a string", func(m map[string]any) {
