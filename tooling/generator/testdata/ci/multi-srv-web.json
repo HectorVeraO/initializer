@@ -1,0 +1,11 @@
+{
+  "schema": 2,
+  "project": { "name": "acme-backend", "goModule": "example.com/acme/backend" },
+  "stacks": ["go-srv", "ng-web"],
+  "modules": ["identity"],
+  "components": [
+    { "stack": "go-srv", "name": "acme-backend-srv-first" },
+    { "stack": "go-srv", "name": "acme-backend-srv-second", "modules": ["api-keys", "feature-flags", "identity", "parameters", "tenancy"] },
+    { "stack": "ng-web", "name": "acme-backend-web", "backend": "acme-backend-srv-second" }
+  ]
+}

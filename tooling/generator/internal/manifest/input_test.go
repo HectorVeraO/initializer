@@ -520,6 +520,9 @@ func TestRecordedSelectionOfEveryCISelection(t *testing.T) {
 			}
 
 			s := in.Selection
+			if len(s.Components) > 0 {
+				t.Skip("flags-only twin skipped: a multi-component file is not expressible as flags alone")
+			}
 			flagValues := manifest.Flags{
 				Name: s.Project.Name, GoModule: s.Project.GoModule, Stacks: s.Stacks, Modules: s.Modules,
 				Has: manifest.FlagPresence{Name: true, GoModule: s.Has.GoModule, Stacks: true, Modules: true},

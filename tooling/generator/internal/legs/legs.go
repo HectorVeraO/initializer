@@ -31,11 +31,34 @@ type Leg struct {
 	Stacks []string
 	// Modules are the resolved backend modules in plan order, core first.
 	Modules []string
+	// Components lists the delivered components of a project with several
+	// backends, sorted by (Stack, Index); nil for every single leg.
+	Components []LegComponent
 }
 
-// key identifies a leg: its stacks and resolved modules.
+// LegComponent is one component of a multi leg after resolution.
+type LegComponent struct {
+	Stack string
+	// Index is the position among the components of Stack.
+	Index int
+	// Modules are the resolved modules of the component in plan order.
+	Modules []string
+	// Backend is the index of the bound backend of a frontend, -1 for a backend.
+	Backend int
+}
+
+// key identifies a leg: its stacks and resolved modules, then the components
+// of a multi leg as stack#index:modules>backend. Names are not part of it.
 func (l Leg) key() string {
-	return strings.Join(l.Stacks, ",") + "|" + strings.Join(l.Modules, ",")
+	base := strings.Join(l.Stacks, ",") + "|" + strings.Join(l.Modules, ",")
+	if len(l.Components) == 0 {
+		return base
+	}
+	parts := make([]string, len(l.Components))
+	for i, component := range l.Components {
+		parts[i] = fmt.Sprintf("%s#%d:%s>%d", component.Stack, component.Index, strings.Join(component.Modules, ","), component.Backend)
+	}
+	return base + "|" + strings.Join(parts, ";")
 }
 
 // baseLeg is a resolved backend leg with the typed modules that produced it.
@@ -85,14 +108,93 @@ func Derive(cat catalog.Catalog) []Leg {
 			legs = append(legs, resolved)
 		}
 	}
+	if multi, ok := multiLeg(cat, *backend, frontends); ok && !seen[multi.key()] {
+		legs = append(legs, multi)
+	}
 	sort.Slice(legs, func(i, j int) bool {
 		left, right := strings.Join(legs[i].Stacks, ","), strings.Join(legs[j].Stacks, ",")
 		if left != right {
 			return left < right
 		}
-		return strings.Join(legs[i].Modules, ",") < strings.Join(legs[j].Modules, ",")
+		if modules := strings.Compare(strings.Join(legs[i].Modules, ","), strings.Join(legs[j].Modules, ",")); modules != 0 {
+			return modules < 0
+		}
+		return legs[i].key() < legs[j].key()
 	})
 	return legs
+}
+
+// Names of the synthetic components of the multi candidate.
+const (
+	multiProject = "legs"
+	multiFirst   = multiProject + "-srv-first"
+	multiSecond  = multiProject + "-srv-second"
+	multiWeb     = multiProject + "-web"
+)
+
+// multiLeg resolves the multi candidate: backend index 0 starts from the
+// modules that own per-instance infrastructure, backend index 1 from every
+// module, and the first frontend stack binds to index 1. It reports false when
+// the plan refuses the candidate.
+func multiLeg(cat catalog.Catalog, backend catalog.StackEntry, frontends []catalog.StackEntry) (Leg, bool) {
+	var owners, all []string
+	for _, module := range backend.Modules {
+		if module.Module == manifest.CoreModule {
+			continue
+		}
+		all = append(all, module.Module)
+		hasInfrastructure := len(module.Ports) > 0 || len(module.PerComponent) > 0
+		if !module.Implied && hasInfrastructure {
+			owners = append(owners, module.Module)
+		}
+	}
+	sort.Strings(owners)
+	sort.Strings(all)
+	sel := manifest.Selection{
+		Schema:  2,
+		Project: manifest.Project{Name: multiProject, GoModule: "example.com/legs"},
+		Stacks:  []string{backend.Stack},
+		Modules: owners,
+		Components: []manifest.Component{
+			{Stack: backend.Stack, Name: multiFirst},
+			{Stack: backend.Stack, Name: multiSecond, Modules: all, HasModules: true},
+		},
+	}
+	if len(frontends) > 0 {
+		sel.Stacks = append(sel.Stacks, frontends[0].Stack)
+		sel.Components = append(sel.Components, manifest.Component{Stack: frontends[0].Stack, Name: multiWeb, Backend: multiSecond})
+	}
+	sort.Strings(sel.Stacks)
+	resolved, issues := plan.Resolve(cat, sel)
+	if len(issues) > 0 || !resolved.Multi() {
+		return Leg{}, false
+	}
+	return legOf(resolved), true
+}
+
+// legOf builds the leg of a resolved plan; a multi plan adds its components.
+func legOf(resolved plan.Plan) Leg {
+	leg := Leg{Stacks: resolved.Selection.Stacks, Modules: resolved.Selection.Modules}
+	if !resolved.Multi() {
+		return leg
+	}
+	backendIndex := map[string]int{}
+	for _, component := range resolved.Components {
+		if component.Role == roleBackend {
+			backendIndex[component.Name] = component.Index
+		}
+	}
+	for _, component := range resolved.Components {
+		entry := LegComponent{Stack: component.Stack, Index: component.Index, Backend: -1}
+		for _, module := range component.Modules {
+			entry.Modules = append(entry.Modules, module.Module)
+		}
+		if component.Role == roleFrontend {
+			entry.Backend = backendIndex[component.Partner]
+		}
+		leg.Components = append(leg.Components, entry)
+	}
+	return leg
 }
 
 // splitStacks returns the backend stack and the frontend stacks of cat.
@@ -238,7 +340,7 @@ func Check(cat catalog.Catalog, files map[string]manifest.Selection) []issue.Iss
 				Message: fmt.Sprintf("selection is refused: %s %s: %s", first.Code, first.Path, first.Message)})
 			continue
 		}
-		leg := Leg{Stacks: resolved.Selection.Stacks, Modules: resolved.Selection.Modules}
+		leg := legOf(resolved)
 		if !inSet[leg.key()] {
 			issues = append(issues, issue.Issue{Code: CodeDrift, Path: path, Message: "leg is not in the covering set"})
 			continue

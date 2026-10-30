@@ -19,12 +19,29 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 )
 
+// exampleEnvPath locates the example env: .deploy/local/.example.env of the
+// project root, or .deploy/local/<component>/.example.env when the component
+// sits in a multi-component project and is named after its directory.
+func exampleEnvPath(t *testing.T) string {
+	t.Helper()
+	componentRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve component root: %v", err)
+	}
+	projectRoot := filepath.Dir(componentRoot)
+	single := filepath.Join(projectRoot, ".deploy", "local", ".example.env")
+	if _, statErr := os.Stat(single); statErr == nil {
+		return single
+	}
+	perComponent := filepath.Join(projectRoot, ".deploy", "local", filepath.Base(componentRoot), ".example.env")
+	return perComponent
+}
+
 // exampleEnvSettings are the identity lines of .deploy/local/.example.env,
 // read from the file so the test follows the template.
 func exampleEnvSettings(t *testing.T) map[string]string {
 	t.Helper()
-	path := filepath.Join("..", "..", "..", "..", ".deploy", "local", ".example.env")
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(exampleEnvPath(t))
 	if err != nil {
 		t.Fatalf("read example env: %v", err)
 	}

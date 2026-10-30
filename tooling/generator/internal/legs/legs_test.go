@@ -22,11 +22,39 @@ func selection(stacks []string, modules ...string) manifest.Selection {
 }
 
 func describe(found []legs.Leg) []string {
-	out := make([]string, len(found))
-	for i, leg := range found {
-		out[i] = strings.Join(leg.Stacks, ",") + " " + strings.Join(leg.Modules, ",")
+	var out []string
+	for _, leg := range found {
+		if len(leg.Components) > 0 {
+			continue
+		}
+		out = append(out, strings.Join(leg.Stacks, ",")+" "+strings.Join(leg.Modules, ","))
 	}
 	return out
+}
+
+// multiLegs returns the legs that hold components.
+func multiLegs(found []legs.Leg) []legs.Leg {
+	var out []legs.Leg
+	for _, leg := range found {
+		if len(leg.Components) > 0 {
+			out = append(out, leg)
+		}
+	}
+	return out
+}
+
+// multiSelection is the selection file of the multi leg.
+func multiSelection(stacks []string) manifest.Selection {
+	sel := selection(stacks, "identity")
+	sel.Schema = 2
+	sel.Components = []manifest.Component{
+		{Stack: "go-srv", Name: "acme-backend-srv-first"},
+		{Stack: "go-srv", Name: "acme-backend-srv-second", Modules: []string{"api-keys", "feature-flags", "identity", "parameters", "tenancy"}, HasModules: true},
+	}
+	if len(stacks) > 1 {
+		sel.Components = append(sel.Components, manifest.Component{Stack: "ng-web", Name: "acme-backend-web", Backend: "acme-backend-srv-second"})
+	}
+	return sel
 }
 
 // The fixture catalog has the modules core, identity, parameters, feature-flags,
@@ -107,7 +135,7 @@ func TestDeriveDropsAWebCandidateThePlanRefuses(t *testing.T) {
 		}
 		for m := range cat.Stacks[s].Modules {
 			if cat.Stacks[s].Modules[m].Module == "core" {
-				cat.Stacks[s].Modules[m].ImplementsSpec = map[string]string{"core": "0.1.0", "identity": "0.1.0"}
+				cat.Stacks[s].Modules[m].ImplementsSpec = map[string]string{"core": "0.1.0", "ghost-spec": "0.1.0"}
 			}
 		}
 	}
@@ -163,6 +191,10 @@ func completeFiles(t *testing.T, cat catalog.Catalog) map[string]manifest.Select
 	t.Helper()
 	files := map[string]manifest.Selection{}
 	for _, leg := range legs.Derive(cat) {
+		if len(leg.Components) > 0 {
+			files["multi.json"] = multiSelection(leg.Stacks)
+			continue
+		}
 		name := strings.ReplaceAll(strings.Join(leg.Stacks, "+")+"-"+strings.Join(leg.Modules, "+"), ",", "+") + ".json"
 		files[name] = selection(leg.Stacks, leg.Modules...)
 	}
@@ -274,5 +306,187 @@ func TestDeriveListsALegOnceWhenTwoCandidatesResolveToIt(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("leg listed %d times", count)
+	}
+}
+
+func TestDeriveAddsOneMultiLegWithABoundFrontend(t *testing.T) {
+	found := multiLegs(legs.Derive(fixture.Load(t).Catalog))
+	if len(found) != 1 {
+		t.Fatalf("multi legs = %d", len(found))
+	}
+	got := found[0]
+	if !reflect.DeepEqual(got.Stacks, []string{"go-srv", "ng-web"}) {
+		t.Fatalf("stacks = %v", got.Stacks)
+	}
+	want := []legs.LegComponent{
+		{Stack: "go-srv", Index: 0, Modules: []string{"core", "identity"}, Backend: -1},
+		{Stack: "go-srv", Index: 1, Modules: []string{"core", "identity", "api-keys", "feature-flags", "parameters", "tenancy"}, Backend: -1},
+		{Stack: "ng-web", Index: 0, Modules: []string{"core", "identity", "feature-flags", "parameters"}, Backend: 1},
+	}
+	if !reflect.DeepEqual(got.Components, want) {
+		t.Fatalf("components = %+v, want %+v", got.Components, want)
+	}
+}
+
+func TestDeriveAddsTheMultiLegWithoutAFrontendStack(t *testing.T) {
+	cat := fixture.Load(t).Catalog
+	backendOnly := cat
+	backendOnly.Stacks = nil
+	for _, stack := range cat.Stacks {
+		if stack.Role == "backend" {
+			backendOnly.Stacks = append(backendOnly.Stacks, stack)
+		}
+	}
+	found := multiLegs(legs.Derive(backendOnly))
+	if len(found) != 1 || !reflect.DeepEqual(found[0].Stacks, []string{"go-srv"}) || len(found[0].Components) != 2 {
+		t.Fatalf("multi legs = %+v", found)
+	}
+}
+
+func TestDeriveStartsIndexZeroFromTheModulesThatOwnInstanceFiles(t *testing.T) {
+	cat := fixture.Load(t).Catalog
+	for s := range cat.Stacks {
+		if cat.Stacks[s].Role != "backend" {
+			continue
+		}
+		for m := range cat.Stacks[s].Modules {
+			if cat.Stacks[s].Modules[m].Module == "parameters" {
+				cat.Stacks[s].Modules[m].PerComponent = []string{"cfg/parameters.yaml"}
+			}
+		}
+	}
+	found := multiLegs(legs.Derive(cat))
+	if len(found) != 1 {
+		t.Fatalf("multi legs = %d", len(found))
+	}
+	first := found[0].Components[0].Modules
+	wantFirst := []string{"core", "identity", "parameters"}
+	if !reflect.DeepEqual(first, wantFirst) {
+		t.Fatalf("index 0 modules = %v, want %v", first, wantFirst)
+	}
+}
+
+func TestDeriveWithoutInstanceOwnersGivesNoMultiLegBeyondCore(t *testing.T) {
+	cat := fixture.Load(t).Catalog
+	for s := range cat.Stacks {
+		for m := range cat.Stacks[s].Modules {
+			cat.Stacks[s].Modules[m].Ports = nil
+			cat.Stacks[s].Modules[m].PerComponent = nil
+		}
+	}
+	found := multiLegs(legs.Derive(cat))
+	if len(found) != 1 || !reflect.DeepEqual(found[0].Components[0].Modules, []string{"core"}) {
+		t.Fatalf("multi legs = %+v", found)
+	}
+}
+
+func TestCheckMatchesTheMultiFileAndReportsItsDrift(t *testing.T) {
+	cat := fixture.Load(t).Catalog
+	files := completeFiles(t, cat)
+	if issues := legs.Check(cat, files); len(issues) != 0 {
+		t.Fatalf("issues = %v", issues)
+	}
+
+	// A different module list on the second backend is another leg.
+	drifted := multiSelection([]string{"go-srv", "ng-web"})
+	drifted.Components[1].Modules = []string{"api-keys", "identity"}
+	files["multi.json"] = drifted
+	got := driftMessages(legs.Check(cat, files))
+	if got["testdata/ci/multi.json leg is not in the covering set"] != legs.CodeDrift {
+		t.Fatalf("drift = %v", got)
+	}
+
+	// Without the file the multi leg is named as missing.
+	delete(files, "multi.json")
+	missing := false
+	for _, found := range legs.Check(cat, files) {
+		if found.Path == "testdata/ci" && strings.HasPrefix(found.Message, "no selection file for stacks go-srv,ng-web") {
+			missing = true
+		}
+	}
+	if !missing {
+		t.Fatal("the missing multi file is not reported")
+	}
+}
+
+func TestCheckKeepsNamesOutOfTheLegIdentity(t *testing.T) {
+	cat := fixture.Load(t).Catalog
+	files := completeFiles(t, cat)
+	renamed := multiSelection([]string{"go-srv", "ng-web"})
+	renamed.Components[0].Name = "acme-backend-api"
+	renamed.Components[1].Name = "acme-backend-core"
+	renamed.Components[2].Backend = "acme-backend-core"
+	files["multi.json"] = renamed
+	if issues := legs.Check(cat, files); len(issues) != 0 {
+		t.Fatalf("issues = %v", issues)
+	}
+}
+
+func TestDeriveDropsTheMultiLegThePlanRefuses(t *testing.T) {
+	breakFrontend := func(cat *catalog.Catalog) {
+		for s := range cat.Stacks {
+			if cat.Stacks[s].Role != "frontend" {
+				continue
+			}
+			for m := range cat.Stacks[s].Modules {
+				if cat.Stacks[s].Modules[m].Module == "core" {
+					cat.Stacks[s].Modules[m].ImplementsSpec = map[string]string{"core": "0.1.0", "ghost-spec": "0.1.0"}
+				}
+			}
+		}
+	}
+	breakBackend := func(cat *catalog.Catalog) {
+		for s := range cat.Stacks {
+			if cat.Stacks[s].Role != "backend" {
+				continue
+			}
+			var kept []catalog.ModuleEntry
+			for _, module := range cat.Stacks[s].Modules {
+				if module.Module != "identity" {
+					kept = append(kept, module)
+				}
+			}
+			cat.Stacks[s].Modules = kept
+		}
+	}
+	cases := map[string][]func(*catalog.Catalog){
+		"backend only":  {breakBackend},
+		"frontend only": {breakFrontend},
+		"both":          {breakBackend, breakFrontend},
+	}
+	for name, breakers := range cases {
+		t.Run(name, func(t *testing.T) {
+			cat := fixture.Load(t).Catalog
+			for _, apply := range breakers {
+				apply(&cat)
+			}
+			if found := multiLegs(legs.Derive(cat)); len(found) != 0 {
+				t.Fatalf("the refused multi leg was kept: %+v", found)
+			}
+		})
+	}
+}
+
+func TestDeriveListsTheMultiLegAfterTheSingleLegsOfItsStacks(t *testing.T) {
+	found := legs.Derive(fixture.Load(t).Catalog)
+	position := -1
+	for i, leg := range found {
+		if len(leg.Components) > 0 {
+			position = i
+		}
+	}
+	if position < 0 {
+		t.Fatal("no multi leg")
+	}
+	for i, leg := range found {
+		if i > position && strings.Join(leg.Stacks, ",") == "go-srv,ng-web" && strings.Join(leg.Modules, ",") < strings.Join(found[position].Modules, ",") {
+			t.Fatalf("leg %d (%v) sorts before the multi leg at %d", i, leg.Modules, position)
+		}
+	}
+	for i := 1; i < len(found); i++ {
+		left, right := strings.Join(found[i-1].Stacks, ","), strings.Join(found[i].Stacks, ",")
+		if left > right {
+			t.Fatalf("legs not ordered by stacks at %d: %q > %q", i, left, right)
+		}
 	}
 }
