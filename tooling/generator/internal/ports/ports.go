@@ -27,6 +27,14 @@ type Port struct {
 	Offset int `json:"offset"`
 	// Origin marks the public origin port of its stack.
 	Origin bool `json:"origin,omitempty"`
+	// Stride is the distance between the ports of two components of one
+	// stack: the host offset of the component at index i is Offset + i*Stride.
+	Stride int `json:"stride,omitempty"`
+}
+
+// OffsetAt returns the host offset of the port for the component at index.
+func (p Port) OffsetAt(index int) int {
+	return p.Offset + index*p.Stride
 }
 
 // Token is one port token: five ASCII digits with no ASCII digit directly before or after.

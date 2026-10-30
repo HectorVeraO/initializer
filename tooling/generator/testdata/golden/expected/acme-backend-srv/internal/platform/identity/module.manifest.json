@@ -8,7 +8,8 @@
   "requiresCore": "^0.1.0",
   "requiresModules": [],
   "tablePrefixes": ["iam"],
-  "ports": [{"name": "kratos-public", "offset": 33}],
+  "ports": [{"name": "kratos-public", "offset": 33, "stride": 10}],
+  "perComponent": [".deploy/local/kratos/"],
   "files": [".deploy/local/kratos/", ".deploy/local/postgres-init/", "go-srv/internal/platform/identity/", "specs/tck-support/actors/"],
   "exclude": []
 }

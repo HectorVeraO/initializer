@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/markers"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
@@ -213,6 +214,9 @@ func (b *builder) checkFileRules(doc *moduleDoc, path string, rules []nameRule) 
 			b.addPlain(CodeNameRuleOverlap, path, fmt.Sprintf("rule %q at byte %d touches the marker on line %d", usable[occurrence.Rule].rule.Text, occurrence.Start, line+1))
 		}
 		blocks[occurrence.Rule][layout.enclosing(occurrence)] = true
+		if b.isProjectScope(path) && !layout.inRun(occurrence.Start) {
+			b.checkScoped(path, usable[occurrence.Rule], layout.lineOf(occurrence.Start))
+		}
 	}
 	for i, candidate := range usable {
 		if len(blocks[i]) == 0 {
@@ -230,11 +234,40 @@ func (b *builder) checkFileRules(doc *moduleDoc, path string, rules []nameRule) 
 	return nil
 }
 
+// checkScoped applies NAME_RULE_UNSCOPED to one occurrence outside every run
+// of a project-scope file: only a project-level slot is allowed there.
+func (b *builder) checkScoped(path string, rule nameRule, line int) {
+	for _, slot := range rule.slots {
+		if names.IsProjectLevel(slot) {
+			continue
+		}
+		b.addPlain(CodeNameRuleUnscoped, path,
+			fmt.Sprintf("line %d: rule %q uses slot %q, which is per instance, outside every run of a project-scope file", line+1, rule.rule.Text, slot))
+		return
+	}
+}
+
 // lineLayout maps byte offsets of one file to its lines and marker blocks.
 type lineLayout struct {
 	starts []int
 	data   []byte
 	blocks []markers.Block
+	runs   []markers.Run
+}
+
+// inRun reports whether the byte at offset sits on a line of a run.
+func (l lineLayout) inRun(offset int) bool {
+	position := offset
+	if position < len(l.data) && l.data[position] == '\n' && position+1 < len(l.data) {
+		position++
+	}
+	line := l.lineOf(position)
+	for _, run := range l.runs {
+		if line >= run.Start && line <= run.End {
+			return true
+		}
+	}
+	return false
 }
 
 func newLineLayout(path string, data []byte) lineLayout {
@@ -245,7 +278,11 @@ func newLineLayout(path string, data []byte) lineLayout {
 		}
 	}
 	if _, hasMarkers := markers.SyntaxFor(path); hasMarkers {
-		layout.blocks, _ = markers.Parse(path, data)
+		var issues []issue.Issue
+		layout.blocks, issues = markers.Parse(path, data)
+		if len(issues) == 0 {
+			layout.runs = markers.Runs(data, layout.blocks)
+		}
 	}
 	return layout
 }

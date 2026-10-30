@@ -145,6 +145,17 @@ func derivedOf(slot string) (DerivedSlot, string, bool) {
 	return DerivedSlot{}, "", false
 }
 
+// IsProjectLevel reports whether slot has one value for the whole project:
+// the project name, the display name and the environment prefix. Every other
+// slot takes the value of one component or instance.
+func IsProjectLevel(slot string) bool {
+	switch slot {
+	case SlotProject, SlotDisplayName, SlotEnvPrefix:
+		return true
+	}
+	return false
+}
+
 // IsRecorded reports whether a lock may record slot: false for the derived
 // instance slots, whose value is fixed by the generator.
 func IsRecorded(slot string) bool {

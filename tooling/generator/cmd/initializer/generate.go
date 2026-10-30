@@ -295,9 +295,6 @@ func generateProject(ctx *Context, in generateInput) int {
 		var planIssues []issue.Issue
 		resolved, planIssues = plan.Resolve(built, selection)
 		issues = append(issues, withoutUndetermined(planIssues, len(issues) > 0)...)
-		if len(issues) == 0 && resolved.Multi() {
-			issues = append(issues, multiComponentIssue())
-		}
 		if len(issues) == 0 {
 			sourceIssues, err := plan.CheckSources(root, resolved)
 			if err != nil {

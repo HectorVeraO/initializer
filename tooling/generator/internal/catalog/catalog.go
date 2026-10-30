@@ -71,7 +71,10 @@ type ModuleEntry struct {
 	Names           []NameRule        `json:"names,omitempty"`
 	Ports           []ports.Port      `json:"ports,omitempty"`
 	PortFiles       []string          `json:"portFiles,omitempty"`
-	Files           []File            `json:"files"`
+	// PerComponent are the owned paths delivered once per backend component
+	// that installs the module: a file, or a directory with a trailing slash.
+	PerComponent []string `json:"perComponent,omitempty"`
+	Files        []File   `json:"files"`
 }
 
 // NameRule is one name rule of a module manifest as the catalog records it.
@@ -137,6 +140,7 @@ func normalize(c Catalog) Catalog {
 			module.Files = nonNilFiles(module.Files)
 			module.Ports = append([]ports.Port(nil), module.Ports...)
 			module.PortFiles = append([]string(nil), module.PortFiles...)
+			module.PerComponent = append([]string(nil), module.PerComponent...)
 			module.Names = append([]NameRule(nil), module.Names...)
 			for k := range module.Names {
 				module.Names[k].Blocks = nonNilStrings(module.Names[k].Blocks)

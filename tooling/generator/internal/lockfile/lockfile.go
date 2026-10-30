@@ -476,6 +476,9 @@ func checkMultiComponents(lock Lock) error {
 		if err := checkEntryRole(where, component, info, byName, backendOf); err != nil {
 			return err
 		}
+		if err := checkEntryPorts(where, lock, component, info); err != nil {
+			return err
+		}
 		if info.GoModule {
 			if component.GoModule == "" {
 				return fmt.Errorf("%s: goModule is missing", where)
@@ -490,6 +493,27 @@ func checkMultiComponents(lock Lock) error {
 		}
 	}
 	return checkModuleEntries(lock)
+}
+
+// checkEntryPorts requires the ports of every entry, and the origin of every
+// backend, in a lock whose catalog declared ports. A lock without a port band
+// records neither.
+func checkEntryPorts(where string, lock Lock, component Component, info manifest.StackInfo) error {
+	if lock.Ports == nil {
+		return nil
+	}
+	if len(component.Ports) == 0 {
+		return fmt.Errorf("%s: ports is missing", where)
+	}
+	for name, port := range component.Ports {
+		if !names.ValidLabel(name) || port < 1 || port > 65535 {
+			return fmt.Errorf("%s: ports %q is not a label with a TCP port", where, name)
+		}
+	}
+	if info.Role == manifest.RoleBackend && component.Origin == "" {
+		return fmt.Errorf("%s: origin is missing", where)
+	}
+	return nil
 }
 
 // checkEntryRole applies the rules that depend on the role of the stack.

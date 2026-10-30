@@ -8,8 +8,8 @@
   "requiresModules": [],
   "tablePrefixes": ["cor"],
   "ports": [
-    { "name": "srv", "offset": 0, "origin": true },
-    { "name": "postgres", "offset": 32 }
+    { "name": "srv", "offset": 0, "origin": true, "stride": 1 },
+    { "name": "postgres", "offset": 32, "stride": 10 }
   ],
   "portFiles": [
     ".deploy/local/.example.env",
@@ -17,6 +17,7 @@
     ".deploy/local/docker-compose.yml",
     "mise.toml"
   ],
+  "perComponent": [".deploy/local/.example.env"],
   "files": [
     ".deploy/local/",
     ".gitattributes",
@@ -75,6 +76,7 @@
     { "path": ".deploy/local/.example.env", "text": "Overriding %{envPrefix}_PG_PASSWORD in .env" },
     { "path": ".deploy/local/README.md", "text": "`%{component.go-srv}` HTTP API" },
     { "path": ".deploy/local/README.md", "text": "passes it to `%{component.go-srv}`" },
+    { "path": ".deploy/local/README.md", "text": "Overrides go in `.deploy/local/%{instanceDir.go-srv}.env`" },
     { "path": ".deploy/local/README.md", "text": "`%{component.ng-web}` console, the public origin" },
     { "path": ".deploy/local/README.md", "text": "- %{component.go-srv} applies its own migrations" },
     { "path": ".deploy/local/README.md", "text": "run %{component.go-srv} from" },
@@ -98,6 +100,10 @@
     { "path": ".deploy/local/docker-compose.yml", "text": "- path: ./%{instanceDir.go-srv}.env" },
     { "path": ".deploy/local/docker-compose.yml", "text": "- ./%{instanceDir.go-srv}kratos:/etc/config/kratos:ro" },
     { "path": ".deploy/local/.example.env", "text": "OTEL_SERVICE_NAME=%{component.go-srv}" },
+    {
+      "path": ".deploy/local/.example.env",
+      "text": "APP_SESSION_KEYS=local-dev-1:passphrase:change-me-local-only-session-key%{instanceSuffix.go-srv}"
+    },
     { "path": ".deploy/local/.example.env", "text": "and the %{component.go-srv} session" },
     { "path": ".deploy/local/.example.env", "text": "host-dev runs from %{component.go-srv}/." },
     { "path": ".deploy/local/README.md", "text": "`%{component.go-srv}` on 10100 also proxies" },

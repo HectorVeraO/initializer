@@ -270,3 +270,112 @@ func TestReadmeRefusesUnsafeFields(t *testing.T) {
 		}
 	}
 }
+
+// multiReadmeInput returns the README data of a project with two backends: the
+// first installs identity and has no console, the second installs identity and
+// feature-flags and is bound to the console acme-web.
+func multiReadmeInput() render.ReadmeInput {
+	return render.ReadmeInput{
+		Name:             "acme",
+		GeneratorVersion: "0.1.0",
+		Modules: []render.ReadmeModule{
+			{Component: "acme-srv-first", Stack: "go-srv", Module: "core", Version: "0.1.0"},
+			{Component: "acme-srv-first", Stack: "go-srv", Module: "identity", Version: "0.1.0"},
+			{Component: "acme-srv-second", Stack: "go-srv", Module: "core", Version: "0.1.0"},
+			{Component: "acme-srv-second", Stack: "go-srv", Module: "identity", Version: "0.1.0"},
+			{Component: "acme-srv-second", Stack: "go-srv", Module: "feature-flags", Version: "0.1.0"},
+			{Component: "acme-web", Stack: "ng-web", Module: "core", Version: "0.1.0"},
+		},
+		Run: render.ReadmeRun{PortLow: 10100, PortHigh: 10199, Instances: []render.ReadmeInstance{
+			{Backend: "acme-srv-first", OriginURL: "http://localhost:10100", HasIdentity: true, DevSrvTask: "dev:acme-srv-first", TCKTask: "tck:acme-srv-first"},
+			{Backend: "acme-srv-second", Web: "acme-web", OriginURL: "http://localhost:10120", HasIdentity: true,
+				DevSrvTask: "dev:acme-srv-second", DevWebTask: "dev:acme-web", TCKTask: "tck:acme-srv-second"},
+		}},
+		Components: []render.ReadmeComponent{
+			{Name: "acme-srv-first", Stack: "go-srv", Origin: "http://localhost:10100",
+				Ports:   []render.ReadmePort{{Name: "srv", Port: 10100}, {Name: "postgres", Port: 10132}, {Name: "kratos-public", Port: 10133}},
+				TCKTags: []string{"@core", "@identity", "@otel"}},
+			{Name: "acme-srv-second", Stack: "go-srv", Origin: "http://localhost:10120",
+				Ports:   []render.ReadmePort{{Name: "srv", Port: 10101}, {Name: "postgres", Port: 10142}, {Name: "kratos-public", Port: 10143}},
+				TCKTags: []string{"@core", "@feature-flags", "@identity", "@otel"},
+				TCKEnv:  []render.EnvPair{{Key: "APP_FLAGS_FILE", Value: "specs/feature-flags/tck/fixtures/flags.yaml"}}},
+			{Name: "acme-web", Stack: "ng-web", Backend: "acme-srv-second", Ports: []render.ReadmePort{{Name: "web", Port: 10120}}},
+		},
+	}
+}
+
+func TestReadmeMultiGolden(t *testing.T) {
+	got, err := render.Readme(multiReadmeInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "README.multi.md.golden", got)
+	if !bytes.HasSuffix(got, []byte("mise run tck:acme-srv-second\n")) || bytes.HasSuffix(got, []byte("\n\n")) {
+		t.Fatal("README must end with exactly one newline")
+	}
+}
+
+func TestReadmeMultiStatesTheOverridesAndTheCookieNote(t *testing.T) {
+	got, err := render.Readme(multiReadmeInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"acme-srv-second: http://localhost:10120 (console acme-web)",
+		"acme-srv-first: http://localhost:10100;",
+		"Per-instance overrides go in `.deploy/local/<component>/.env`",
+		"`.deploy/local/.env` is read only by compose interpolation and reaches every instance",
+		"one browser profile is signed in to one identity instance at a time",
+		"mise run dev:acme-srv-first", "mise run dev:acme-web", "mise run tck:acme-srv-first",
+		"to `.deploy/local/acme-srv-second/.env`",
+	} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("README lacks %q:\n%s", want, got)
+		}
+	}
+	in := multiReadmeInput()
+	in.Run.Instances[0].HasIdentity = false
+	got, err = render.Readme(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "browser profile") {
+		t.Errorf("the cookie note needs two identity instances:\n%s", got)
+	}
+}
+
+func TestReadmeMultiRefusesAnInstanceWithoutItsComponent(t *testing.T) {
+	cases := map[string]func(in *render.ReadmeInput){
+		"missing component":     func(in *render.ReadmeInput) { in.Components = in.Components[1:] },
+		"line break":            func(in *render.ReadmeInput) { in.Components[0].Name = "acme-srv-first\n# injected" },
+		"line break in stack":   func(in *render.ReadmeInput) { in.Components[0].Stack = "go-srv\n# injected" },
+		"line break in backend": func(in *render.ReadmeInput) { in.Components[2].Backend = "acme-srv-second\n# injected" },
+		"line break in origin":  func(in *render.ReadmeInput) { in.Components[0].Origin = "http://localhost:10100\n# injected" },
+		"backtick in env":       func(in *render.ReadmeInput) { in.Components[1].TCKEnv[0].Value = "a`b" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			in := multiReadmeInput()
+			mutate(&in)
+			if out, err := render.Readme(in); err == nil {
+				t.Fatalf("want an error, got:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestReadmeWithoutComponentsRendersTheSingleText(t *testing.T) {
+	in := readmeInput(true, true, true)
+	single, err := render.Readme(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Components = []render.ReadmeComponent{}
+	again, err := render.Readme(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(single, again) {
+		t.Error("an empty Components list changed the single README")
+	}
+}

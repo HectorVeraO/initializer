@@ -54,6 +54,34 @@ func Load(t testing.TB) Repo {
 	return Repo{Root: root, Catalog: built, CatalogBytes: encoded}
 }
 
+// LoadCheckout builds the catalog of the repository checkout the tests run in,
+// from its tracked files. The test is skipped when git cannot list them.
+func LoadCheckout(t testing.TB) Repo {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot locate the checkout")
+	}
+	root := filepath.Join(filepath.Dir(file), "..", "..", "..", "..")
+	listed, err := exec.Command("git", "-C", root, "ls-files", "-z").Output()
+	if err != nil {
+		t.Skipf("git ls-files: %v", err)
+	}
+	files, err := catalog.ParseFileList(listed)
+	if err != nil {
+		t.Fatalf("parse the file list: %v", err)
+	}
+	built, issues, err := catalog.Build(catalog.BuildOptions{Root: os.DirFS(root), Files: files, Generator: generator.Version})
+	if err != nil || len(issues) > 0 {
+		t.Fatalf("build the checkout catalog: %v %v", err, issues)
+	}
+	encoded, err := catalog.Encode(built)
+	if err != nil {
+		t.Fatalf("encode the checkout catalog: %v", err)
+	}
+	return Repo{Root: root, Catalog: built, CatalogBytes: encoded}
+}
+
 // Clone copies the golden fixture checkout into a new git repository that
 // holds the generator marker (tooling/generator/go.mod), commits it as Jane Doe
 // and returns the directory and the commit. A developer's git configuration is

@@ -7,8 +7,9 @@
   "implementsSpec": {"core": "0.1.0"},
   "requiresModules": [],
   "tablePrefixes": ["cor"],
-  "ports": [{"name": "srv", "offset": 0, "origin": true}, {"name": "postgres", "offset": 32}],
+  "ports": [{"name": "srv", "offset": 0, "origin": true, "stride": 1}, {"name": "postgres", "offset": 32, "stride": 10}],
   "portFiles": [".deploy/local/.example.env", ".deploy/local/README.md"],
+  "perComponent": [".deploy/local/.example.env"],
   "files": [".deploy/local/", ".gitattributes", ".gitignore", "go-srv/", "specs/package.json", "specs/tck-support/"],
   "exclude": ["go-srv/AGENTS.md", "go-srv/cookbooks/"],
   "names": [{"path": ".deploy/local/docker-compose.yml", "text": "name: %{project}"}]

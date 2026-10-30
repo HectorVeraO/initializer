@@ -261,8 +261,8 @@ func TestRunsExtendTheReadmeTableAndDropAFrontendRowWithoutPartner(t *testing.T)
 	project := buildRuns(t, multiSelection())
 	readme := projectFile(t, project, runsReadme)
 	assertContainsAll(t, "README", readme,
-		"| 10100 | `acme-srv-first` HTTP API |\n", "| 10100 | `acme-srv-second` HTTP API |\n",
-		"| 10133 | `acme-srv-first-kratos` public API |\n", "| 10133 | `acme-srv-second-kratos` public API |\n")
+		"| 10100 | `acme-srv-first` HTTP API |\n", "| 10101 | `acme-srv-second` HTTP API |\n",
+		"| 10133 | `acme-srv-first-kratos` public API |\n", "| 10143 | `acme-srv-second-kratos` public API |\n")
 	// The first backend has no frontend: its copy drops the ng-web row; the
 	// second backend's copy keeps it.
 	assertCount(t, "README", readme, "| 10120 | `acme-web` console |\n", 1)

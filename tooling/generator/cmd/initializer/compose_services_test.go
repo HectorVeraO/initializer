@@ -1,10 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -188,6 +192,89 @@ func TestGeneratedComposeConfig(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A two-backend project (index 0 with identity only, index 1 with every
+// module, one console bound to index 1) yields a compose file that docker
+// compose accepts with and without the app profile, and whose resolved
+// configuration holds every instance service with its published port. The
+// resolved configuration holds secrets' defaults, so it is parsed and never
+// printed.
+func TestGeneratedMultiComposeConfig(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker not found")
+	}
+	if out, err := runCompose(t.TempDir(), "version"); err != nil {
+		t.Skipf("docker compose is not available: %v: %s", err, out)
+	}
+	root, catalogPath := realCatalog(t)
+	out := filepath.Join(t.TempDir(), "out")
+	code, _, stderr := execute(t, "generate", "--root", root, "--catalog", catalogPath, out,
+		"--name", "acme", "--go-module", "example.com/acme", "--stacks", "go-srv,ng-web",
+		"--component", "go-srv=acme-srv-first,modules=identity",
+		"--component", "go-srv=acme-srv-second,modules=api-keys+feature-flags+identity+parameters+tenancy",
+		"--component", "ng-web=acme-web,backend=acme-srv-second")
+	if code != exitOK {
+		t.Fatalf("generate exit %d: %s", code, stderr)
+	}
+	if code, _, stderr := execute(t, "verify", out); code != exitOK {
+		t.Fatalf("verify exit %d: %s", code, stderr)
+	}
+	compose := filepath.Join(out, ".deploy", "local", "docker-compose.yml")
+	for _, args := range [][]string{
+		{"-f", compose, "config", "-q"},
+		{"-f", compose, "--profile", "app", "config", "-q"},
+	} {
+		if output, err := runCompose(out, args...); err != nil {
+			t.Errorf("docker compose %s: %v\n%s", strings.Join(args, " "), err, output)
+		}
+	}
+	rendered, err := runCompose(out, "-f", compose, "--profile", "app", "config", "--format", "json")
+	if err != nil {
+		t.Fatalf("docker compose config --format json: %v", err)
+	}
+	var config struct {
+		Services map[string]struct {
+			Ports []struct {
+				Published string `json:"published"`
+				Target    int    `json:"target"`
+			} `json:"ports"`
+		} `json:"services"`
+	}
+	if err := json.Unmarshal([]byte(rendered), &config); err != nil {
+		t.Fatalf("parse the resolved configuration: %v", err)
+	}
+	want := map[string][]string{
+		"acme-srv-first":                 {"10100:10100"},
+		"acme-srv-first-postgres":        {"10132:5432"},
+		"acme-srv-first-kratos":          {"10133:4433", "10134:4434"},
+		"acme-srv-first-kratos-migrate":  nil,
+		"acme-srv-first-postgres-init":   nil,
+		"acme-srv-second":                {"10101:10101"},
+		"acme-srv-second-postgres":       {"10142:5432"},
+		"acme-srv-second-kratos":         {"10143:4433", "10144:4434"},
+		"acme-srv-second-kratos-migrate": nil,
+		"acme-srv-second-postgres-init":  nil,
+		"acme-web":                       {"10120:80"},
+	}
+	if len(config.Services) != len(want) {
+		t.Errorf("the configuration has %d services, want %d", len(config.Services), len(want))
+	}
+	for name, ports := range want {
+		service, found := config.Services[name]
+		if !found {
+			t.Errorf("service %s is missing", name)
+			continue
+		}
+		var got []string
+		for _, port := range service.Ports {
+			got = append(got, port.Published+":"+strconv.Itoa(port.Target))
+		}
+		sort.Strings(got)
+		if !reflect.DeepEqual(got, ports) && (len(got) > 0 || len(ports) > 0) {
+			t.Errorf("service %s publishes %v, want %v", name, got, ports)
+		}
 	}
 }
 

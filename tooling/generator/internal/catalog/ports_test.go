@@ -15,12 +15,13 @@ import (
 )
 
 const portsCoreBlock = `"tablePrefixes": ["cor"],
-  "ports": [{"name": "srv", "offset": 0, "origin": true}, {"name": "postgres", "offset": 32}],
+  "ports": [{"name": "srv", "offset": 0, "origin": true, "stride": 1}, {"name": "postgres", "offset": 32, "stride": 10}],
   "portFiles": ["` + composeFile + `"],`
 
 const portsIdentityBlock = `"tablePrefixes": ["iam"],
-  "ports": [{"name": "kratos-public", "offset": 33}],
-  "portFiles": [".deploy/local/kratos/kratos.yml"],`
+  "ports": [{"name": "kratos-public", "offset": 33, "stride": 10}],
+  "portFiles": [".deploy/local/kratos/kratos.yml"],
+  "perComponent": [".deploy/local/kratos/"],`
 
 // portsRepo returns the clean repo with ports declared by core and identity,
 // a reference band of 101 and tokens of every kind in the compose file.
@@ -30,7 +31,7 @@ func portsRepo(t *testing.T) fstest.MapFS {
 	edit(t, repo, coreManifest, `"tablePrefixes": ["cor"],`, portsCoreBlock)
 	edit(t, repo, identityManifest, `"tablePrefixes": ["iam"],`, portsIdentityBlock)
 	edit(t, repo, referenceFile, `"schema": 2,`, `"schema": 2, "ports": {"band": 101},`)
-	put(repo, composeFile, "name: fixture-app\n\nservices: {}\n# 10100-10199 api 10100, db 10132, kratos 10133\n")
+	put(repo, composeFile, "name: fixture-app\n\nservices: {}\n# 10100-10199 api 10100\n# initializer:stack go-srv\n# db 10132, kratos 10133\n# initializer:end go-srv\n")
 	put(repo, ".deploy/local/kratos/kratos.yml", "public: http://localhost:10133\n")
 	return repo
 }
@@ -42,7 +43,7 @@ func TestPortsAreRecordedInTheCatalog(t *testing.T) {
 		t.Errorf("portBand = %d, want 101", built.PortBand)
 	}
 	core := findModule(t, built, "go-srv", "core")
-	wantPorts := []ports.Port{{Name: "srv", Offset: 0, Origin: true}, {Name: "postgres", Offset: 32}}
+	wantPorts := []ports.Port{{Name: "srv", Offset: 0, Origin: true, Stride: 1}, {Name: "postgres", Offset: 32, Stride: 10}}
 	if !reflect.DeepEqual(core.Ports, wantPorts) || !reflect.DeepEqual(core.PortFiles, []string{composeFile}) {
 		t.Errorf("core ports %+v files %v", core.Ports, core.PortFiles)
 	}
@@ -99,10 +100,10 @@ func TestPortIssueCodes(t *testing.T) {
 			edit(t, r, coreManifest, `"offset": 32`, `"offset": -1`)
 		}, []string{"PORT_INVALID", "PORT_UNDECLARED"}},
 		{"two origins in one stack", func(t *testing.T, r fstest.MapFS) {
-			edit(t, r, coreManifest, `{"name": "postgres", "offset": 32}`, `{"name": "postgres", "offset": 32, "origin": true}`)
+			edit(t, r, coreManifest, `{"name": "postgres", "offset": 32, "stride": 10}`, `{"name": "postgres", "offset": 32, "stride": 10, "origin": true}`)
 		}, []string{"PORT_INVALID"}},
 		{"origin outside the core module", func(t *testing.T, r fstest.MapFS) {
-			edit(t, r, identityManifest, `{"name": "kratos-public", "offset": 33}`, `{"name": "kratos-public", "offset": 33, "origin": true}`)
+			edit(t, r, identityManifest, `{"name": "kratos-public", "offset": 33, "stride": 10}`, `{"name": "kratos-public", "offset": 33, "stride": 10, "origin": true}`)
 		}, []string{"PORT_INVALID"}},
 		{"two ports share an offset", func(t *testing.T, r fstest.MapFS) {
 			edit(t, r, identityManifest, `"offset": 33`, `"offset": 32`)
@@ -123,7 +124,7 @@ func TestPortIssueCodes(t *testing.T) {
 			put(r, composeFile, "name: fixture-app\n10177\n")
 		}, []string{"PORT_UNDECLARED"}},
 		{"token offset declared by no module", func(t *testing.T, r fstest.MapFS) {
-			edit(t, r, identityManifest, `"ports": [{"name": "kratos-public", "offset": 33}],`, ``)
+			edit(t, r, identityManifest, `"ports": [{"name": "kratos-public", "offset": 33, "stride": 10}],`, ``)
 		}, []string{"PORT_UNDECLARED"}},
 		{"reference has no band", func(t *testing.T, r fstest.MapFS) {
 			edit(t, r, referenceFile, `"ports": {"band": 101},`, ``)
@@ -150,7 +151,7 @@ func TestBandBoundsAlwaysPass(t *testing.T) {
 	repo := portsRepo(t)
 	put(repo, composeFile, "name: fixture-app\n10100 10199\n10100-10199\n")
 	put(repo, ".deploy/local/kratos/kratos.yml", "10100 10199\n")
-	edit(t, repo, identityManifest, `"ports": [{"name": "kratos-public", "offset": 33}],`, ``)
+	edit(t, repo, identityManifest, `"ports": [{"name": "kratos-public", "offset": 33, "stride": 10}],`, ``)
 	_, issues := buildRepo(t, repo)
 	assertCodes(t, issues)
 }
