@@ -71,9 +71,47 @@ type lockV1 struct {
 }
 
 // Component is one delivered component: the stack and the project folder name.
+// Every other field is set only in a multi lock.
 type Component struct {
 	Stack string `json:"stack"`
 	Name  string `json:"name"`
+	// Index is the position among the components of Stack; a pointer so that
+	// index 0 encodes.
+	Index *int `json:"index,omitempty"`
+	// GoModule is the target Go module path of a component of a stack with one.
+	GoModule string `json:"goModule,omitempty"`
+	// Database is the database and owner role of a backend whose database slots are live.
+	Database *Database `json:"database,omitempty"`
+	// Modules are the installed module ids in plan order, core included.
+	Modules []string `json:"modules,omitempty"`
+	// Ports holds the declared ports of the installed modules.
+	Ports map[string]int `json:"ports,omitempty"`
+	// Origin is the public base URL of a backend.
+	Origin string `json:"origin,omitempty"`
+	// TCK is the TCK selection of a backend with at least one spec.
+	TCK *TCK `json:"tck,omitempty"`
+	// Backend names the backend component a frontend is bound to.
+	Backend string `json:"backend,omitempty"`
+	// Names holds the live slots of this instance.
+	Names map[string]string `json:"names,omitempty"`
+}
+
+// Database is the database name and owner role of one backend.
+type Database = manifest.Database
+
+// TCK is the TCK selection of one backend component.
+type TCK struct {
+	Tags       []string          `json:"tags"`
+	Grep       string            `json:"grep"`
+	GrepInvert string            `json:"grepInvert,omitempty"`
+	Env        map[string]string `json:"env"`
+}
+
+// hasMultiFields reports whether the entry carries a field only a multi lock has.
+func (c Component) hasMultiFields() bool {
+	hasAny := c.Index != nil || c.GoModule != "" || c.Database != nil || len(c.Modules) > 0 ||
+		len(c.Ports) > 0 || c.Origin != "" || c.TCK != nil || c.Backend != "" || len(c.Names) > 0
+	return hasAny
 }
 
 // Source identifies the source tree the project was generated from.
@@ -112,6 +150,8 @@ type Module struct {
 	Version        string            `json:"version"`
 	ImplementsSpec map[string]string `json:"implementsSpec"`
 	Files          []File            `json:"files"`
+	// Component names the component that holds the module; set only in a multi lock.
+	Component string `json:"component,omitempty"`
 }
 
 // File is one delivered file. SHA256 hashes the delivered bytes.
@@ -171,6 +211,38 @@ func (l Lock) FolderOf(stack string) (string, bool) {
 	return folder, true
 }
 
+// Multi reports whether some stack has two or more components.
+func (l Lock) Multi() bool {
+	perStack := map[string]int{}
+	for _, component := range l.Components {
+		perStack[component.Stack]++
+		if perStack[component.Stack] > 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// ComponentOf returns the component that holds module entry m: the entry named
+// m.Component of the same stack in a multi lock, the only component of
+// m.Stack otherwise.
+func (l Lock) ComponentOf(m Module) (Component, bool) {
+	if !l.Multi() {
+		for _, component := range l.Components {
+			if component.Stack == m.Stack {
+				return component, true
+			}
+		}
+		return Component{}, false
+	}
+	for _, component := range l.Components {
+		if component.Stack == m.Stack && component.Name == m.Component {
+			return component, true
+		}
+	}
+	return Component{}, false
+}
+
 // Encode returns the canonical bytes of l: two-space indent, LF line ends and
 // one trailing newline. Nil lists and maps encode as [] and {}.
 func Encode(l Lock) ([]byte, error) {
@@ -191,6 +263,20 @@ func normalize(l Lock) Lock {
 	out.Selection.Modules = nonNilStrings(l.Selection.Modules)
 	if out.Components == nil {
 		out.Components = []Component{}
+	}
+	if l.Multi() {
+		out.Components = make([]Component, len(l.Components))
+		for i, component := range l.Components {
+			if component.TCK != nil {
+				tck := *component.TCK
+				tck.Tags = nonNilStrings(tck.Tags)
+				if tck.Env == nil {
+					tck.Env = map[string]string{}
+				}
+				component.TCK = &tck
+			}
+			out.Components[i] = component
+		}
 	}
 	if out.Names == nil {
 		out.Names = map[string]string{}
@@ -311,14 +397,10 @@ func upgradeV1(old lockV1) Lock {
 
 // checkSchema2 applies the rules that only schema 2 has.
 func checkSchema2(lock Lock) error {
-	byStack := map[string]string{}
 	usedNames := map[string]bool{}
 	for _, component := range lock.Components {
 		if _, known := manifest.LookupStack(component.Stack); !known {
 			return fmt.Errorf("components: stack %q is unknown", component.Stack)
-		}
-		if _, dup := byStack[component.Stack]; dup {
-			return fmt.Errorf("components: stack %q is listed twice", component.Stack)
 		}
 		if !names.ValidLabel(component.Name) {
 			return fmt.Errorf("components: name %q is not a label", component.Name)
@@ -326,23 +408,16 @@ func checkSchema2(lock Lock) error {
 		if usedNames[component.Name] {
 			return fmt.Errorf("components: name %q is used twice", component.Name)
 		}
-		byStack[component.Stack] = component.Name
 		usedNames[component.Name] = true
 	}
-	for _, module := range lock.Modules {
-		if _, has := byStack[module.Stack]; !has {
-			return fmt.Errorf("module %s: stack %q has no component", module.Module, module.Stack)
+	if lock.Multi() {
+		if err := checkMultiComponents(lock); err != nil {
+			return err
 		}
-		for _, file := range module.Files {
-			for stack, name := range byStack {
-				isOtherFolder := stack != module.Stack && strings.HasPrefix(file.Path, name+"/")
-				if isOtherFolder {
-					return fmt.Errorf("module %s: %q is inside the folder of the %s component", module.Module, file.Path, stack)
-				}
-			}
-		}
+	} else if err := checkSingleComponents(lock); err != nil {
+		return err
 	}
-	if err := checkNames(lock.Names, byStack); err != nil {
+	if err := checkModuleFolders(lock); err != nil {
 		return err
 	}
 	if lock.Ports != nil && !ports.ValidBand(lock.Ports.Band) {
@@ -350,6 +425,183 @@ func checkSchema2(lock Lock) error {
 	}
 	if lock.Source != nil && !commitPattern.MatchString(lock.Source.Commit) {
 		return errors.New("source.commit must be 40 or 64 lowercase hex digits")
+	}
+	return nil
+}
+
+// checkSingleComponents refuses every multi field in a lock whose stacks have
+// one component each.
+func checkSingleComponents(lock Lock) error {
+	byStack := map[string]string{}
+	for _, component := range lock.Components {
+		if component.hasMultiFields() {
+			return fmt.Errorf("components: %q has multi-component fields but no stack has two components", component.Name)
+		}
+		byStack[component.Stack] = component.Name
+	}
+	for _, module := range lock.Modules {
+		if module.Component != "" {
+			return fmt.Errorf("module %s: component is set but no stack has two components", module.Module)
+		}
+		if _, has := byStack[module.Stack]; !has {
+			return fmt.Errorf("module %s: stack %q has no component", module.Module, module.Stack)
+		}
+	}
+	return checkNames(lock.Names, byStack)
+}
+
+// checkMultiComponents applies the strict rules of a lock with a stack that
+// has two or more components.
+func checkMultiComponents(lock Lock) error {
+	if err := checkMultiNames(lock); err != nil {
+		return err
+	}
+	seen := map[string]int{}
+	goModules := map[string]string{}
+	backendOf := map[string]string{}
+	byName := map[string]Component{}
+	for _, component := range lock.Components {
+		byName[component.Name] = component
+	}
+	for _, component := range lock.Components {
+		info, _ := manifest.LookupStack(component.Stack)
+		where := "components: " + component.Name
+		if component.Index == nil || *component.Index != seen[component.Stack] {
+			return fmt.Errorf("%s: index must be %d, the position among the %s components", where, seen[component.Stack], component.Stack)
+		}
+		seen[component.Stack]++
+		if len(component.Modules) == 0 {
+			return fmt.Errorf("%s: modules is missing", where)
+		}
+		if err := checkEntryRole(where, component, info, byName, backendOf); err != nil {
+			return err
+		}
+		if info.GoModule {
+			if component.GoModule == "" {
+				return fmt.Errorf("%s: goModule is missing", where)
+			}
+			if other, dup := goModules[component.GoModule]; dup {
+				return fmt.Errorf("%s: goModule %q is also the one of %s", where, component.GoModule, other)
+			}
+			goModules[component.GoModule] = component.Name
+		}
+		if component.TCK != nil && (len(component.TCK.Tags) == 0 || component.TCK.Grep == "") {
+			return fmt.Errorf("%s: tck needs tags and grep", where)
+		}
+	}
+	return checkModuleEntries(lock)
+}
+
+// checkEntryRole applies the rules that depend on the role of the stack.
+func checkEntryRole(where string, component Component, info manifest.StackInfo, byName map[string]Component, backendOf map[string]string) error {
+	if info.Role != manifest.RoleFrontend {
+		if component.Backend != "" {
+			return fmt.Errorf("%s: backend is only for frontend components", where)
+		}
+		return nil
+	}
+	if !info.GoModule && component.GoModule != "" {
+		return fmt.Errorf("%s: goModule is only for stacks with a Go module", where)
+	}
+	target, found := byName[component.Backend]
+	targetInfo, _ := manifest.LookupStack(target.Stack)
+	if !found || targetInfo.Role != manifest.RoleBackend {
+		return fmt.Errorf("%s: backend %q does not name a backend component", where, component.Backend)
+	}
+	if taken, isTaken := backendOf[component.Backend]; isTaken {
+		return fmt.Errorf("%s: backend %q is also the backend of %s", where, component.Backend, taken)
+	}
+	backendOf[component.Backend] = component.Name
+	return nil
+}
+
+// checkMultiNames applies the names split: the top-level map has no
+// component slot and each entry names itself.
+func checkMultiNames(lock Lock) error {
+	var stackIDs []string
+	for _, info := range manifest.Stacks() {
+		stackIDs = append(stackIDs, info.ID)
+	}
+	for key, value := range lock.Names {
+		if value == "" || !names.IsSlot(key, stackIDs) {
+			return fmt.Errorf("names: %q is not a live slot with a value", key)
+		}
+		if strings.HasPrefix(key, "component.") {
+			return fmt.Errorf("names: %q belongs to the component entries in a multi lock", key)
+		}
+	}
+	for _, component := range lock.Components {
+		where := "components: " + component.Name
+		for key, value := range component.Names {
+			if value == "" || !names.IsSlot(key, stackIDs) {
+				return fmt.Errorf("%s: names %q is not a live slot with a value", where, key)
+			}
+			isOtherComponent := strings.HasPrefix(key, "component.") && key != "component."+component.Stack
+			if isOtherComponent {
+				return fmt.Errorf("%s: names %q is not the slot of this component", where, key)
+			}
+		}
+		if component.Names["component."+component.Stack] != component.Name {
+			return fmt.Errorf("%s: names component.%s must equal the name", where, component.Stack)
+		}
+	}
+	return nil
+}
+
+// checkModuleEntries pairs the modules list of each component with the
+// modules[] entries that name it.
+func checkModuleEntries(lock Lock) error {
+	// listed maps component -> module -> whether a modules[] entry named it.
+	listed := map[string]map[string]bool{}
+	for _, component := range lock.Components {
+		listed[component.Name] = map[string]bool{}
+		for _, module := range component.Modules {
+			if !idPattern.MatchString(module) {
+				return fmt.Errorf("components: %s: module id %q is malformed", component.Name, module)
+			}
+			if _, dup := listed[component.Name][module]; dup {
+				return fmt.Errorf("components: %s: module %q is listed twice", component.Name, module)
+			}
+			listed[component.Name][module] = false
+		}
+	}
+	for _, entry := range lock.Modules {
+		component, found := lock.ComponentOf(entry)
+		if !found {
+			return fmt.Errorf("module %s: component %q is not a %s component", entry.Module, entry.Component, entry.Stack)
+		}
+		done, installed := listed[component.Name][entry.Module]
+		if !installed {
+			return fmt.Errorf("module %s: component %s does not list it in modules", entry.Module, component.Name)
+		}
+		if done {
+			return fmt.Errorf("module %s: component %s has two entries", entry.Module, component.Name)
+		}
+		listed[component.Name][entry.Module] = true
+	}
+	for _, component := range lock.Components {
+		for _, module := range component.Modules {
+			if !listed[component.Name][module] {
+				return fmt.Errorf("components: %s: module %q has no modules entry", component.Name, module)
+			}
+		}
+	}
+	return nil
+}
+
+// checkModuleFolders refuses a module file inside the folder of a component
+// other than the one that holds the module.
+func checkModuleFolders(lock Lock) error {
+	for _, module := range lock.Modules {
+		holder, _ := lock.ComponentOf(module)
+		for _, file := range module.Files {
+			for _, other := range lock.Components {
+				isOtherFolder := other.Name != holder.Name && strings.HasPrefix(file.Path, other.Name+"/")
+				if isOtherFolder {
+					return fmt.Errorf("module %s: %q is inside the folder of the %s component", module.Module, file.Path, other.Name)
+				}
+			}
+		}
 	}
 	return nil
 }

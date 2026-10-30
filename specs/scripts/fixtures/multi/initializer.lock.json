@@ -1,0 +1,19 @@
+{
+  "schema": 2,
+  "components": [
+    {
+      "stack": "go-srv", "name": "acme-srv-first", "index": 0, "goModule": "example.com/acme/acme-srv-first",
+      "modules": ["core", "identity", "parameters"], "origin": "http://localhost:10100",
+      "tck": { "tags": ["@core", "@identity", "@otel", "@parameters"], "grep": "(@core|@identity|@otel|@parameters)", "env": {} }
+    },
+    {
+      "stack": "go-srv", "name": "acme-srv-second", "index": 1, "goModule": "example.com/acme/acme-srv-second",
+      "modules": ["core", "feature-flags", "parameters"], "origin": "http://localhost:10120",
+      "tck": {
+        "tags": ["@core", "@feature-flags", "@otel", "@parameters"], "grep": "(@core|@feature-flags|@otel|@parameters)",
+        "grepInvert": "(@identity)", "env": { "APP_FLAGS_FILE": "specs/feature-flags/tck/fixtures/flags.yaml" }
+      }
+    },
+    { "stack": "ng-web", "name": "acme-web", "index": 0, "modules": ["core"], "backend": "acme-srv-second" }
+  ]
+}

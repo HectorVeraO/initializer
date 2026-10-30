@@ -1,0 +1,1 @@
+{ "schema": 1, "spec": "api-keys", "version": "0.1.0", "tckTags": ["@api-keys"], "tckEnv": {}, "cooperatesWith": ["@tenancy"] }

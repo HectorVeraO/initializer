@@ -88,7 +88,7 @@ func TestDecodeRefusals(t *testing.T) {
 		"lists itself":            {func(l *lockfile.Lock) { l.Generated[0].Path = lockfile.Name }, "itself"},
 		"duplicate":               {func(l *lockfile.Lock) { l.Generated[0].Path = "go-srv/go.mod" }, "twice"},
 		"component unknown stack": {func(l *lockfile.Lock) { l.Components[0].Stack = "rust-srv" }, "components"},
-		"component stack twice":   {func(l *lockfile.Lock) { l.Components = append(l.Components, l.Components[0]) }, "listed twice"},
+		"component stack twice":   {func(l *lockfile.Lock) { l.Components = append(l.Components, l.Components[0]) }, "used twice"},
 		"component bad name":      {func(l *lockfile.Lock) { l.Components[0].Name = "Acme_Srv" }, "not a label"},
 		"component parent path":   {func(l *lockfile.Lock) { l.Components[0].Name = "../x" }, "not a label"},
 		"component nested path":   {func(l *lockfile.Lock) { l.Components[0].Name = "a/b" }, "not a label"},
@@ -264,6 +264,12 @@ func FuzzDecode(f *testing.F) {
 		f.Fatal(err)
 	}
 	f.Add(valid)
+	multi, err := lockfile.Encode(validMulti())
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(multi)
+	f.Add([]byte(`{"schema":2,"components":[{"stack":"go-srv","name":"a","index":0},{"stack":"go-srv","name":"b","index":1}]}`))
 	f.Add([]byte(`{"schema":1}`))
 	f.Add([]byte(schema1Lock("")))
 	f.Add([]byte(""))
@@ -279,11 +285,11 @@ func FuzzDecode(f *testing.F) {
 					t.Fatalf("accepted path %q", file.Path)
 				}
 			}
-			folder, hasFolder := lock.FolderOf(module.Stack)
-			if !hasFolder {
+			holder, hasHolder := lock.ComponentOf(module)
+			if !hasHolder {
 				t.Fatalf("accepted stack %q without a component", module.Stack)
 			}
-			if _, ok := lockfile.ModuleDir(folder, module.Stack, module.Module); !ok {
+			if _, ok := lockfile.ModuleDir(holder.Name, module.Stack, module.Module); !ok {
 				t.Fatalf("accepted stack %q", module.Stack)
 			}
 		}
