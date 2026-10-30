@@ -534,6 +534,13 @@ jobs:
               env_file="${project}/.deploy/local/${name}/.example.env"
               database_url="$(set -a; . "${env_file}"; printf '%s' "${APP_DATABASE_URL}")"
               public_base_url="$(set -a; . "${env_file}"; printf '%s' "${APP_PUBLIC_BASE_URL:-}")"
+              # The instance's own Kratos; the tests default to instance 0's ports.
+              kratos_public="$(jq -r --arg n "${name}" '.components[] | select(.name == $n) | .ports["kratos-public"] // empty' "${project}/initializer.lock.json")"
+              kratos_admin="$(jq -r --arg n "${name}" '.components[] | select(.name == $n) | .ports["kratos-admin"] // empty' "${project}/initializer.lock.json")"
+              if [ -n "${kratos_public}" ]; then
+                export APP_TEST_KRATOS_PUBLIC_URL="http://127.0.0.1:${kratos_public}"
+                export APP_TEST_KRATOS_ADMIN_URL="http://127.0.0.1:${kratos_admin}"
+              fi
             else
               database_url="$(set -a; . "${project}/.deploy/local/.example.env"; printf '%s' "${APP_DATABASE_URL}")"
               public_base_url="${APP_PUBLIC_BASE_URL}"
