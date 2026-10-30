@@ -135,7 +135,7 @@ func TestDeriveDropsAWebCandidateThePlanRefuses(t *testing.T) {
 		}
 		for m := range cat.Stacks[s].Modules {
 			if cat.Stacks[s].Modules[m].Module == "core" {
-				cat.Stacks[s].Modules[m].ImplementsSpec = map[string]string{"core": "0.1.0", "identity": "0.1.0"}
+				cat.Stacks[s].Modules[m].ImplementsSpec = map[string]string{"core": "0.1.0", "ghost-spec": "0.1.0"}
 			}
 		}
 	}
@@ -423,16 +423,23 @@ func TestCheckKeepsNamesOutOfTheLegIdentity(t *testing.T) {
 }
 
 func TestDeriveDropsTheMultiLegThePlanRefuses(t *testing.T) {
-	cat := fixture.Load(t).Catalog
-	for s := range cat.Stacks {
-		switch cat.Stacks[s].Role {
-		case "frontend":
+	breakFrontend := func(cat *catalog.Catalog) {
+		for s := range cat.Stacks {
+			if cat.Stacks[s].Role != "frontend" {
+				continue
+			}
 			for m := range cat.Stacks[s].Modules {
 				if cat.Stacks[s].Modules[m].Module == "core" {
-					cat.Stacks[s].Modules[m].ImplementsSpec = map[string]string{"core": "0.1.0", "identity": "0.1.0"}
+					cat.Stacks[s].Modules[m].ImplementsSpec = map[string]string{"core": "0.1.0", "ghost-spec": "0.1.0"}
 				}
 			}
-		case "backend":
+		}
+	}
+	breakBackend := func(cat *catalog.Catalog) {
+		for s := range cat.Stacks {
+			if cat.Stacks[s].Role != "backend" {
+				continue
+			}
 			var kept []catalog.ModuleEntry
 			for _, module := range cat.Stacks[s].Modules {
 				if module.Module != "identity" {
@@ -442,8 +449,21 @@ func TestDeriveDropsTheMultiLegThePlanRefuses(t *testing.T) {
 			cat.Stacks[s].Modules = kept
 		}
 	}
-	if found := multiLegs(legs.Derive(cat)); len(found) != 0 {
-		t.Fatalf("the refused multi leg was kept: %+v", found)
+	cases := map[string][]func(*catalog.Catalog){
+		"backend only":  {breakBackend},
+		"frontend only": {breakFrontend},
+		"both":          {breakBackend, breakFrontend},
+	}
+	for name, breakers := range cases {
+		t.Run(name, func(t *testing.T) {
+			cat := fixture.Load(t).Catalog
+			for _, apply := range breakers {
+				apply(&cat)
+			}
+			if found := multiLegs(legs.Derive(cat)); len(found) != 0 {
+				t.Fatalf("the refused multi leg was kept: %+v", found)
+			}
+		})
 	}
 }
 
