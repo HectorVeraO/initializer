@@ -21,6 +21,9 @@ const (
 	CodeMarkerStackUnknown = "MARKER_STACK_UNKNOWN"
 	// CodeMarkerInModuleFile is a marker in a file that no core module owns.
 	CodeMarkerInModuleFile = "MARKER_IN_MODULE_FILE"
+	// CodeMarkerRunInvalid is a module block outside every run whose end line
+	// is directly followed by a stack block.
+	CodeMarkerRunInvalid = "MARKER_RUN_INVALID"
 )
 
 // coreModule is the one id a marker may never name.
@@ -254,11 +257,7 @@ func Drop(p string, src []byte, keep Keep) ([]byte, error) {
 	}
 	blocks, issues := Parse(p, src)
 	if len(issues) > 0 {
-		messages := make([]string, len(issues))
-		for i, found := range issues {
-			messages[i] = found.Code + ": " + found.Message
-		}
-		return nil, fmt.Errorf("%s: %s", p, strings.Join(messages, "; "))
+		return nil, parseError(p, issues)
 	}
 	lines := splitLines(src)
 	removed := make([]bool, len(lines))
@@ -299,4 +298,140 @@ func Drop(p string, src []byte, keep Keep) ([]byte, error) {
 		}
 	}
 	return out, nil
+}
+
+// Run is a maximal sequence of directly adjacent blocks that starts with a
+// stack block; Start and End are 0-based line indexes of its first open and
+// last end marker; Blank is the count of empty lines directly above Start.
+type Run struct {
+	// Stack is the stack id the first block names.
+	Stack string
+	// Start and End are the line indexes of the first open and the last end marker.
+	Start, End int
+	// Blank is the count of empty lines directly above Start.
+	Blank int
+	// Blocks are the blocks of the run in file order.
+	Blocks []Block
+}
+
+// Runs returns the runs of blocks, which Parse returned for src, in file
+// order. A block continues the previous one when its open line is the line
+// directly after the previous end line; a sequence is a run when its first
+// block is a stack block. It does not change Parse's checks.
+func Runs(src []byte, blocks []Block) []Run {
+	lines := splitLines(src)
+	var runs []Run
+	var current *Run
+	flush := func() {
+		if current != nil {
+			runs = append(runs, *current)
+			current = nil
+		}
+	}
+	for i, block := range blocks {
+		isContinuing := i > 0 && block.Start == blocks[i-1].End+1
+		if current != nil && isContinuing {
+			current.End = block.End
+			current.Blocks = append(current.Blocks, block)
+			continue
+		}
+		flush()
+		if block.Kind != KindStack {
+			continue
+		}
+		blank := 0
+		for at := block.Start - 1; at >= 0 && at < len(lines) && lineText(lines[at]) == ""; at-- {
+			blank++
+		}
+		current = &Run{Stack: block.ID, Start: block.Start, End: block.End, Blank: blank, Blocks: []Block{block}}
+	}
+	flush()
+	return runs
+}
+
+// Expand returns src with every run emitted count(run.Stack) times through
+// copyRun, and the text outside the runs through outside. Each callback gets
+// the raw bytes of its segment and returns the transformed bytes; the caller
+// applies its transform order inside the callback. A run with no copy is
+// dropped together with the one blank line directly before it (the rule of
+// Drop). Copies after the first are each preceded by the blank lines that
+// directly precede the run in src. A segment with no bytes is not passed to
+// outside. It returns an error when Parse reports an issue, a count is
+// negative, or a callback fails.
+func Expand(p string, src []byte, count func(stack string) int,
+	copyRun func(r Run, index int, seg []byte) ([]byte, error),
+	outside func(seg []byte) ([]byte, error)) ([]byte, error) {
+	if count == nil || copyRun == nil || outside == nil {
+		return nil, errors.New("expand callbacks must be non-nil")
+	}
+	blocks, issues := Parse(p, src)
+	if len(issues) > 0 {
+		return nil, parseError(p, issues)
+	}
+	runs := Runs(src, blocks)
+	lines := splitLines(src)
+	var out []byte
+	next := 0
+	emitGap := func(from, to int) error {
+		if from >= to {
+			return nil
+		}
+		seg, err := outside(joinLines(lines[from:to]))
+		if err != nil {
+			return err
+		}
+		out = append(out, seg...)
+		return nil
+	}
+	for _, run := range runs {
+		copies := count(run.Stack)
+		if copies < 0 {
+			return nil, fmt.Errorf("%s: count for stack %s is negative", p, run.Stack)
+		}
+		gapEnd := run.Start
+		if copies == 0 && run.Blank > 0 {
+			gapEnd--
+		}
+		if err := emitGap(next, gapEnd); err != nil {
+			return nil, err
+		}
+		if copies == 0 {
+			next = run.End + 1
+			continue
+		}
+		blank := joinLines(lines[run.Start-run.Blank : run.Start])
+		body := joinLines(lines[run.Start : run.End+1])
+		for index := 0; index < copies; index++ {
+			if index > 0 {
+				if len(out) > 0 && out[len(out)-1] != '\n' {
+					out = append(out, '\n')
+				}
+				out = append(out, blank...)
+			}
+			seg, err := copyRun(run, index, body)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, seg...)
+		}
+		next = run.End + 1
+	}
+	if err := emitGap(next, len(lines)); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// joinLines concatenates lines that keep their terminators.
+func joinLines(lines [][]byte) []byte {
+	return bytes.Join(lines, nil)
+}
+
+// parseError joins the issues of Parse into one error for path p.
+func parseError(p string, issues []issue.Issue) error {
+	messages := make([]string, len(issues))
+	for i, found := range issues {
+		messages[i] = found.Code + ": " + found.Message
+	}
+	return fmt.Errorf("%s: %s", p, strings.Join(messages, "; "))
 }

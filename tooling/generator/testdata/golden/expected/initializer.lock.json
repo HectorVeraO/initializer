@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "generator": "0.1.0",
-  "catalogSha256": "e114882eaca0d76ff4041d4805505edb1ae41d4ac176d9ad0b877e717f814219",
+  "catalogSha256": "300c1fc2afc558be3faa370daffef40214c25efa8abd65353cfa9b359d42e3cf",
   "selection": {
     "schema": 1,
     "project": {
@@ -101,13 +101,13 @@
         },
         {
           "path": ".deploy/local/README.md",
-          "sha256": "9e4d9a501bb91327777322c78c39c2223427fbbe764750ea638916cd3c99bb97",
-          "sourceSha256": "059aa9b09efee040687aab13095e59d947db81cbbea63d2a1a56de0073b285c5"
+          "sha256": "117a3c8b3de098cadf6e0c3d7fb117954dd67e806cc3e8a859a075d2045e2c87",
+          "sourceSha256": "7f8f5cd27b3164eec8cc00b365bef868bcfde826a6be1b067775c9de81bb6785"
         },
         {
           "path": ".deploy/local/docker-compose.yml",
-          "sha256": "ec017e374449c009b35d996c371b02636cc766280c85b769f748755b42ef6f9c",
-          "sourceSha256": "b6f07b65a18479374ef1cff295630f1fb55b69e417f12286b795e7331f716adf"
+          "sha256": "cc5dac972c5039e8c585f22b98a3db0a326b00964896c058cf24eb2eb9842254",
+          "sourceSha256": "54c97c29282877fd44788436ded45663f453a55fb87cb976e345212f22d99384"
         },
         {
           "path": ".gitattributes",

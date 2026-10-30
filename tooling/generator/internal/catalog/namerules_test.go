@@ -119,7 +119,11 @@ func TestReferenceFileIsNeverCatalogued(t *testing.T) {
 
 func TestCatalogRecordsTheReferenceSlotMap(t *testing.T) {
 	built, _ := buildRepo(t, cleanRepo(t))
-	want := map[string]string{"project": "fixture-app", "envPrefix": "FIXTURE_APP", "component.go-srv": "go-srv", "component.ng-web": "ng-web"}
+	want := map[string]string{
+		"project": "fixture-app", "envPrefix": "FIXTURE_APP", "component.go-srv": "go-srv", "component.ng-web": "ng-web",
+		"instanceDir.go-srv": "", "instanceSuffix.go-srv": "", "task.go-srv": "srv", "task.ng-web": "web",
+		"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
+	}
 	for slot, value := range want {
 		if built.Reference[slot] != value {
 			t.Errorf("reference[%s] = %q, want %q", slot, built.Reference[slot], value)
@@ -162,6 +166,7 @@ func TestRecordedBlocksNameTheEnclosingMarkerBlocks(t *testing.T) {
 		"# initializer:module identity",
 		"b: fixture-app",
 		"# initializer:end identity",
+		"",
 		"# initializer:stack ng-web",
 		"c: fixture-app",
 		"# initializer:end ng-web",

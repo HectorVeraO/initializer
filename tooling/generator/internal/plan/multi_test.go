@@ -470,3 +470,78 @@ func TestAGivenNameSharedByTwoStacksConflictsInAMultiProject(t *testing.T) {
 		t.Fatalf("message = %q", issues[0].Message)
 	}
 }
+
+// withInstanceRules gives the fixture catalog one rule that uses the derived
+// instance slots and one of a module only some backends install.
+func withInstanceRules(t *testing.T) catalog.Catalog {
+	t.Helper()
+	cat := load(t, "fullstack.json")
+	for _, slot := range []string{"database", "dbUser", "service.postgres", "service.kratos", "service.kratos-migrate"} {
+		cat.Reference[slot] = "ref-" + slot
+	}
+	core := []catalog.NameRule{
+		{Path: "a", Text: "db: %{database} %{dbUser} %{service.postgres}", Blocks: []string{""}},
+		{Path: "d", Text: "dir: %{instanceDir.go-srv} %{task.go-srv} %{task.ng-web} %{tckTask.go-srv}%{tckArgs.go-srv}", Blocks: []string{""}},
+	}
+	identity := []catalog.NameRule{
+		{Path: "b", Text: "k: %{service.kratos}", Blocks: []string{"module:identity"}},
+		{Path: "c", Text: "m: %{service.kratos-migrate}", Blocks: []string{"module:identity"}},
+	}
+	return withRules(t, cat, core, identity)
+}
+
+func TestMultiPlanGivesEachComponentTheSlotsOfItsInstance(t *testing.T) {
+	sel := multiSelection(
+		backendEntry("acme-srv-first", "identity"),
+		backendEntry("acme-srv-second", "parameters"),
+		webEntry("acme-web", "acme-srv-second"))
+	p := mustResolve(t, withInstanceRules(t), sel)
+	first, second, web := byName(t, p, "acme-srv-first"), byName(t, p, "acme-srv-second"), byName(t, p, "acme-web")
+	if first.Slots["instanceDir.go-srv"] != "acme-srv-first/" || second.Slots["instanceDir.go-srv"] != "acme-srv-second/" {
+		t.Errorf("instanceDir = %q %q", first.Slots["instanceDir.go-srv"], second.Slots["instanceDir.go-srv"])
+	}
+	if web.Slots["instanceDir.go-srv"] != "acme-srv-second/" || web.Slots["component.go-srv"] != "acme-srv-second" {
+		t.Errorf("a frontend resolves the *.go-srv slots to its bound backend: %v", web.Slots)
+	}
+	if second.Slots["task.ng-web"] != "acme-web" || second.Slots["task.go-srv"] != "acme-srv-second" {
+		t.Errorf("task slots of the second pair: %v", second.Slots)
+	}
+	if got := first.Slots["tckTask.go-srv"]; got != `"tck:acme-srv-first"` {
+		t.Errorf("tckTask = %s", got)
+	}
+	if got := first.Slots["tckArgs.go-srv"]; got != " -- --component acme-srv-first" {
+		t.Errorf("tckArgs = %q", got)
+	}
+	// The first pair has no frontend: its task.ng-web takes the single form so
+	// the rule of the project still expands.
+	if got := first.Slots["task.ng-web"]; got != "web" {
+		t.Errorf("task.ng-web without a frontend = %q, want web", got)
+	}
+	for slot := range p.Live {
+		for _, derived := range []string{"instanceDir", "instanceSuffix", "task.", "tckTask", "tckArgs"} {
+			if strings.HasPrefix(slot, derived) {
+				t.Errorf("live slot %s would reach the lock", slot)
+			}
+		}
+	}
+}
+
+func TestSingleProjectKeepsTheReferenceFormOfTheInstanceSlots(t *testing.T) {
+	sel := multiSelection(backendEntry("acme-srv", "identity"), webEntry("acme-web", ""))
+	p := mustResolve(t, withInstanceRules(t), sel)
+	for _, name := range []string{"acme-srv", "acme-web"} {
+		slots := byName(t, p, name).Slots
+		want := map[string]string{
+			"instanceDir.go-srv": "", "instanceSuffix.go-srv": "", "task.go-srv": "srv", "task.ng-web": "web",
+			"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
+		}
+		for slot, value := range want {
+			if got, ok := slots[slot]; !ok || got != value {
+				t.Errorf("%s: %s = %q (present %v), want %q", name, slot, got, ok, value)
+			}
+		}
+	}
+	if _, found := p.LockNames()["task.go-srv"]; found {
+		t.Error("the lock names hold a derived slot")
+	}
+}

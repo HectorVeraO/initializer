@@ -49,7 +49,7 @@ func TestIdentityPortsOfAnotherBandMoveInsideAnIdentityBlock(t *testing.T) {
 	repo := fixture.Load(t)
 	project := mustBuild(t, repo, withBand(webSelection("tenancy"), 110))
 	readme := projectFile(t, project, ".deploy/local/README.md")
-	if !strings.Contains(readme, "Identity adds Kratos on 11033.") {
+	if !strings.Contains(readme, "| 11033 | kratos |") {
 		t.Errorf("deploy README:\n%s", readme)
 	}
 }

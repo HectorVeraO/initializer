@@ -21,9 +21,9 @@ func (p Plan) LockNames() map[string]string {
 // slots computes the slots of one pair: the backend component and its frontend.
 // A slot used by a rule whose value no input gives yet is an internal error:
 // the catalog and the generator disagree.
-func (r *resolver) slots(stacks []ComponentPlan, src infraSource) (values map[string]string, live map[string]bool) {
+func (r *resolver) slots(stacks []ComponentPlan, src infraSource, others []ComponentPlan) (values map[string]string, live map[string]bool) {
 	project := r.sel.Project.Name
-	resolved := names.Resolved{Project: project, Components: map[string]string{}}
+	resolved := names.Resolved{Project: project, Components: map[string]string{}, Multi: r.multi}
 	live = map[string]bool{names.SlotProject: true}
 	selected := map[string]bool{}
 	for _, component := range stacks {
@@ -55,14 +55,39 @@ func (r *resolver) slots(stacks []ComponentPlan, src infraSource) (values map[st
 						}
 						values[slot] = value
 					}
-					if isLive && !isUnselectedComponentSlot(slot, selected) {
+					if isLive && !isUnselectedComponentSlot(slot, selected) && names.IsRecorded(slot) {
 						live[slot] = true
 					}
 				}
 			}
 		}
 	}
+	r.fillOtherSlots(values, others, src)
 	return values, live
+}
+
+// fillOtherSlots gives the pair a value for every slot a rule of another
+// pair's modules uses, so a file transformed in this pair's context can apply
+// every rule of the project. These slots are never live here.
+func (r *resolver) fillOtherSlots(values map[string]string, others []ComponentPlan, src infraSource) {
+	for _, other := range others {
+		for _, module := range other.Modules {
+			for _, rule := range module.Names {
+				used, err := names.Slots(rule.Text)
+				if err != nil {
+					continue
+				}
+				for _, slot := range used {
+					if _, known := values[slot]; known {
+						continue
+					}
+					if value, ok := r.defaultSlot(slot, src); ok {
+						values[slot] = value
+					}
+				}
+			}
+		}
+	}
 }
 
 // ruleIsLive reports whether one of the blocks of rule is kept: no block, an
@@ -82,9 +107,13 @@ func ruleIsLive(rule catalog.NameRule, installed, selected map[string]bool) bool
 	return false
 }
 
-// defaultSlot returns the value of a slot no input sets: the default
-// component name of a stack that is not selected.
+// defaultSlot returns the value of a slot no input sets: the single form of a
+// derived slot, the default component name of a stack that is not selected, or
+// an instance value.
 func (r *resolver) defaultSlot(slot string, src infraSource) (string, bool) {
+	if value, isDerived := names.DerivedDefault(slot); isDerived {
+		return value, true
+	}
 	stack, isComponent := strings.CutPrefix(slot, "component.")
 	if isComponent {
 		if _, known := manifest.LookupStack(stack); known {
