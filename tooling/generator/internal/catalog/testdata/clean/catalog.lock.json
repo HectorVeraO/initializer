@@ -6,7 +6,13 @@
     "component.go-srv": "go-srv",
     "component.ng-web": "ng-web",
     "envPrefix": "FIXTURE_APP",
-    "project": "fixture-app"
+    "instanceDir.go-srv": "",
+    "instanceSuffix.go-srv": "",
+    "project": "fixture-app",
+    "task.go-srv": "srv",
+    "task.ng-web": "web",
+    "tckArgs.go-srv": "",
+    "tckTask.go-srv": "tck"
   },
   "portBand": 0,
   "specs": [

@@ -32,6 +32,7 @@ func (b *builder) markerChecks(p string, data []byte, owner *moduleDoc) {
 	for _, found := range issues {
 		b.addPlain(found.Code, p, found.Message)
 	}
+	b.checkRuns(p, data, blocks, len(issues) == 0)
 	knownModules := b.moduleIDs()
 	knownStacks := stackNames()
 	for _, block := range blocks {
@@ -62,4 +63,30 @@ func (b *builder) moduleIDs() map[string]bool {
 		ids[doc.module.Module] = true
 	}
 	return ids
+}
+
+// checkRuns applies MARKER_RUN_INVALID: a module block outside every run
+// whose end line is directly followed by the open line of a stack block. The
+// repeat unit of that sequence is ambiguous, so the author puts the stack
+// block first. Inside a run the same sequence is the normal interleave.
+func (b *builder) checkRuns(p string, data []byte, blocks []markers.Block, isParsed bool) {
+	if !isParsed {
+		return
+	}
+	inRun := map[int]bool{}
+	for _, run := range markers.Runs(data, blocks) {
+		for _, block := range run.Blocks {
+			inRun[block.Start] = true
+		}
+	}
+	for i := 0; i+1 < len(blocks); i++ {
+		block, following := blocks[i], blocks[i+1]
+		isOutsideModule := block.Kind == markers.KindModule && !inRun[block.Start]
+		isFollowedByStack := following.Kind == markers.KindStack && following.Start == block.End+1
+		if isOutsideModule && isFollowedByStack {
+			b.addPlain(markers.CodeMarkerRunInvalid, p,
+				fmt.Sprintf("module block %s (line %d) is directly followed by the stack block %s (line %d): put the stack block first",
+					block.ID, block.Start+1, following.ID, following.Start+1))
+		}
+	}
 }

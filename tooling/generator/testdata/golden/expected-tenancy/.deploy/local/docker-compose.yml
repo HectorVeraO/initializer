@@ -1,12 +1,14 @@
 name: acme-backend
 
 services:
+  # initializer:stack go-srv
   postgres:
     image: postgres:18
     environment:
       POSTGRES_PASSWORD: change-me-local-only
-
+  # initializer:end go-srv
   # initializer:module identity
+
   kratos:
     image: oryd/kratos:v26.2.0
     depends_on:

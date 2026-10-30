@@ -105,6 +105,8 @@ type builder struct {
 	rules map[string][]names.Rule
 	// portFiles holds the source paths of the port files of the installed modules.
 	portFiles map[string]bool
+	// byName maps a component name to its plan.
+	byName map[string]plan.ComponentPlan
 }
 
 // Build produces the whole project in memory. Nothing touches the disk. An
@@ -125,8 +127,10 @@ func Build(opts BuildOptions) (Project, error) {
 		return Project{}, errors.New("catalog hash is malformed")
 	}
 	roots := map[string]bool{}
+	byName := map[string]plan.ComponentPlan{}
 	firstTarget := ""
 	for _, component := range opts.Plan.Components {
+		byName[component.Name] = component
 		info, known := manifest.LookupStack(component.Stack)
 		if known && info.GoModule && component.GoModule == "" {
 			return Project{}, fmt.Errorf("plan has no Go module path for component %q", component.Name)
@@ -151,6 +155,7 @@ func Build(opts BuildOptions) (Project, error) {
 		projectOwner: map[string]projectDelivery{},
 		rules:        nameRules(opts.Plan),
 		portFiles:    portFiles(opts.Plan),
+		byName:       byName,
 	}
 	return b.run()
 }
@@ -298,7 +303,7 @@ func (b *builder) copyFile(component *plan.ComponentPlan, owner string, file cat
 	if sourceSum != file.SHA256 {
 		return lockfile.File{}, false, fmt.Errorf("source %s changed since the catalog was built", file.Path)
 	}
-	transformed, err := b.transform(file.Path, data, owner, b.targetOf(component, isProject))
+	transformed, err := b.transform(file.Path, data, owner, b.targetOf(component, isProject), component, isProject)
 	if err != nil {
 		return lockfile.File{}, false, err
 	}
@@ -328,19 +333,129 @@ func (b *builder) targetOf(component *plan.ComponentPlan, isProject bool) string
 	return component.GoModule
 }
 
-// transform applies the copy rules of the source path.
-func (b *builder) transform(sourcePath string, data []byte, owner, target string) ([]byte, error) {
+// transform applies the copy rules of the source path. A component-scope file
+// runs the transform order once in the context of its component. A
+// project-scope file with markers is split into segments (the text outside the
+// runs and every run copy) and each segment runs the order in its own context.
+// The order is: name rules on the source bytes, the marker drop, the port band
+// substitution, then the go.mod and import rewrite.
+func (b *builder) transform(sourcePath string, data []byte, owner, target string, component *plan.ComponentPlan, isProject bool) ([]byte, error) {
+	_, hasSyntax := markers.SyntaxFor(sourcePath)
+	hasMarkers := hasSyntax && owner == manifest.CoreModule
+	var out []byte
+	var err error
+	switch {
+	case component != nil && !isProject:
+		out, err = b.segment(sourcePath, data, hasMarkers, b.contextOf(*component))
+	case hasMarkers:
+		out, err = b.expandRuns(sourcePath, data)
+	default:
+		out, err = b.segment(sourcePath, data, false, b.projectContext())
+	}
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case sourcePath == gorewrite.GoModPath:
+		rewritten, err := gorewrite.RewriteModuleLine(out, b.source, target)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", sourcePath, err)
+		}
+		return rewritten, nil
+	case gorewrite.ShouldRewrite(sourcePath):
+		rewritten, _, err := gorewrite.RewriteImports(sourcePath, out, b.source, target)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", sourcePath, err)
+		}
+		return rewritten, nil
+	}
+	return out, nil
+}
+
+// context is where a segment of a file is transformed: the slot values and
+// the marker predicates of one component or of the project.
+type context struct {
+	slots map[string]string
+	keep  markers.Keep
+}
+
+// projectContext is the context of project-scope text outside every run: the
+// slots of the index-0 instance, a module block kept when any component
+// installs the module, a stack block kept when the stack is selected.
+func (b *builder) projectContext() context {
+	return context{
+		slots: b.opts.Plan.Slots,
+		keep:  markers.Keep{Module: b.hasModule, Stack: b.hasStack},
+	}
+}
+
+// contextOf is the context of one component and its partner: its instance
+// slots, a module block kept when the component installs the module, a stack
+// block kept for the component's own stack and its partner's stack.
+func (b *builder) contextOf(component plan.ComponentPlan) context {
+	installed := map[string]bool{}
+	for _, module := range component.Modules {
+		installed[module.Module] = true
+	}
+	stacks := map[string]bool{component.Stack: true}
+	if partner, hasPartner := b.byName[component.Partner]; hasPartner {
+		stacks[partner.Stack] = true
+	}
+	slots := component.Slots
+	if slots == nil {
+		slots = b.opts.Plan.Slots
+	}
+	return context{
+		slots: slots,
+		keep:  markers.Keep{Module: func(id string) bool { return installed[id] }, Stack: func(id string) bool { return stacks[id] }},
+	}
+}
+
+// expandRuns transforms a project-scope file with markers: each run is
+// emitted once per component of its stack, each copy in its component's
+// context, and the text outside the runs in the project context.
+func (b *builder) expandRuns(sourcePath string, data []byte) ([]byte, error) {
+	p := b.opts.Plan
+	count := func(stack string) int {
+		total := 0
+		for _, component := range p.Components {
+			if component.Stack == stack {
+				total++
+			}
+		}
+		return total
+	}
+	copyRun := func(run markers.Run, index int, seg []byte) ([]byte, error) {
+		return b.segment(sourcePath, seg, true, b.contextOf(b.nth(run.Stack, index)))
+	}
+	outside := func(seg []byte) ([]byte, error) {
+		return b.segment(sourcePath, seg, true, b.projectContext())
+	}
+	return markers.Expand(sourcePath, data, count, copyRun, outside)
+}
+
+// nth returns the component of a stack at an index; Expand never asks for an
+// index at or past the count.
+func (b *builder) nth(stack string, index int) plan.ComponentPlan {
+	for _, component := range b.opts.Plan.Components {
+		if component.Stack == stack && component.Index == index {
+			return component
+		}
+	}
+	return plan.ComponentPlan{}
+}
+
+// segment runs the first three steps of the transform order on one segment.
+func (b *builder) segment(sourcePath string, data []byte, hasMarkers bool, ctx context) ([]byte, error) {
 	if rules := b.rules[sourcePath]; len(rules) > 0 {
-		renamed, err := names.Apply(data, rules, b.opts.Plan.Reference, b.opts.Plan.Slots)
+		renamed, err := names.Apply(data, rules, b.opts.Plan.Reference, ctx.slots)
 		if err != nil {
 			return nil, fmt.Errorf("%s: name rules: %w", sourcePath, err)
 		}
 		data = renamed
 	}
-	// Order: name rules on the source bytes, then the marker drop, then the
-	// port band substitution, then the go.mod and import rewrite.
-	if _, hasMarkers := markers.SyntaxFor(sourcePath); hasMarkers && owner == manifest.CoreModule {
-		dropped, err := markers.Drop(sourcePath, data, markers.Keep{Module: b.hasModule, Stack: b.hasStack})
+	if hasMarkers {
+		dropped, err := markers.Drop(sourcePath, data, ctx.keep)
 		if err != nil {
 			return nil, err
 		}
@@ -353,20 +468,6 @@ func (b *builder) transform(sourcePath string, data []byte, owner, target string
 			return nil, fmt.Errorf("%s: port band: %w", sourcePath, err)
 		}
 		data = rewritten
-	}
-	switch {
-	case sourcePath == gorewrite.GoModPath:
-		out, err := gorewrite.RewriteModuleLine(data, b.source, target)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", sourcePath, err)
-		}
-		return out, nil
-	case gorewrite.ShouldRewrite(sourcePath):
-		out, _, err := gorewrite.RewriteImports(sourcePath, data, b.source, target)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", sourcePath, err)
-		}
-		return out, nil
 	}
 	return data, nil
 }

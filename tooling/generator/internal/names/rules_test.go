@@ -191,9 +191,62 @@ func TestResolvedSlotsIncludeDerivedAndSkipEmpty(t *testing.T) {
 		Project:    "acme-backend",
 		Components: map[string]string{"go-srv": "acme-backend-srv"},
 	}.Slots()
-	want := map[string]string{"project": "acme-backend", "envPrefix": "ACME_BACKEND", "component.go-srv": "acme-backend-srv"}
+	want := map[string]string{
+		"project": "acme-backend", "envPrefix": "ACME_BACKEND", "component.go-srv": "acme-backend-srv",
+		"instanceDir.go-srv": "", "instanceSuffix.go-srv": "", "task.go-srv": "srv",
+		"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Slots = %v, want %v", got, want)
+	}
+}
+
+func TestInstanceSlotsTakeTheirMultiForm(t *testing.T) {
+	got := names.Resolved{
+		Project:    "acme",
+		Components: map[string]string{"go-srv": "acme-srv-first", "ng-web": "acme-web"},
+		Multi:      true,
+	}.Slots()
+	want := map[string]string{
+		"instanceDir.go-srv": "acme-srv-first/", "instanceSuffix.go-srv": "-acme-srv-first",
+		"task.go-srv": "acme-srv-first", "task.ng-web": "acme-web",
+		"tckTask.go-srv": `"tck:acme-srv-first"`, "tckArgs.go-srv": " -- --component acme-srv-first",
+	}
+	for slot, value := range want {
+		if got[slot] != value {
+			t.Errorf("%s = %q, want %q", slot, got[slot], value)
+		}
+	}
+}
+
+func TestDerivedSlotsAreNeverRecorded(t *testing.T) {
+	for _, slot := range []string{"instanceDir.go-srv", "instanceSuffix.go-srv", "task.go-srv", "task.ng-web", "tckTask.go-srv", "tckArgs.go-srv"} {
+		if names.IsRecorded(slot) {
+			t.Errorf("%s is recorded", slot)
+		}
+		if !names.IsSlot(slot, []string{"go-srv", "ng-web"}) {
+			t.Errorf("%s is not a slot", slot)
+		}
+	}
+	for _, slot := range []string{"project", "envPrefix", "component.go-srv", "service.postgres"} {
+		if !names.IsRecorded(slot) {
+			t.Errorf("%s is not recorded", slot)
+		}
+	}
+	if names.IsSlot("task.unknown-stack", []string{"go-srv"}) {
+		t.Error("task.<unknown stack> is a slot")
+	}
+}
+
+func TestDerivedDefaultIsTheSingleForm(t *testing.T) {
+	for slot, want := range map[string]string{"task.ng-web": "web", "tckTask.go-srv": "tck", "instanceDir.go-srv": ""} {
+		got, ok := names.DerivedDefault(slot)
+		if !ok || got != want {
+			t.Errorf("DerivedDefault(%s) = %q, %v, want %q", slot, got, ok, want)
+		}
+	}
+	if _, ok := names.DerivedDefault("project"); ok {
+		t.Error("project has a derived default")
 	}
 }
 
@@ -205,6 +258,8 @@ func TestReferenceReturnsTheSlotMap(t *testing.T) {
 	want := map[string]string{
 		"project": "initializer", "envPrefix": "INITIALIZER",
 		"component.go-srv": "go-srv", "component.ng-web": "ng-web",
+		"instanceDir.go-srv": "", "instanceSuffix.go-srv": "", "task.go-srv": "srv", "task.ng-web": "web",
+		"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
 	}
 	if len(issues) > 0 || !reflect.DeepEqual(got, want) {
 		t.Fatalf("Reference = %v, %+v", got, issues)

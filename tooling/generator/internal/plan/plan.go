@@ -101,6 +101,10 @@ type ComponentPlan struct {
 	Database manifest.Database
 	// Services maps the live service keys of a backend to their effective names.
 	Services map[string]string
+	// Slots holds the slot values of the component's instance: the values of
+	// the backend and its bound frontend, the instance slots in their single
+	// or multi form, and a value for every slot a rule of the project uses.
+	Slots map[string]string
 	// Ports maps each declared port of the installed modules to its host port.
 	Ports map[string]int
 	// Origin is the public base URL of a backend.
@@ -237,7 +241,7 @@ func (r *resolver) run() Plan {
 	components := flatten(pairs)
 	r.checkFolders(components, r.wantedSpecs(components))
 	for i := range pairs {
-		r.nameSlots(&pairs[i])
+		r.nameSlots(&pairs[i], components)
 	}
 	r.checkInfraNames(pairs)
 	if len(r.issues) > 0 {

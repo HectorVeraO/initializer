@@ -1,10 +1,13 @@
 package catalog
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/markers"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/ports"
 )
@@ -16,6 +19,7 @@ const (
 	CodePortFileUnowned     = "PORT_FILE_UNOWNED"
 	CodePortBandMixed       = "PORT_BAND_MIXED"
 	CodePortUndeclared      = "PORT_UNDECLARED"
+	CodePortRangeInRun      = "PORT_RANGE_IN_RUN"
 )
 
 // Offsets 00 and 99 are the bounds of a band: a token may always carry them.
@@ -163,6 +167,7 @@ func (b *builder) checkPortTokens() error {
 			if symlink {
 				continue
 			}
+			b.checkPortRange(path, data)
 			for _, token := range ports.Scan(data) {
 				text := string(data[token.Start:token.End])
 				isBound := token.Offset == bandLowOffset || token.Offset == bandHighOffset
@@ -177,6 +182,40 @@ func (b *builder) checkPortTokens() error {
 		}
 	}
 	return nil
+}
+
+// checkPortRange applies PORT_RANGE_IN_RUN: the band range text "1NN00-1NN99"
+// inside a run or in a component-scope file would be read as the port of the
+// component, so it stays in project-scope text outside every run.
+func (b *builder) checkPortRange(path string, data []byte) {
+	needle := []byte(fmt.Sprintf("%d%02d-%d%02d", b.portBand, bandLowOffset, b.portBand, bandHighOffset))
+	if !bytes.Contains(data, needle) {
+		return
+	}
+	isComponentScope := false
+	for _, stack := range stackTable {
+		isComponentScope = isComponentScope || strings.HasPrefix(path, stack.root)
+	}
+	var runs []markers.Run
+	if _, hasSyntax := markers.SyntaxFor(path); hasSyntax && !isComponentScope {
+		blocks, issues := markers.Parse(path, data)
+		if len(issues) == 0 {
+			runs = markers.Runs(data, blocks)
+		}
+	}
+	lines := bytes.SplitAfter(data, []byte{'\n'})
+	for index, line := range lines {
+		if !bytes.Contains(line, needle) {
+			continue
+		}
+		isInRun := isComponentScope
+		for _, run := range runs {
+			isInRun = isInRun || (index >= run.Start && index <= run.End)
+		}
+		if isInRun {
+			b.addPlain(CodePortRangeInRun, path, fmt.Sprintf("line %d: the band range %s sits inside a run or a component-scope file, where its first token is read as a port", index+1, needle))
+		}
+	}
 }
 
 // recordedPortFiles returns the sorted port files of a module.

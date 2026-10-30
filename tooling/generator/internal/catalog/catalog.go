@@ -277,7 +277,7 @@ func (v *validator) reference(slots map[string]string) {
 		switch {
 		case !names.IsSlot(key, stacks):
 			v.add(pointer, "key is not a slot name")
-		case slots[key] == "":
+		case slots[key] == "" && !names.MayBeEmpty(key):
 			v.add(pointer, "must not be empty")
 		}
 	}

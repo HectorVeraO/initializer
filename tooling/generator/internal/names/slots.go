@@ -14,6 +14,22 @@ const (
 	SlotDatabase    = "database"
 	SlotDBUser      = "dbUser"
 	SlotEnvPrefix   = "envPrefix"
+	// SlotInstanceDir is the directory prefix of a per-component file of the
+	// bound backend: "" in a single project, "<component>/" in a multi project.
+	SlotInstanceDir = "instanceDir.go-srv"
+	// SlotInstanceSuffix is "" in a single project, "-<component>" in a multi project.
+	SlotInstanceSuffix = "instanceSuffix.go-srv"
+	// SlotTCKTask is the mise TCK task key, quoted in a multi project.
+	SlotTCKTask = "tckTask.go-srv"
+	// SlotTCKArgs is the extra argument text of the mise TCK run line.
+	SlotTCKArgs = "tckArgs.go-srv"
+	// SlotTaskPrefix starts the per-stack dev task slot ("task.go-srv").
+	SlotTaskPrefix = "task."
+)
+
+const (
+	backendStack = "go-srv"
+	singleTCK    = "tck"
 )
 
 const (
@@ -48,6 +64,9 @@ type Resolved struct {
 	Components map[string]string
 	// Services maps a service key to its compose service name.
 	Services map[string]string
+	// Multi is true for a project with two or more backend components: the
+	// instance slots take their multi form, built from Components.
+	Multi bool
 }
 
 // DerivedSlot is a slot no input sets. Its reference value is Value applied
@@ -58,11 +77,95 @@ type DerivedSlot struct {
 	Name string
 	// Value returns the slot value; stack is "" for a project slot.
 	Value func(r Resolved, stack string) string
+	// MayBeEmpty marks a slot whose single form is "": Slots keeps it.
+	MayBeEmpty bool
+	// NotRecorded marks a slot no lock records, whatever the rules use it.
+	NotRecorded bool
 }
 
 // Derived is the registry of derived slots, sorted by Name.
 var Derived = []DerivedSlot{
 	{Name: SlotEnvPrefix, Value: func(r Resolved, _ string) string { return EnvPrefix(r.Project) }},
+	{Name: SlotInstanceDir, MayBeEmpty: true, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		return instanceValue(r, "", "/")
+	}},
+	{Name: SlotInstanceSuffix, MayBeEmpty: true, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		return instanceValue(r, "-", "")
+	}},
+	{Name: SlotTaskPrefix, NotRecorded: true, Value: func(r Resolved, stack string) string {
+		if r.Multi && r.Components[stack] != "" {
+			return r.Components[stack]
+		}
+		_, role, _ := lastCut(stack, "-")
+		return role
+	}},
+	{Name: SlotTCKArgs, MayBeEmpty: true, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		return instanceValue(r, " -- --component ", "")
+	}},
+	{Name: SlotTCKTask, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		if !r.Multi || r.Components[backendStack] == "" {
+			return singleTCK
+		}
+		return `"` + singleTCK + ":" + r.Components[backendStack] + `"`
+	}},
+}
+
+// instanceValue returns before + backend component + after in a multi
+// project, and "" otherwise.
+func instanceValue(r Resolved, before, after string) string {
+	if !r.Multi || r.Components[backendStack] == "" {
+		return ""
+	}
+	return before + r.Components[backendStack] + after
+}
+
+// lastCut slices s around the last instance of sep.
+func lastCut(s, sep string) (before, after string, found bool) {
+	at := strings.LastIndex(s, sep)
+	if at < 0 {
+		return s, s, false
+	}
+	return s[:at], s[at+len(sep):], true
+}
+
+// derivedOf returns the registry entry that defines slot, and the stack a
+// per-stack entry was asked for.
+func derivedOf(slot string) (DerivedSlot, string, bool) {
+	for _, derived := range Derived {
+		if !strings.HasSuffix(derived.Name, ".") {
+			if slot == derived.Name {
+				return derived, "", true
+			}
+			continue
+		}
+		if stack, isPerStack := strings.CutPrefix(slot, derived.Name); isPerStack && stack != "" {
+			return derived, stack, true
+		}
+	}
+	return DerivedSlot{}, "", false
+}
+
+// IsRecorded reports whether a lock may record slot: false for the derived
+// instance slots, whose value is fixed by the generator.
+func IsRecorded(slot string) bool {
+	derived, _, isDerived := derivedOf(slot)
+	return !isDerived || !derived.NotRecorded
+}
+
+// MayBeEmpty reports whether slot is a derived slot whose value may be "".
+func MayBeEmpty(slot string) bool {
+	derived, _, isDerived := derivedOf(slot)
+	return isDerived && derived.MayBeEmpty
+}
+
+// DerivedDefault returns the single-project value of a derived slot, for a
+// slot whose stack the resolved set does not hold.
+func DerivedDefault(slot string) (string, bool) {
+	derived, stack, isDerived := derivedOf(slot)
+	if !isDerived {
+		return "", false
+	}
+	return derived.Value(Resolved{}, stack), true
 }
 
 // Snake returns s with every "-" replaced by "_".
@@ -142,7 +245,12 @@ func (r Resolved) Slots() map[string]string {
 	sort.Strings(stacks)
 	for _, derived := range Derived {
 		if !strings.HasSuffix(derived.Name, ".") {
-			set(derived.Name, derived.Value(r, ""))
+			value := derived.Value(r, "")
+			if derived.MayBeEmpty {
+				slots[derived.Name] = value
+				continue
+			}
+			set(derived.Name, value)
 			continue
 		}
 		for _, stack := range stacks {

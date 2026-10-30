@@ -194,7 +194,7 @@ func (r *resolver) derivedNotes(pairs []pairPlan) []string {
 
 // nameSlots computes the slots of a pair and the database and service names of
 // its backend. A pair with an unnamed component is left for the caller.
-func (r *resolver) nameSlots(pair *pairPlan) {
+func (r *resolver) nameSlots(pair *pairPlan, all []ComponentPlan) {
 	members := []ComponentPlan{pair.backend}
 	if pair.frontend != nil {
 		members = append(members, *pair.frontend)
@@ -205,8 +205,19 @@ func (r *resolver) nameSlots(pair *pairPlan) {
 		}
 	}
 	pair.src = r.infraOf(pair.input.backend)
-	pair.values, pair.live = r.slots(members, pair.src)
+	var others []ComponentPlan
+	for _, component := range all {
+		isMember := component.Name == pair.backend.Name || (pair.frontend != nil && component.Name == pair.frontend.Name)
+		if !isMember {
+			others = append(others, component)
+		}
+	}
+	pair.values, pair.live = r.slots(members, pair.src, others)
 	pair.named = true
+	pair.backend.Slots = pair.values
+	if pair.frontend != nil {
+		pair.frontend.Slots = pair.values
+	}
 	pair.backend.Database = databaseFrom(pair.values, pair.live)
 	pair.backend.Services = servicesFrom(pair.values, pair.live)
 }
