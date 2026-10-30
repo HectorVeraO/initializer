@@ -2,13 +2,15 @@
 
 Host ports 10100-10199. Every published port comes from this range and binds `127.0.0.1`.
 
+<!-- initializer:stack go-srv -->
 | Port | Service | Runs on |
 |---|---|---|
-<!-- initializer:stack go-srv -->
 | 10100 | `go-srv` HTTP API (`GO_SRV_ADDR`) | Docker or host |
 | 10132 | `postgres` | Docker |
 <!-- initializer:end go-srv -->
 <!-- initializer:module identity -->
+| Port | Service | Runs on |
+|---|---|---|
 | 10133 | `kratos` public API (`go-srv` on 10100 also proxies `/kratos/*` to it) | Docker |
 | 10134 | `kratos` admin API (never proxied) | Docker |
 <!-- initializer:end identity -->
