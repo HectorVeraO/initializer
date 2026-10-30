@@ -168,6 +168,8 @@ func TestDecodeRefusesAMultiLockThatBreaksAStrictRule(t *testing.T) {
 		"frontend without ports": {func(l *lockfile.Lock) { l.Components[2].Ports = nil }, "ports is missing"},
 		"backend without origin": {func(l *lockfile.Lock) { l.Components[1].Origin = "" }, "origin is missing"},
 		"port out of range":      {func(l *lockfile.Lock) { l.Components[0].Ports["srv"] = 70000 }, "TCP port"},
+		"port zero":              {func(l *lockfile.Lock) { l.Components[0].Ports["srv"] = 0 }, "TCP port"},
+		"port above maximum":     {func(l *lockfile.Lock) { l.Components[0].Ports["srv"] = 65536 }, "TCP port"},
 		"port name not a label":  {func(l *lockfile.Lock) { l.Components[0].Ports["Srv"] = 10100 }, "TCP port"},
 		"module without component": {func(l *lockfile.Lock) {
 			l.Modules[1].Component = ""

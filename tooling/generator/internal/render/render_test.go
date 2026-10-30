@@ -346,9 +346,12 @@ func TestReadmeMultiStatesTheOverridesAndTheCookieNote(t *testing.T) {
 
 func TestReadmeMultiRefusesAnInstanceWithoutItsComponent(t *testing.T) {
 	cases := map[string]func(in *render.ReadmeInput){
-		"missing component": func(in *render.ReadmeInput) { in.Components = in.Components[1:] },
-		"line break":        func(in *render.ReadmeInput) { in.Components[0].Name = "acme-srv-first\n# injected" },
-		"backtick in env":   func(in *render.ReadmeInput) { in.Components[1].TCKEnv[0].Value = "a`b" },
+		"missing component":     func(in *render.ReadmeInput) { in.Components = in.Components[1:] },
+		"line break":            func(in *render.ReadmeInput) { in.Components[0].Name = "acme-srv-first\n# injected" },
+		"line break in stack":   func(in *render.ReadmeInput) { in.Components[0].Stack = "go-srv\n# injected" },
+		"line break in backend": func(in *render.ReadmeInput) { in.Components[2].Backend = "acme-srv-second\n# injected" },
+		"line break in origin":  func(in *render.ReadmeInput) { in.Components[0].Origin = "http://localhost:10100\n# injected" },
+		"backtick in env":       func(in *render.ReadmeInput) { in.Components[1].TCKEnv[0].Value = "a`b" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

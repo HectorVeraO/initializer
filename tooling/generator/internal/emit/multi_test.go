@@ -284,7 +284,9 @@ func TestMultiReadmeRunSectionNamesEveryBackendAndOnlyTheBoundFrontend(t *testin
 	readme := projectFile(t, mustBuildMulti(t, fixture.Load(t)), "README.md")
 	for _, want := range []string{
 		"stop acme-srv-first\n", "stop acme-srv-second acme-web\n", "mise run dev:acme-srv-first\n", "mise run dev:acme-web\n",
-		"- acme-srv-first: http://localhost:10100;", "- acme-srv-second: http://localhost:10120 (console acme-web);",
+		"- acme-srv-first: http://localhost:10100; ports srv 10100, postgres 10132, kratos-public 10133\n",
+		"- acme-srv-second: http://localhost:10120 (console acme-web); ports srv 10101, postgres 10142, kratos-public 10143\n",
+		"acme-srv-first: tags @core, @identity", "acme-srv-second: tags @core",
 		"mise run tck:acme-srv-first\n", "mise run tck:acme-srv-second\n",
 	} {
 		if !strings.Contains(readme, want) {
