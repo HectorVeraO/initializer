@@ -244,10 +244,11 @@ COMPONENT                 STACK    INDEX   BACKEND                   GO MODULE  
 acme-backend-srv-first    go-srv   0                                 example.com/acme/backend/acme-backend-srv-first    acme_backend_srv_first/acme_backend_srv_first     srv 10100, postgres 10132, kratos-public 10133, kratos-admin 10134   core, identity
 acme-backend-srv-second   go-srv   1                                 example.com/acme/backend/acme-backend-srv-second   acme_backend_srv_second/acme_backend_srv_second   srv 10101, postgres 10142, kratos-public 10143, kratos-admin 10144   core, identity, api-keys, feature-flags, parameters, tenancy
 acme-backend-web          ng-web   0       acme-backend-srv-second                                                                                                        web 10120                                                            core, identity, api-keys, feature-flags, parameters, tenancy
+note: go modules derived from example.com/acme/backend; pass go-module= per component to change them
 811 files
 ```
 
-stderr adds `note: go modules derived from example.com/acme/backend; pass go-module= per component to change them`. Without `--dry-run` the command writes the project (811 files) and `initializer verify acme-backend` answers `No differences.`
+The `note:` line names the derived Go modules; the plan prints it after the table. Without `--dry-run` the command writes the project (811 files) and `initializer verify acme-backend` answers `No differences.`
 
 In a multi-component project:
 
