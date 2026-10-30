@@ -512,6 +512,14 @@ func TestMultiPlanGivesEachComponentTheSlotsOfItsInstance(t *testing.T) {
 	if got := first.Slots["tckArgs.go-srv"]; got != " -- --component acme-srv-first" {
 		t.Errorf("tckArgs = %q", got)
 	}
+	// A pair that does not install identity still holds the slots of the
+	// identity rules, so a file transformed in its context expands them.
+	for _, slot := range []string{"service.kratos", "service.kratos-migrate"} {
+		got, ok := second.Slots[slot]
+		if !ok || got != "acme-srv-second-"+strings.TrimPrefix(slot, "service.") {
+			t.Errorf("second pair %s = %q (present %v), want acme-srv-second-%s", slot, got, ok, strings.TrimPrefix(slot, "service."))
+		}
+	}
 	// The first pair has no frontend: its task.ng-web takes the single form so
 	// the rule of the project still expands.
 	if got := first.Slots["task.ng-web"]; got != "web" {

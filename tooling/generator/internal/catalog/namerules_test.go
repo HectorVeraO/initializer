@@ -125,8 +125,9 @@ func TestCatalogRecordsTheReferenceSlotMap(t *testing.T) {
 		"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
 	}
 	for slot, value := range want {
-		if built.Reference[slot] != value {
-			t.Errorf("reference[%s] = %q, want %q", slot, built.Reference[slot], value)
+		got, ok := built.Reference[slot]
+		if !ok || got != value {
+			t.Errorf("reference[%s] = %q (present %v), want %q", slot, got, ok, value)
 		}
 	}
 	if len(built.Reference) != len(want) {
