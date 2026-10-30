@@ -520,6 +520,10 @@ func TestRecordedSelectionOfEveryCISelection(t *testing.T) {
 			}
 
 			s := in.Selection
+			if len(s.Components) > 0 {
+				// Flags cannot express components, so a multi file has no flags-only twin.
+				return
+			}
 			flagValues := manifest.Flags{
 				Name: s.Project.Name, GoModule: s.Project.GoModule, Stacks: s.Stacks, Modules: s.Modules,
 				Has: manifest.FlagPresence{Name: true, GoModule: s.Has.GoModule, Stacks: true, Modules: true},

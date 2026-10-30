@@ -283,8 +283,9 @@ jobs:
             line="$(jq -c --arg name "$(basename "${file}" .json)" '
               (.stacks | index("ng-web") != null) as $web
               | ((.ports.band // 101) * 100) as $base
-              | {selection: $name, web: $web,
-                 public_base_url: "http://localhost:\($base + (if $web then 20 else 0 end))",
+              | (((.components // []) | map(select(.stack == "go-srv")) | length) > 1) as $multi
+              | {selection: $name, web: $web, multi: $multi,
+                 public_base_url: (if $multi then "" else "http://localhost:\($base + (if $web then 20 else 0 end))" end),
                  kratos_url: "http://127.0.0.1:\($base + 33)"}' "${file}")"
             lines+="${line}"$'\n'
           done
@@ -320,6 +321,12 @@ jobs:
             specs/package-lock.json
             ng-web/package-lock.json
             initializer-e2e/package-lock.json
+      - uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        if: matrix.multi
+        with:
+          install: false
+          cache: false
+          working_directory: ${{ runner.temp }}
       - name: Build the CLI and the catalog
         run: |
           set -euo pipefail
@@ -345,36 +352,58 @@ jobs:
         id: layout
         env:
           WEB: ${{ matrix.web }}
+          MULTI: ${{ matrix.multi }}
         run: |
           set -euo pipefail
           lock="${RUNNER_TEMP}/gen-a/initializer.lock.json"
-          one() {
-            jq -r --arg stack "$1" '[.components[] | select(.stack == $stack) | .name] | if length == 1 then .[0] else empty end' "${lock}"
+          names_of() {
+            jq -r --arg stack "$1" '[.components[] | select(.stack == $stack) | .name] | join(" ")' "${lock}"
           }
-          srv="$(one go-srv)"
-          web="$(one ng-web)"
-          if [ -z "${srv}" ]; then
+          backends="$(names_of go-srv)"
+          frontends="$(names_of ng-web)"
+          backend_count="$(wc -w <<< "${backends}")"
+          frontend_count="$(wc -w <<< "${frontends}")"
+          if [ "${MULTI}" = true ] && [ "${backend_count}" -lt 2 ]; then
+            echo "the leg selects several backends but the lock names ${backend_count}" >&2
+            exit 1
+          fi
+          if [ "${MULTI}" != true ] && [ "${backend_count}" -ne 1 ]; then
             echo "the lock names no single go-srv component" >&2
             exit 1
           fi
-          if [ "${WEB}" = "true" ] && [ -z "${web}" ]; then
-            echo "the leg selects ng-web but the lock names no single ng-web component" >&2
+          if [ "${WEB}" = "true" ] && [ "${frontend_count}" -ne 1 ]; then
+            echo "the leg selects ng-web but the lock names ${frontend_count} ng-web components" >&2
             exit 1
           fi
-          if [ "${WEB}" != "true" ] && [ -n "${web}" ]; then
+          if [ "${WEB}" != "true" ] && [ "${frontend_count}" -ne 0 ]; then
             echo "the lock names an ng-web component the leg does not select" >&2
             exit 1
           fi
-          postgres="$(jq -r '.names["service.postgres"] // empty' "${lock}")"
-          if [ -z "${postgres}" ]; then
-            echo "the lock names no postgres service" >&2
-            exit 1
-          fi
+          # The postgres service of each backend: its own entry in a multi lock, the top-level name in a single one.
+          postgres=""
+          for name in ${backends}; do
+            if [ "${MULTI}" = true ]; then
+              service="$(jq -r --arg n "${name}" '.components[] | select(.name == $n) | .names["service.postgres"] // empty' "${lock}")"
+            else
+              service="$(jq -r '.names["service.postgres"] // empty' "${lock}")"
+            fi
+            if [ -z "${service}" ]; then
+              echo "the lock names no postgres service for ${name}" >&2
+              exit 1
+            fi
+            postgres="${postgres:+${postgres} }${service}"
+          done
           {
-            echo "srv=${srv}"
-            echo "web=${web}"
+            echo "backends=${backends}"
+            echo "frontends=${frontends}"
             echo "postgres=${postgres}"
           } >> "${GITHUB_OUTPUT}"
+          if [ "${MULTI}" != true ]; then
+            {
+              echo "srv=${backends}"
+              echo "web=${frontends}"
+            } >> "${GITHUB_OUTPUT}"
+          fi
       - name: The source module path is gone
         run: |
           set -euo pipefail
@@ -384,6 +413,7 @@ jobs:
             exit 1
           fi
       - name: Delivered files of absent modules and specs are absent
+        if: ${{ !matrix.multi }}
         run: |
           set -euo pipefail
           project="${RUNNER_TEMP}/gen-a"
@@ -428,64 +458,148 @@ jobs:
           fi
           exit "${status}"
       - name: Start the generated project stack
+        env:
+          MULTI: ${{ matrix.multi }}
+          BACKENDS: ${{ steps.layout.outputs.backends }}
         run: |
           set -euo pipefail
           project="${RUNNER_TEMP}/gen-a"
+          lock="${project}/initializer.lock.json"
           compose="docker compose -f ${project}/.deploy/local/docker-compose.yml"
-          # The lock's TCK env, as the backend reads it from its component folder.
-          jq -r '.tckEnv | to_entries[]
+          # TCK env as KEY=VALUE lines, as the backend reads it from its component folder.
+          env_lines='to_entries[]
             | .value as $v
             | (($v | test("/")) and ($v | test("://") | not) and ($v | startswith("/") | not)) as $rel
-            | "\(.key)=\(if $rel then "../" + $v else $v end)"' \
-            "${project}/initializer.lock.json" >> "${project}/.deploy/local/.env"
-          # The leg's public base wins over the template value in .example.env, for the go-srv container and Kratos.
-          printf 'APP_PUBLIC_BASE_URL=%s\n' "${APP_PUBLIC_BASE_URL}" >> "${project}/.deploy/local/.env"
+            | "\(.key)=\(if $rel then "../" + $v else $v end)"'
+          if [ "${MULTI}" = true ]; then
+            # Each instance reads its own env file; the public base of each stays the one in its .example.env.
+            for name in ${BACKENDS}; do
+              jq -r --arg n "${name}" ".components[] | select(.name == \$n) | (.tck.env // {}) | ${env_lines}" "${lock}" >> "${project}/.deploy/local/${name}/.env"
+            done
+          else
+            jq -r ".tckEnv | ${env_lines}" "${lock}" >> "${project}/.deploy/local/.env"
+            # The leg's public base wins over the template value in .example.env, for the go-srv container and Kratos.
+            printf 'APP_PUBLIC_BASE_URL=%s\n' "${APP_PUBLIC_BASE_URL}" >> "${project}/.deploy/local/.env"
+          fi
           ${compose} config -q
           ${compose} --profile app config -q
           ${compose} --profile app up -d --build
-          wait_kratos=false
-          if jq -e 'any(.modules[]; .module == "identity")' "${project}/initializer.lock.json" > /dev/null; then
-            wait_kratos=true
+          # Ready URLs: every backend's origin, and Kratos for every backend with identity.
+          urls=()
+          if [ "${MULTI}" = true ]; then
+            for name in ${BACKENDS}; do
+              urls+=("$(jq -r --arg n "${name}" '.components[] | select(.name == $n) | .origin' "${lock}")/health/ready")
+              if jq -e --arg n "${name}" '.components[] | select(.name == $n) | .modules | index("identity")' "${lock}" > /dev/null; then
+                urls+=("http://127.0.0.1:$(jq -r --arg n "${name}" '.components[] | select(.name == $n) | .ports["kratos-public"]' "${lock}")/health/ready")
+              fi
+            done
+          else
+            urls+=("${TCK_BASE_URL}/health/ready")
+            if jq -e 'any(.modules[]; .module == "identity")' "${lock}" > /dev/null; then
+              urls+=("${{ matrix.kratos_url }}/health/ready")
+            fi
           fi
           for _ in $(seq 1 90); do
-            if curl -fsS "${TCK_BASE_URL}/health/ready" > /dev/null; then
-              if [ "${wait_kratos}" = false ] || curl -fsS "${{ matrix.kratos_url }}/health/ready" > /dev/null; then
-                exit 0
+            is_ready=true
+            for url in "${urls[@]}"; do
+              if ! curl -fsS "${url}" > /dev/null; then
+                is_ready=false
+                break
               fi
+            done
+            if [ "${is_ready}" = true ]; then
+              exit 0
             fi
             sleep 2
           done
-          echo "timeout waiting for the generated project" >&2
+          echo "timeout waiting for the generated project: ${urls[*]}" >&2
           exit 1
       - name: Format, vet, build and test the generated go-srv
-        working-directory: ${{ runner.temp }}/gen-a/${{ steps.layout.outputs.srv }}
-        run: |
-          set -euo pipefail
-          unformatted="$(gofmt -l .)"
-          if [ -n "${unformatted}" ]; then
-            echo "${unformatted}" >&2
-            exit 1
-          fi
-          go vet ./...
-          go build ./...
-          database_url="$(set -a; . ../.deploy/local/.example.env; printf '%s' "${APP_DATABASE_URL}")"
-          APP_TEST_DATABASE_URL="${database_url}" APP_TEST_PUBLIC_BASE_URL="${APP_PUBLIC_BASE_URL}" go test ./...
-      - name: Lint, build and test the generated ng-web
-        if: matrix.web
-        working-directory: ${{ runner.temp }}/gen-a/${{ steps.layout.outputs.web }}
-        run: |
-          set -euo pipefail
-          npm ci
-          npm run lint
-          npm run build
-          npm test -- --watch=false
-      - name: Run the console e2e the lock selects
-        if: matrix.web
+        env:
+          MULTI: ${{ matrix.multi }}
+          BACKENDS: ${{ steps.layout.outputs.backends }}
         run: |
           set -euo pipefail
           project="${RUNNER_TEMP}/gen-a"
+          for name in ${BACKENDS}; do
+            unformatted="$(gofmt -l "${project}/${name}")"
+            if [ -n "${unformatted}" ]; then
+              echo "${unformatted}" >&2
+              exit 1
+            fi
+            go -C "${project}/${name}" vet ./...
+            go -C "${project}/${name}" build ./...
+            if [ "${MULTI}" = true ]; then
+              # The instance's own template: its database, port and public base.
+              env_file="${project}/.deploy/local/${name}/.example.env"
+              database_url="$(set -a; . "${env_file}"; printf '%s' "${APP_DATABASE_URL}")"
+              public_base_url="$(set -a; . "${env_file}"; printf '%s' "${APP_PUBLIC_BASE_URL:-}")"
+            else
+              database_url="$(set -a; . "${project}/.deploy/local/.example.env"; printf '%s' "${APP_DATABASE_URL}")"
+              public_base_url="${APP_PUBLIC_BASE_URL}"
+            fi
+            APP_TEST_DATABASE_URL="${database_url}" APP_TEST_PUBLIC_BASE_URL="${public_base_url}" go -C "${project}/${name}" test ./...
+          done
+      - name: Lint, build and test the generated ng-web
+        if: matrix.web
+        env:
+          FRONTENDS: ${{ steps.layout.outputs.frontends }}
+        run: |
+          set -euo pipefail
+          for name in ${FRONTENDS}; do
+            web="${RUNNER_TEMP}/gen-a/${name}"
+            npm --prefix "${web}" ci
+            npm --prefix "${web}" run lint
+            npm --prefix "${web}" run build
+            npm --prefix "${web}" test -- --watch=false
+          done
+      - name: Wait for the console of the multi project to serve
+        if: matrix.multi && matrix.web
+        env:
+          FRONTENDS: ${{ steps.layout.outputs.frontends }}
+        run: |
+          set -euo pipefail
+          lock="${RUNNER_TEMP}/gen-a/initializer.lock.json"
+          for name in ${FRONTENDS}; do
+            # The frontend is served on the origin of the backend it binds.
+            bound="$(jq -r --arg n "${name}" '.components[] | select(.name == $n) | .backend' "${lock}")"
+            origin="$(jq -r --arg n "${bound}" '.components[] | select(.name == $n) | .origin' "${lock}")"
+            served=false
+            for _ in $(seq 1 60); do
+              code="$(curl -s -o /dev/null -w '%{http_code}' "${origin}/" || true)"
+              if [ "${code}" = 200 ]; then
+                served=true
+                break
+              fi
+              sleep 2
+            done
+            if [ "${served}" != true ]; then
+              echo "the console ${name} does not answer 200 on ${origin}/" >&2
+              exit 1
+            fi
+          done
+      - name: Run the console e2e the lock selects
+        if: matrix.web
+        env:
+          MULTI: ${{ matrix.multi }}
+          FRONTENDS: ${{ steps.layout.outputs.frontends }}
+        run: |
+          set -euo pipefail
+          project="${RUNNER_TEMP}/gen-a"
+          lock="${project}/initializer.lock.json"
+          if [ "${MULTI}" = true ]; then
+            # The console talks to the backend its frontend binds; the frontend serves that backend's origin.
+            bound="$(jq -r --arg n "${FRONTENDS}" '.components[] | select(.name == $n) | .backend' "${lock}")"
+            installed_modules="$(jq -c --arg n "${bound}" '.components[] | select(.name == $n) | .modules' "${lock}")"
+            web_base_url="$(jq -r --arg n "${bound}" '.components[] | select(.name == $n) | .origin' "${lock}")"
+            env_dir="${project}/.deploy/local/${bound}"
+          else
+            installed_modules="$(jq -c '[.modules[].module]' "${lock}")"
+            web_base_url="${TCK_BASE_URL}"
+            env_dir="${project}/.deploy/local"
+          fi
           installed() {
-            jq -e --arg m "$1" 'any(.modules[]; .module == $m)' "${project}/initializer.lock.json" > /dev/null
+            jq -e --arg m "$1" 'index($m) != null' <<< "${installed_modules}" > /dev/null
           }
           if ! installed identity; then
             e2e_grep='@shell-open'
@@ -501,40 +615,89 @@ jobs:
           npm --prefix initializer-e2e ci
           (cd initializer-e2e && npx playwright install --with-deps chromium)
           grep -Ev '^(PW_(VIDEO|SCREENSHOT|TRACE)|INIT_START_STACK|INIT_WEB_BASE_URL|INIT_USER_EMAIL|INIT_USER_PASSWORD)=' initializer-e2e/.example.env > initializer-e2e/.env
-          email="$(. "${project}/.deploy/local/.example.env"; if [ -f "${project}/.deploy/local/.env" ]; then . "${project}/.deploy/local/.env"; fi; printf '%s' "${APP_BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}")"
-          password="$(. "${project}/.deploy/local/.example.env"; if [ -f "${project}/.deploy/local/.env" ]; then . "${project}/.deploy/local/.env"; fi; printf '%s' "${APP_BOOTSTRAP_ADMIN_PASSWORD:-change-me-local-only}")"
-          printf 'INIT_WEB_BASE_URL=%s\nINIT_USER_EMAIL=%s\nINIT_USER_PASSWORD=%s\n' "${TCK_BASE_URL}" "${email}" "${password}" >> initializer-e2e/.env
+          email="$(. "${env_dir}/.example.env"; if [ -f "${env_dir}/.env" ]; then . "${env_dir}/.env"; fi; printf '%s' "${APP_BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}")"
+          password="$(. "${env_dir}/.example.env"; if [ -f "${env_dir}/.env" ]; then . "${env_dir}/.env"; fi; printf '%s' "${APP_BOOTSTRAP_ADMIN_PASSWORD:-change-me-local-only}")"
+          printf 'INIT_WEB_BASE_URL=%s\nINIT_USER_EMAIL=%s\nINIT_USER_PASSWORD=%s\n' "${web_base_url}" "${email}" "${password}" >> initializer-e2e/.env
           (cd initializer-e2e && npx playwright test tests/e2e/console --grep "${e2e_grep}")
+      - name: Install the project's tools with mise
+        if: matrix.multi
+        working-directory: ${{ runner.temp }}/gen-a
+        run: |
+          set -euo pipefail
+          mise trust
+          mise install
       - name: Run the TCK the lock selects
         working-directory: ${{ runner.temp }}/gen-a/specs
+        env:
+          MULTI: ${{ matrix.multi }}
         run: |
           set -euo pipefail
           npm ci
           npm run typecheck
-          locked="$(jq -r '.tckTags | join(",")' ../initializer.lock.json)"
+          # A multi lock records the tags per backend: the installed tags equal their union.
+          if [ "${MULTI}" = true ]; then
+            locked="$(jq -r '[.components[] | (.tck.tags // [])[]] | unique | join(",")' ../initializer.lock.json)"
+          else
+            locked="$(jq -r '.tckTags | join(",")' ../initializer.lock.json)"
+          fi
           installed="$(jq -rs '[.[].tckTags[]] | unique | join(",")' */spec.manifest.json)"
           if [ "${locked}" != "${installed}" ]; then
             echo "installed tags ${installed} differ from the lock ${locked}" >&2
             exit 1
           fi
-          npm run tck
+          if [ "${MULTI}" != true ]; then
+            npm run tck
+            exit 0
+          fi
+          # One TCK per backend that has specs, through the project's mise task.
+          tck_backends="$(jq -r '.components[] | select(.stack == "go-srv" and ((.tck.tags // []) | length) > 0) | .name' ../initializer.lock.json)"
+          if [ -z "${tck_backends}" ]; then
+            echo "the multi lock names no backend with a TCK" >&2
+            exit 1
+          fi
+          for name in ${tck_backends}; do
+            (cd .. && mise run "tck:${name}")
+          done
       - name: Check the specs the lock selects
         working-directory: ${{ runner.temp }}/gen-a/specs
+        env:
+          MULTI: ${{ matrix.multi }}
         run: |
           set -euo pipefail
-          # The two TCK passes write one junit file, so the selected tests are counted from the lock's grep.
-          grep_pattern="$(jq -r .tckGrep ../initializer.lock.json)"
-          invert="$(jq -r '.tckGrepInvert // ""' ../initializer.lock.json)"
-          args=(--grep "${grep_pattern}")
-          if [ -n "${invert}" ]; then
-            args+=(--grep-invert "${invert}")
+          lock=../initializer.lock.json
+          # The TCK passes write one junit file, so the selected tests are counted from the lock's grep.
+          check_grep() {
+            local grep_pattern="$1" invert="$2" label="$3" specs="$4"
+            local args=(--grep "${grep_pattern}")
+            if [ -n "${invert}" ]; then
+              args+=(--grep-invert "${invert}")
+            fi
+            # --list never calls the instance; the config only needs a non-empty base URL (a multi leg sets none).
+            TCK_BASE_URL="${TCK_BASE_URL:-http://localhost:10100}" npx playwright test --list --reporter=list "${args[@]}" > "${RUNNER_TEMP}/tck-list-${label}.txt"
+            # Every spec in the selection has tests; uninstalled specs are absent (see the absence step).
+            for spec in ${specs}; do
+              count="$(grep -c " ${spec}/tck/" "${RUNNER_TEMP}/tck-list-${label}.txt" || true)"
+              echo "${label} ${spec}: ${count} tests"
+              test "${count}" -gt 0
+            done
+          }
+          if [ "${MULTI}" != true ]; then
+            check_grep "$(jq -r .tckGrep "${lock}")" "$(jq -r '.tckGrepInvert // ""' "${lock}")" all "$(jq -r '.specs[].spec' "${lock}")"
+            exit 0
           fi
-          npx playwright test --list --reporter=list "${args[@]}" > "${RUNNER_TEMP}/tck-list.txt"
-          # Every spec in the lock has tests; uninstalled specs are absent (see the absence step).
-          for spec in $(jq -r '.specs[].spec' ../initializer.lock.json); do
-            count="$(grep -c " ${spec}/tck/" "${RUNNER_TEMP}/tck-list.txt" || true)"
-            echo "${spec}: ${count} tests"
-            test "${count}" -gt 0
+          for name in $(jq -r '.components[] | select(.stack == "go-srv" and ((.tck.tags // []) | length) > 0) | .name' "${lock}"); do
+            tags="$(jq -c --arg n "${name}" '.components[] | select(.name == $n) | .tck.tags' "${lock}")"
+            # A backend's specs are the installed specs whose tags it all selects.
+            specs=""
+            for manifest in */spec.manifest.json; do
+              if jq -e --argjson tags "${tags}" '.tckTags | all(. as $t | $tags | index($t) != null)' "${manifest}" > /dev/null; then
+                specs="${specs} $(dirname "${manifest}")"
+              fi
+            done
+            check_grep \
+              "$(jq -r --arg n "${name}" '.components[] | select(.name == $n) | .tck.grep' "${lock}")" \
+              "$(jq -r --arg n "${name}" '.components[] | select(.name == $n) | .tck.grepInvert // ""' "${lock}")" \
+              "${name}" "${specs}"
           done
       - name: Collect logs
         if: always()
@@ -551,7 +714,7 @@ jobs:
             initializer-e2e/playwright-report/
             initializer-e2e/test-results/
             ${{ runner.temp }}/compose.log
-            ${{ runner.temp }}/tck-list.txt
+            ${{ runner.temp }}/tck-list-*.txt
           if-no-files-found: warn
           retention-days: 7
       - name: Stop the stack

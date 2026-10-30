@@ -45,6 +45,7 @@ initializer stack ls
 STACK    ROLE       SUFFIX   GO MODULE   MODULES
 go-srv   backend    srv      yes         6
 ng-web   frontend   web      no          6
+Several components of one stack: repeat --component STACK=NAME (see 'initializer help generate').
 ```
 
 | Module | Adds |
@@ -65,7 +66,7 @@ initializer generate acme --stacks go-srv,ng-web --modules identity,parameters
 ```
 
 ```text
-Project acme generated in ./acme (533 files).
+Project acme generated in ./acme (543 files).
 Next: cd acme && mise run up
 ```
 
@@ -143,7 +144,7 @@ Go module   example.com/acme
 Database    acme (user acme)
 Services    acme-postgres, acme-postgres-init, acme-kratos-migrate, acme-kratos
 Ports       band 101
-556 files
+566 files
 ```
 
 To turn a flag line into a starter file, keep the `selection` member of the dry run's JSON document:
@@ -161,7 +162,7 @@ Every generated project carries the resolved choices as `initializer.selection.j
 |---|---|---|
 | `--name NAME` | Project name | the folder's name, else `demo` |
 | `--display-name TEXT` | Brand text of the web console | the project name |
-| `--component STACK=NAME` | Folder of that stack's component | `<name>-<suffix>` (`acme-srv`, `acme-web`) |
+| `--component STACK[=NAME][,KEY=VALUE...]` | Add or override a component of STACK (section 6) | one component per stack, named `<name>-<suffix>` (`acme-srv`, `acme-web`) |
 | `--db-name NAME`, `--db-user NAME` | Database and its user | `<name>` with `-` replaced by `_` |
 | `--service KEY=NAME` | Rename one compose service | `<name>-<key>` |
 | `--port-band NNN` | Host ports `1NNxx`, from 100 to 654 | `101` |
@@ -173,6 +174,7 @@ initializer generate shop --name shop --stacks go-srv,ng-web --display-name "Acm
 ```
 
 ```text
+note: Go module defaults to example.com/shop; pass --go-module to set yours
 Project shop in ./shop (dry run, nothing written)
 COMPONENT   STACK    FOLDER      MODULES
 shop-api    go-srv   shop-api/   core
@@ -181,16 +183,80 @@ Go module   example.com/shop (default)
 Database    shop_db (user shop_app)
 Services    shop-pg
 Ports       band 103
-397 files
+407 files
 ```
 
 Names are lowercase letters, digits and inner hyphens, 2 to 63 characters, starting with a letter. Anything else answers `NAME_INVALID` with an example.
 
 ## 6. Components
 
-Each stack produces one component folder. Without `--component` the folder is `<name>-<suffix>`. Two components of the same stack are not supported yet: a second `--component go-srv=...` answers `COMPONENT_MULTI_UNSUPPORTED` and nothing is written.
+A component is one copy of one stack, in the folder named after it. Without `--component`, each stack produces one component named `<name>-<suffix>`. A project can hold several components of one stack, up to 7 backends. Each backend is an instance with its own origin, ports, Postgres and, with identity, its own Kratos and session key; a frontend binds to exactly one backend, and a backend serves at most one frontend.
 
-When a file lists components, a `--component STACK=NAME` flag must name one of them exactly; it never renames. For a file that lists `acme-core` for `go-srv`:
+`--component STACK[=NAME][,KEY=VALUE...]` is repeatable. With several components of one stack, each needs a `NAME`. Keys:
+
+| Key | Sets | For |
+|---|---|---|
+| `modules` | Modules the component starts from, ids joined by `+`; required modules are added | backends |
+| `go-module` | Go module path | backends |
+| `db-name`, `db-user` | Database and its user | backends |
+| `service.<key>` | Rename one compose service of the component | backends |
+| `backend` | Name of the backend the frontend binds to | frontends |
+
+A frontend installs what its backend installs, so it takes no `modules`. A top-level `--modules` seeds every backend that sets no `modules` of its own. With several backends, set `--db-name` and `--db-user` per component.
+
+### Two backends and a console
+
+The first backend installs identity only; the second installs every module; the console binds to the second. As flags:
+
+```bash
+initializer generate acme-backend --stacks go-srv,ng-web --go-module example.com/acme/backend \
+  --modules identity \
+  --component go-srv=acme-backend-srv-first \
+  --component go-srv=acme-backend-srv-second,modules=api-keys+feature-flags+identity+parameters+tenancy \
+  --component ng-web=acme-backend-web,backend=acme-backend-srv-second --dry-run
+```
+
+or as a YAML file (`multi.yaml`), run with `initializer generate acme-backend -f multi.yaml --dry-run`:
+
+```yaml
+schema: 2
+project:
+  name: acme-backend
+  goModule: example.com/acme/backend
+stacks: [go-srv, ng-web]
+modules: [identity]
+components:
+  - stack: go-srv
+    name: acme-backend-srv-first
+  - stack: go-srv
+    name: acme-backend-srv-second
+    modules: [api-keys, feature-flags, identity, parameters, tenancy]
+  - stack: ng-web
+    name: acme-backend-web
+    backend: acme-backend-srv-second
+```
+
+Both print the same plan (`INDEX` counts components of one stack; `PORTS` are the host ports of the instance):
+
+```text
+Project acme-backend in ./acme-backend (dry run, nothing written)
+COMPONENT                 STACK    INDEX   BACKEND                   GO MODULE                                          DATABASE                                          PORTS                                                                MODULES
+acme-backend-srv-first    go-srv   0                                 example.com/acme/backend/acme-backend-srv-first    acme_backend_srv_first/acme_backend_srv_first     srv 10100, postgres 10132, kratos-public 10133, kratos-admin 10134   core, identity
+acme-backend-srv-second   go-srv   1                                 example.com/acme/backend/acme-backend-srv-second   acme_backend_srv_second/acme_backend_srv_second   srv 10101, postgres 10142, kratos-public 10143, kratos-admin 10144   core, identity, api-keys, feature-flags, parameters, tenancy
+acme-backend-web          ng-web   0       acme-backend-srv-second                                                                                                        web 10120                                                            core, identity, api-keys, feature-flags, parameters, tenancy
+811 files
+```
+
+stderr adds `note: go modules derived from example.com/acme/backend; pass go-module= per component to change them`. Without `--dry-run` the command writes the project (811 files) and `initializer verify acme-backend` answers `No differences.`
+
+In a multi-component project:
+
+- Per-component files live in `.deploy/local/<component>/`: `.example.env` (local-only defaults, read by compose and the host-dev task) and, with identity, `kratos/`. Put overrides in `.deploy/local/<component>/.env` (optional, gitignored, same keys as `.example.env`). `.deploy/local/.env` is read only by compose interpolation and reaches every instance.
+- A single-component project keeps `.example.env` and `kratos/` directly in `.deploy/local/`, and overrides go in `.deploy/local/.env`.
+- On `localhost` one browser profile is signed in to one identity instance at a time, because cookies are per host, not per port: signing in to the second backend overwrites the first's cookies. Use a second browser profile or a private window per instance.
+- `mise run tck:<component>` runs the TCK against one backend; the generated `README.md` lists the tags and the `.env` keys each needs.
+
+When a file lists components, a `--component STACK=NAME` flag must name one of them exactly; it never renames, and its keys override that component. For a file that lists `acme-core` for `go-srv`:
 
 ```bash
 initializer generate m4 -f comp.yaml --component go-srv=acme-core
@@ -205,7 +271,28 @@ error: --component go-srv=other: --component go-srv=other names no go-srv compon
 1 problem; nothing was written.
 ```
 
-Add, remove or rename a component by editing the file.
+Add, remove or rename a component by editing the file. Two examples of the new codes:
+
+```bash
+initializer generate x1 --name acme --stacks go-srv --component go-srv --component go-srv --dry-run
+```
+
+```text
+error: --component go-srv: stack go-srv has 2 components; name each one [COMPONENT_NAME_REQUIRED]
+  hint: initializer generate x1 --name acme --stacks go-srv --component go-srv=acme-srv-first --component go-srv=acme-srv-second --dry-run
+1 problem; nothing was written.
+```
+
+```bash
+initializer generate x3 --name acme --stacks go-srv,ng-web --component go-srv=acme-one \
+  --component go-srv=acme-two --component ng-web=acme-web,backend=nope --dry-run
+```
+
+```text
+error: --component ng-web=acme-web,backend=nope: "nope" names no backend component [COMPONENT_BACKEND_UNKNOWN]
+  hint: backend components: acme-one, acme-two
+1 problem; nothing was written.
+```
 
 ## 7. Check
 
@@ -263,7 +350,16 @@ Codes a person meets:
 | `MODULE_UNKNOWN` | The module id is not in the catalog; run `initializer module ls`. |
 | `OUTPUT_NOT_EMPTY` | The folder already holds files; choose another one. |
 | `NAME_INVALID` | A name breaks the name rule of section 5. |
-| `COMPONENT_MULTI_UNSUPPORTED` | A stack has more than one component; use one. |
+| `COMPONENT_NAME_REQUIRED` | A stack has several components and one has no name; the error's hint (`suggestedNames` in JSON) lists names to use. |
+| `COMPONENT_LIMIT` | A stack has more than 7 components; use fewer. |
+| `COMPONENT_BACKEND_REQUIRED` | A frontend does not say which of several backends it binds to; set `backend=`. |
+| `COMPONENT_BACKEND_UNKNOWN` | `backend=` names no backend component; use one the hint lists. |
+| `COMPONENT_BACKEND_TAKEN` | Two frontends bind to one backend; a backend serves at most one. |
+| `COMPONENT_FIELD_NOT_ALLOWED` | A key does not apply to that component (for example `modules` on a frontend). |
+| `COMPONENT_AMBIGUOUS` | A top-level `--db-name` or `--db-user` would be inherited by several backends; set it per component. |
+| `MODULES_UNUSED` | Top-level `--modules` while every backend sets its own; drop one of them. |
+| `PORT_BAND_EXHAUSTED` | A catalog build or a component count whose ports do not fit the band; use fewer components. |
+| `NAME_RESERVED` | A component name equals a folder of the project (for example `specs`); choose another. |
 | `COMPONENT_MERGE_AMBIGUOUS` | A `--component` flag names no component of the file; edit the file. |
 | `SOURCE_ROOT_NOT_FOUND` | No clone found from the working directory or the binary; run inside a clone, pass `--root <clone>`, or set `INITIALIZER_ROOT`. |
 | `REQUIRES_STACK_MISMATCH` | A catalog build error: a module names different required modules in its two stacks. |
