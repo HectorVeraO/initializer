@@ -54,6 +54,8 @@ test('--component selects the tags and the cooperation invert of that backend', 
   const second = planComponentRun({ specsDir, component: 'acme-srv-second', env: {} });
   assert.equal(first.passes.length, 1);
   assert.match('a @identity @parameters', regexOf(first.passes[0], '--grep'));
+  // The real title of the fixture spec: a grep that dropped @core would skip it.
+  assert.match('the instance origin and flags file reach the suite @core', regexOf(first.passes[0], '--grep'));
   assert.doesNotMatch('a @feature-flags', regexOf(first.passes[0], '--grep'));
   assert.doesNotMatch('a @identity', regexOf(first.passes[0], '--grep-invert'));
   assert.equal(second.passes.length, 2);

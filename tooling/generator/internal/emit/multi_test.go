@@ -123,7 +123,7 @@ func TestMultiLockRecordsEveryComponentAndItsModules(t *testing.T) {
 		t.Errorf("first backend = %q, want none", first.Backend)
 	}
 	if first.TCK == nil {
-		t.Error("the first backend has no tck member")
+		t.Fatal("the first backend has no tck member")
 	}
 	if len(first.Ports) != 0 {
 		t.Errorf("first ports = %v, want none", first.Ports)
@@ -262,6 +262,28 @@ func TestCrossReferencesBetweenGoComponentsAreRefusedAndLookalikesAreNot(t *test
 				t.Fatalf("error = %v, want %v naming the file", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestAComponentKeepingTheSourceModulePathIsRefusedThroughTheLock(t *testing.T) {
+	selection := multiSelection()
+	selection.Project.GoModule = "example.com/fixture"
+	selection.Components[0].Name = "srv"
+	resolved := resolveOrFail(t, fixture.Load(t), selection)
+	repo := fixture.Load(t)
+	_, err := emit.Build(emit.BuildOptions{Root: os.DirFS(repo.Root), Plan: resolved, CatalogSHA256: hashOf(repo.CatalogBytes)})
+	if !errors.Is(err, emit.ErrGoModulePathLeak) || !strings.Contains(err.Error(), "initializer.lock.json") {
+		t.Fatalf("error = %v, want a leak found in the lock", err)
+	}
+}
+
+func TestMultiReadmeRunSectionNamesTheFirstBackendWithoutAFrontend(t *testing.T) {
+	readme := projectFile(t, mustBuildMulti(t, fixture.Load(t)), "README.md")
+	if !strings.Contains(readme, "stop acme-srv-first\n") {
+		t.Errorf("README misses the first backend's host-edit command:\n%s", readme)
+	}
+	if strings.Contains(readme, "acme-web") {
+		t.Errorf("README names the frontend bound to the second backend:\n%s", readme)
 	}
 }
 
