@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"sort"
 	"strconv"
+	"strings"
 
 	generator "github.com/HectorVeraO/initializer/tooling/generator"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
@@ -64,29 +65,42 @@ func (b *builder) reserved(p string) bool {
 	case readmeName, lockfile.SelectionName, lockfile.Name:
 		return true
 	}
-	for _, stack := range b.opts.Plan.Components {
-		if root, ok := b.compositionRoot(stack.Stack); ok && root == p {
-			return true
-		}
-	}
-	return false
+	return b.roots[p]
 }
 
-// compositionRoot returns the project path of the composition root of stack.
-func (b *builder) compositionRoot(stack string) (string, bool) {
-	info, known := manifest.LookupStack(stack)
+// compositionRoot returns the project path of the composition root of one
+// component: its folder plus the composition root of its stack.
+func compositionRoot(component plan.ComponentPlan) (string, bool) {
+	info, known := manifest.LookupStack(component.Stack)
 	if !known {
 		return "", false
 	}
-	return b.opts.Plan.ProjectPath(info.Root + info.CompositionRoot), true
+	return component.Name + "/" + info.CompositionRoot, true
 }
+
+// Errors of the module path scans; the message starts with the code.
+var (
+	// ErrGoModulePathLeak reports the source module path in a delivered file.
+	ErrGoModulePathLeak = errors.New("GO_MODULE_PATH_LEAK")
+	// ErrGoModuleCrossReference reports the module path of another Go
+	// component in a file of a Go component folder.
+	ErrGoModuleCrossReference = errors.New("GO_MODULE_CROSS_REFERENCE")
+)
 
 type builder struct {
 	opts    BuildOptions
 	source  string
-	target  string
 	project string
-	files   map[string][]byte
+	// firstTarget is the Go module path project-scope files are rewritten to:
+	// the first Go component's, else the selection's.
+	firstTarget string
+	files       map[string][]byte
+	// roots holds the project path of every composition root of the plan.
+	roots map[string]bool
+	// projectOwner maps a delivered project-scope path to the module that
+	// delivered it ("stack/module"); a later component that installs the same
+	// module skips the file.
+	projectOwner map[string]projectDelivery
 	// rules maps a source path to the name rules of the installed modules.
 	rules map[string][]names.Rule
 	// portFiles holds the source paths of the port files of the installed modules.
@@ -105,19 +119,38 @@ func Build(opts BuildOptions) (Project, error) {
 		return Project{}, errors.New("plan has no stacks")
 	case selection.Project.Name == "":
 		return Project{}, errors.New("plan has no project name")
-	case opts.Plan.GoModule == "" || selection.Project.GoModule == "":
+	case opts.Plan.GoModule == "":
 		return Project{}, errors.New("plan has no Go module path")
 	case len(opts.CatalogSHA256) != sha256.Size*2:
 		return Project{}, errors.New("catalog hash is malformed")
 	}
+	roots := map[string]bool{}
+	firstTarget := ""
+	for _, component := range opts.Plan.Components {
+		info, known := manifest.LookupStack(component.Stack)
+		if known && info.GoModule && component.GoModule == "" {
+			return Project{}, fmt.Errorf("plan has no Go module path for component %q", component.Name)
+		}
+		if known && info.GoModule && firstTarget == "" {
+			firstTarget = component.GoModule
+		}
+		if root, ok := compositionRoot(component); ok {
+			roots[root] = true
+		}
+	}
+	if firstTarget == "" {
+		firstTarget = selection.Project.GoModule
+	}
 	b := &builder{
-		opts:      opts,
-		source:    opts.Plan.GoModule,
-		target:    selection.Project.GoModule,
-		project:   selection.Project.Name,
-		files:     map[string][]byte{},
-		rules:     nameRules(opts.Plan),
-		portFiles: portFiles(opts.Plan),
+		opts:         opts,
+		source:       opts.Plan.GoModule,
+		project:      selection.Project.Name,
+		firstTarget:  firstTarget,
+		files:        map[string][]byte{},
+		roots:        roots,
+		projectOwner: map[string]projectDelivery{},
+		rules:        nameRules(opts.Plan),
+		portFiles:    portFiles(opts.Plan),
 	}
 	return b.run()
 }
@@ -137,13 +170,17 @@ func (b *builder) run() (Project, error) {
 		TCKGrepInvert: p.TCKGrepInvert,
 		TCKEnv:        p.TCKEnv,
 	}
+	multi := p.Multi()
 	for _, component := range p.Components {
-		lock.Components = append(lock.Components, lockfile.Component{Stack: component.Stack, Name: component.Name})
+		lock.Components = append(lock.Components, lockComponent(component, multi))
+	}
+	if multi {
+		lock.Names = projectNames(lock.Names)
 	}
 	for _, spec := range p.Specs {
 		entry := lockfile.Spec{Spec: spec.Spec, Version: spec.Version}
 		for _, file := range spec.Files {
-			delivered, err := b.copyFile(file, "")
+			delivered, _, err := b.copyFile(nil, "", file)
 			if err != nil {
 				return Project{}, err
 			}
@@ -151,20 +188,26 @@ func (b *builder) run() (Project, error) {
 		}
 		lock.Specs = append(lock.Specs, entry)
 	}
-	for _, stack := range p.Components {
-		for _, module := range stack.Modules {
+	for i := range p.Components {
+		component := &p.Components[i]
+		for _, module := range component.Modules {
 			entry := lockfile.Module{
-				Stack:          stack.Stack,
+				Stack:          component.Stack,
 				Module:         module.Module,
 				Version:        module.Version,
 				ImplementsSpec: module.ImplementsSpec,
 			}
+			if multi {
+				entry.Component = component.Name
+			}
 			for _, file := range module.Files {
-				delivered, err := b.copyFile(file, module.Module)
+				delivered, isDelivered, err := b.copyFile(component, module.Module, file)
 				if err != nil {
 					return Project{}, err
 				}
-				entry.Files = append(entry.Files, delivered)
+				if isDelivered {
+					entry.Files = append(entry.Files, delivered)
+				}
 			}
 			lock.Modules = append(lock.Modules, entry)
 		}
@@ -193,31 +236,71 @@ func (b *builder) add(p string, data []byte) error {
 	return nil
 }
 
+// place maps a delivered source-form path to its project path. A path under
+// the source root of a stack goes into the folder of the component that
+// copies it (component scope); every other path stays as it is (project
+// scope). isProject reports the second case. A nil component is a spec file.
+func (b *builder) place(component *plan.ComponentPlan, delivered string) (dest string, isProject bool, err error) {
+	p := b.opts.Plan
+	for _, info := range manifest.Stacks() {
+		if !strings.HasPrefix(delivered, info.Root) {
+			continue
+		}
+		rest := strings.TrimPrefix(delivered, info.Root)
+		if component != nil && component.Stack == info.ID {
+			return component.Name + "/" + rest, false, nil
+		}
+		if only, hasOne := p.Component(info.ID); hasOne {
+			return only.Name + "/" + rest, false, nil
+		}
+		if b.hasStack(info.ID) {
+			return "", false, fmt.Errorf("catalog path %q is under the root of stack %s, which has several components", delivered, info.ID)
+		}
+	}
+	return delivered, true, nil
+}
+
 // copyFile reads one catalog file from the checkout, checks it against the
-// catalog, applies its transform and records it at its delivered path.
-func (b *builder) copyFile(file catalog.File, owner string) (lockfile.File, error) {
+// catalog, applies its transform and records it at its delivered path. The
+// bool is false when a project-scope file was already delivered by an earlier
+// component that installs the same module.
+func (b *builder) copyFile(component *plan.ComponentPlan, owner string, file catalog.File) (lockfile.File, bool, error) {
 	delivered := file.Path
 	if file.Target != "" {
 		delivered = file.Target
 	}
 	if !fs.ValidPath(file.Path) || !lockfile.ValidPath(file.Path) {
-		return lockfile.File{}, fmt.Errorf("catalog path %q is not a repo-relative path", file.Path)
+		return lockfile.File{}, false, fmt.Errorf("catalog path %q is not a repo-relative path", file.Path)
 	}
-	dest := b.opts.Plan.ProjectPath(delivered)
+	dest, isProject, err := b.place(component, delivered)
+	if err != nil {
+		return lockfile.File{}, false, err
+	}
 	if b.reserved(dest) {
-		return lockfile.File{}, fmt.Errorf("catalog file %q lands on the rendered path %q", file.Path, dest)
+		return lockfile.File{}, false, fmt.Errorf("catalog file %q lands on the rendered path %q", file.Path, dest)
+	}
+	ownerKey := ""
+	componentName := ""
+	if component != nil {
+		ownerKey = component.Stack + "/" + owner
+		componentName = component.Name
+	}
+	// Only another component delivering the same module may skip the file;
+	// the same component producing a path twice still reaches b.add and fails.
+	if previous, seen := b.projectOwner[dest]; seen && isProject && previous.key == ownerKey && previous.component != componentName {
+		return lockfile.File{}, false, nil
 	}
 	data, err := fs.ReadFile(b.opts.Root, file.Path)
 	if err != nil {
-		return lockfile.File{}, fmt.Errorf("read %s: %w", file.Path, err)
+		return lockfile.File{}, false, fmt.Errorf("read %s: %w", file.Path, err)
 	}
 	sourceSum := hashHex(data)
 	if sourceSum != file.SHA256 {
-		return lockfile.File{}, fmt.Errorf("source %s changed since the catalog was built", file.Path)
+		return lockfile.File{}, false, fmt.Errorf("source %s changed since the catalog was built", file.Path)
 	}
-	transformed, err := b.transform(file.Path, data, owner)
+	transformed, err := b.transform(file.Path, data, owner, b.targetOf(component, isProject))
 	if err != nil {
-		return lockfile.File{}, err
+		return lockfile.File{}, false, err
 	}
 	entry := lockfile.File{Path: dest, SHA256: hashHex(transformed)}
 	if entry.SHA256 != sourceSum {
@@ -227,13 +310,26 @@ func (b *builder) copyFile(file catalog.File, owner string) (lockfile.File, erro
 		entry.SourcePath = file.Path
 	}
 	if err := b.add(dest, transformed); err != nil {
-		return lockfile.File{}, err
+		return lockfile.File{}, false, err
 	}
-	return entry, nil
+	if isProject {
+		b.projectOwner[dest] = projectDelivery{key: ownerKey, component: componentName}
+	}
+	return entry, true, nil
+}
+
+// targetOf returns the Go module path a file of component is rewritten to:
+// the component's own for a component-scope file, the first Go component's
+// for a project-scope or spec file.
+func (b *builder) targetOf(component *plan.ComponentPlan, isProject bool) string {
+	if component == nil || isProject || component.GoModule == "" {
+		return b.firstTarget
+	}
+	return component.GoModule
 }
 
 // transform applies the copy rules of the source path.
-func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byte, error) {
+func (b *builder) transform(sourcePath string, data []byte, owner, target string) ([]byte, error) {
 	if rules := b.rules[sourcePath]; len(rules) > 0 {
 		renamed, err := names.Apply(data, rules, b.opts.Plan.Reference, b.opts.Plan.Slots)
 		if err != nil {
@@ -260,19 +356,83 @@ func (b *builder) transform(sourcePath string, data []byte, owner string) ([]byt
 	}
 	switch {
 	case sourcePath == gorewrite.GoModPath:
-		out, err := gorewrite.RewriteModuleLine(data, b.source, b.target)
+		out, err := gorewrite.RewriteModuleLine(data, b.source, target)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", sourcePath, err)
 		}
 		return out, nil
 	case gorewrite.ShouldRewrite(sourcePath):
-		out, _, err := gorewrite.RewriteImports(sourcePath, data, b.source, b.target)
+		out, _, err := gorewrite.RewriteImports(sourcePath, data, b.source, target)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", sourcePath, err)
 		}
 		return out, nil
 	}
 	return data, nil
+}
+
+// projectDelivery records who delivered a project-scope path: the
+// "stack/module" key and the component that produced it.
+type projectDelivery struct {
+	key       string
+	component string
+}
+
+// lockComponent returns the lock entry of one component. A single lock keeps
+// the stack and the name; a multi lock adds the instance fields. Ports and
+// origin are not recorded yet.
+func lockComponent(component plan.ComponentPlan, multi bool) lockfile.Component {
+	entry := lockfile.Component{Stack: component.Stack, Name: component.Name}
+	if !multi {
+		return entry
+	}
+	index := component.Index
+	entry.Index = &index
+	entry.GoModule = component.GoModule
+	if component.Database != (manifest.Database{}) {
+		database := component.Database
+		entry.Database = &database
+	}
+	for _, module := range component.Modules {
+		entry.Modules = append(entry.Modules, module.Module)
+	}
+	if component.Role == manifest.RoleFrontend {
+		entry.Backend = component.Partner
+	}
+	if component.TCK != nil {
+		entry.TCK = &lockfile.TCK{
+			Tags:       component.TCK.Tags,
+			Grep:       component.TCK.Grep,
+			GrepInvert: component.TCK.GrepInvert,
+			Env:        component.TCK.Env,
+		}
+	}
+	entry.Names = map[string]string{names.ComponentSlot(component.Stack): component.Name}
+	if component.Database.Name != "" {
+		entry.Names[names.SlotDatabase] = component.Database.Name
+	}
+	if component.Database.User != "" {
+		entry.Names[names.SlotDBUser] = component.Database.User
+	}
+	for key, value := range component.Services {
+		entry.Names[names.ServiceSlot(key)] = value
+	}
+	return entry
+}
+
+// projectNames returns the project-level slots of a multi lock: everything
+// except the component slots and the instance's database and service slots,
+// which the component entries hold.
+func projectNames(all map[string]string) map[string]string {
+	kept := map[string]string{}
+	for key, value := range all {
+		isInstance := key == names.SlotDatabase || key == names.SlotDBUser ||
+			strings.HasPrefix(key, names.ComponentSlot("")) || strings.HasPrefix(key, names.ServiceSlot(""))
+		if !isInstance {
+			kept[key] = value
+		}
+	}
+	return kept
 }
 
 const (
@@ -282,33 +442,30 @@ const (
 )
 
 // readmeRun returns the run section data: one instance per backend component,
-// bound to the component of the frontend stack when one is selected.
+// bound to its frontend component when it has one. Every instance shows the
+// plan's one origin until ports are planned per instance.
 func (b *builder) readmeRun() render.ReadmeRun {
 	p := b.opts.Plan
 	band := p.Ports.Band
 	run := render.ReadmeRun{PortLow: band * 100, PortHigh: band*100 + 99}
 	originURL := "http://localhost:" + strconv.Itoa(p.Ports.Origin)
-	var web string
-	for _, stack := range p.Components {
-		component, hasComponent := p.Component(stack.Stack)
-		if stack.Role == manifest.RoleFrontend && hasComponent {
-			web = component.Name
-		}
-	}
-	for _, stack := range p.Components {
-		component, hasComponent := p.Component(stack.Stack)
-		if stack.Role != manifest.RoleBackend || !hasComponent {
+	for _, component := range p.Components {
+		if component.Role != manifest.RoleBackend {
 			continue
+		}
+		hasIdentity := false
+		for _, module := range component.Modules {
+			hasIdentity = hasIdentity || module.Module == "identity"
 		}
 		instance := render.ReadmeInstance{
 			Backend:     component.Name,
-			Web:         web,
+			Web:         component.Partner,
 			OriginURL:   originURL,
-			HasIdentity: b.hasModule("identity"),
+			HasIdentity: hasIdentity,
 			DevSrvTask:  devSrvTaskName,
 			TCKTask:     tckTaskName,
 		}
-		if web != "" {
+		if component.Partner != "" {
 			instance.DevWebTask = devWebTaskName
 		}
 		run.Instances = append(run.Instances, instance)
@@ -375,8 +532,15 @@ func (b *builder) hasStack(id string) bool {
 // in the catalog order of (path, text).
 func nameRules(p plan.Plan) map[string][]names.Rule {
 	rules := map[string][]names.Rule{}
+	counted := map[string]bool{}
 	for _, stack := range p.Components {
 		for _, module := range stack.Modules {
+			// Components of one stack that install the same module share its rules.
+			key := stack.Stack + "/" + module.Module
+			if counted[key] {
+				continue
+			}
+			counted[key] = true
 			for _, rule := range module.Names {
 				rules[rule.Path] = append(rules[rule.Path], names.Rule{Path: rule.Path, Text: rule.Text})
 			}
@@ -399,8 +563,14 @@ func (b *builder) render() ([]lockfile.File, error) {
 	}
 
 	var rows []render.ReadmeModule
+	listed := map[string]bool{}
 	for _, stack := range p.Components {
 		for _, module := range stack.Modules {
+			key := stack.Stack + "/" + module.Module
+			if listed[key] {
+				continue
+			}
+			listed[key] = true
 			rows = append(rows, render.ReadmeModule{Stack: stack.Stack, Module: module.Module, Version: module.Version})
 		}
 	}
@@ -454,7 +624,8 @@ func (b *builder) render() ([]lockfile.File, error) {
 	return generated, nil
 }
 
-// renderGoRoot renders the go-srv composition root.
+// renderGoRoot renders the go-srv composition root of one component with its
+// own module list and Go module path.
 func (b *builder) renderGoRoot(stack plan.ComponentPlan, record func(string, []byte) error) error {
 	var folders []string
 	for _, module := range stack.Modules {
@@ -468,15 +639,16 @@ func (b *builder) renderGoRoot(stack plan.ComponentPlan, record func(string, []b
 	}
 	info, _ := manifest.LookupStack(stack.Stack)
 	sourceForm := info.Root + info.CompositionRoot
-	rewritten, _, err := gorewrite.RewriteImports(sourceForm, raw, b.source, b.target)
+	rewritten, _, err := gorewrite.RewriteImports(sourceForm, raw, b.source, stack.GoModule)
 	if err != nil {
 		return fmt.Errorf("%s: %w", sourceForm, err)
 	}
-	root, _ := b.compositionRoot(stack.Stack)
+	root, _ := compositionRoot(stack)
 	return record(root, rewritten)
 }
 
-// renderWebRoot renders the ng-web composition root; no path is rewritten.
+// renderWebRoot renders the ng-web composition root of one component; no path
+// is rewritten.
 func (b *builder) renderWebRoot(stack plan.ComponentPlan, record func(string, []byte) error) error {
 	ids := make([]string, 0, len(stack.Modules))
 	for _, module := range stack.Modules {
@@ -486,7 +658,7 @@ func (b *builder) renderWebRoot(stack plan.ComponentPlan, record func(string, []
 	if err != nil {
 		return err
 	}
-	root, _ := b.compositionRoot(stack.Stack)
+	root, _ := compositionRoot(stack)
 	return record(root, raw)
 }
 
@@ -503,15 +675,81 @@ func (b *builder) assemble(lock []byte) (Project, error) {
 		files = append(files, File{Path: p, Data: b.files[p]})
 	}
 	files = append(files, File{Path: lockfile.Name, Data: lock})
-	if b.source != b.target {
-		needle := []byte(b.source)
-		for _, file := range files {
-			if bytes.Contains(file.Data, needle) {
-				return Project{}, fmt.Errorf("source module path found in %s after the rewrite", file.Path)
+	if err := b.scanSourceLeak(files); err != nil {
+		return Project{}, err
+	}
+	if err := b.scanCrossReferences(files); err != nil {
+		return Project{}, err
+	}
+	return Project{Files: files}, nil
+}
+
+// goComponents returns the components of a stack with a Go module.
+func (b *builder) goComponents() []plan.ComponentPlan {
+	var found []plan.ComponentPlan
+	for _, component := range b.opts.Plan.Components {
+		info, known := manifest.LookupStack(component.Stack)
+		if known && info.GoModule {
+			found = append(found, component)
+		}
+	}
+	return found
+}
+
+// scanSourceLeak refuses a delivered file that still holds the source module
+// path. It runs whenever some target differs from the source, and skips the
+// folder of a component whose target is the source path itself.
+func (b *builder) scanSourceLeak(files []File) error {
+	goComponents := b.goComponents()
+	anyDiffers := len(goComponents) == 0 && b.firstTarget != b.source
+	var ownFolders []string
+	for _, component := range goComponents {
+		anyDiffers = anyDiffers || component.GoModule != b.source
+		if component.GoModule == b.source {
+			ownFolders = append(ownFolders, component.Name+"/")
+		}
+	}
+	if !anyDiffers {
+		return nil
+	}
+	needle := []byte(b.source)
+	for _, file := range files {
+		isOwn := false
+		for _, folder := range ownFolders {
+			isOwn = isOwn || strings.HasPrefix(file.Path, folder)
+		}
+		if !isOwn && bytes.Contains(file.Data, needle) {
+			return fmt.Errorf("%w: source module path found in %s after the rewrite", ErrGoModulePathLeak, file.Path)
+		}
+	}
+	return nil
+}
+
+// scanCrossReferences refuses a file under a Go component folder that holds
+// the module path of another Go component followed by a slash or a quote.
+func (b *builder) scanCrossReferences(files []File) error {
+	goComponents := b.goComponents()
+	if len(goComponents) < 2 {
+		return nil
+	}
+	for _, file := range files {
+		for _, own := range goComponents {
+			if !strings.HasPrefix(file.Path, own.Name+"/") {
+				continue
+			}
+			for _, other := range goComponents {
+				if other.Name == own.Name || other.GoModule == own.GoModule {
+					continue
+				}
+				for _, suffix := range []string{"/", "\""} {
+					if bytes.Contains(file.Data, []byte(other.GoModule+suffix)) {
+						return fmt.Errorf("%w: %s names the module path of component %s", ErrGoModuleCrossReference, file.Path, other.Name)
+					}
+				}
 			}
 		}
 	}
-	return Project{Files: files}, nil
+	return nil
 }
 
 // encodeSelection returns the canonical bytes of the recorded selection.

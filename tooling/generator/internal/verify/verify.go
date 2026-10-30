@@ -61,11 +61,11 @@ func Check(dir string) (Report, error) {
 	}
 	for _, module := range lock.Modules {
 		entries = append(entries, module.Files...)
-		folder, hasFolder := lock.FolderOf(module.Stack)
-		if !hasFolder {
-			return Report{}, fmt.Errorf("internal error: lock has no single component for stack %q", module.Stack)
+		holder, hasHolder := lock.ComponentOf(module)
+		if !hasHolder {
+			return Report{}, fmt.Errorf("internal error: lock has no component for module %s of stack %q", module.Module, module.Stack)
 		}
-		moduleDir, hasDir := lockfile.ModuleDir(folder, module.Stack, module.Module)
+		moduleDir, hasDir := lockfile.ModuleDir(holder.Name, module.Stack, module.Module)
 		if !hasDir {
 			return Report{}, fmt.Errorf("internal error: unknown stack %q", module.Stack)
 		}

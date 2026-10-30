@@ -52,6 +52,26 @@
       "reason": "marker line names the stack id"
     },
     {
+      "path": "specs/scripts/run-tck.mjs",
+      "context": "initializer.lock.json",
+      "reason": "the lock file name the generator writes at the project root"
+    },
+    {
+      "path": "specs/scripts/tck-component.test.mjs",
+      "context": "initializer.lock.json",
+      "reason": "the lock file name the generator writes at the project root"
+    },
+    {
+      "path": "specs/scripts/fixtures/multi/initializer.lock.json",
+      "context": "\"stack\": \"go-srv\"",
+      "reason": "stack id of the fixture lock"
+    },
+    {
+      "path": "specs/scripts/fixtures/multi/initializer.lock.json",
+      "context": "\"stack\": \"ng-web\"",
+      "reason": "stack id of the fixture lock"
+    },
+    {
       "path": "specs/**",
       "context": "x-initializer-",
       "reason": "contract extension keys"
