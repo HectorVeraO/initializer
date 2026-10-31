@@ -213,7 +213,7 @@ func writeTable(text *strings.Builder, rows [][]string) {
 func announce(ctx *Context, resolved source.Resolved) sourceRef {
 	ref, notes := announceSources(ctx, resolved)
 	for _, note := range notes {
-		fmt.Fprintf(ctx.Stderr, "note: %s\n", note)
+		fmt.Fprintf(ctx.diagnostics(), "note: %s\n", note)
 	}
 	ctx.Notes = notes
 	return ref

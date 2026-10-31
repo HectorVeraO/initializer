@@ -98,7 +98,7 @@ func announceSources(ctx *Context, resolved source.Resolved) (ref sourceRef, not
 // "checkout", "file", "files" (a file list) or "none".
 func announceRoot(ctx *Context, root source.Root, revision source.Revision, catalogFrom string) sourceRef {
 	ref := refOf(root, revision)
-	fmt.Fprintln(ctx.Stderr, sourcesLine(ref))
+	fmt.Fprintln(ctx.diagnostics(), sourcesLine(ref))
 	ctx.Logger.Info("sources_resolved",
 		slog.String("how", ref.How),
 		slog.String("dir", ref.Dir),
@@ -110,9 +110,9 @@ func announceRoot(ctx *Context, root source.Root, revision source.Revision, cata
 // announceWarnings prints and collects the GENERATOR_STALE warnings.
 func announceWarnings(ctx *Context, revision source.Revision, warnings []issue.Issue) {
 	for _, found := range warnings {
-		fmt.Fprintf(ctx.Stderr, "warning: %s [%s]\n", found.Message, found.Code)
+		fmt.Fprintf(ctx.diagnostics(), "warning: %s [%s]\n", found.Message, found.Code)
 		if found.Hint != "" {
-			fmt.Fprintf(ctx.Stderr, "  hint: %s\n", found.Hint)
+			fmt.Fprintf(ctx.diagnostics(), "  hint: %s\n", found.Hint)
 		}
 		ctx.Warnings = append(ctx.Warnings, Warning{Code: found.Code, Message: found.Message, Hint: found.Hint})
 		ctx.Logger.Warn("generator_stale",
