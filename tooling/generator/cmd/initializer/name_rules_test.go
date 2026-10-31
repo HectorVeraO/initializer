@@ -41,7 +41,7 @@ func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 	}
 	text := string(delivered)
 	for _, want := range []string{
-		"name: acme\n", "\n  acme-postgres:\n", "\n  acme-postgres-init:\n", "\n  acme-kratos-migrate:\n", "\n  acme-kratos:\n",
+		"name: acme-101\n", "\n  acme-postgres:\n", "\n  acme-postgres-init:\n", "\n  acme-kratos-migrate:\n", "\n  acme-kratos:\n",
 		"POSTGRES_DB: acme\n", "POSTGRES_USER: acme\n", "${ACME_PG_PASSWORD:-change-me-local-only}", "@acme-postgres:5432/kratos",
 		"\n  acme-srv:\n", "\n  acme-web:\n", "build: ../../acme-srv\n", "build: ../../acme-web\n",
 		"working_dir: /project/acme-srv\n", "GO_SRV_HOST: acme-srv:10100\n", "\n  acme-postgres-data:\n", "- acme-postgres-data:/var/lib/postgresql\n",
@@ -73,7 +73,9 @@ func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 	}
 	// The repo copy names its services bare; the delivered copy prefixes them with the project.
 	unprefixed := strings.NewReplacer("acme-postgres", "postgres", "acme-kratos", "kratos", "acme-srv", "go-srv", "acme-web", "ng-web").Replace(text)
-	if unprefixed != strings.Join(sourceLines, "\n") {
+	// The delivered compose project is "<project>-<band>"; the repo copy keeps the bare name.
+	renamedSource := strings.Replace(strings.Join(sourceLines, "\n"), "name: acme\n", "name: acme-101\n", 1)
+	if unprefixed != renamedSource {
 		t.Error("the compose file differs from the repo copy beyond the renamed reference names")
 	}
 	// The Kratos role and database and the init folder keep their fixed names.
@@ -118,6 +120,10 @@ func TestGenerateFromTheReferenceFileReproducesTheRepo(t *testing.T) {
 		if err != nil {
 			t.Errorf("%s has no repo copy: %v", slash, err)
 			return nil
+		}
+		if slash == ".deploy/local/docker-compose.yml" {
+			// The delivered compose project is "<project>-<band>"; the repo copy keeps the bare name.
+			source = bytes.Replace(source, []byte("name: initializer\n"), []byte("name: initializer-101\n"), 1)
 		}
 		if !bytes.Equal(delivered, source) {
 			t.Errorf("%s differs from the repo copy", slash)

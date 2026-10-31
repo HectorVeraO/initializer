@@ -58,15 +58,24 @@ func originOf(declared []catalogPort, stack string) (catalogPort, bool) {
 
 // portBand returns the effective band, reporting a band outside the range.
 func (r *resolver) portBand() PortPlan {
-	band := ports.DefaultBand
-	if r.sel.Ports != nil {
-		band = r.sel.Ports.Band
-		if !ports.ValidBand(band) {
-			r.add(manifest.CodeSelectionInvalid, selectionSource, "/ports/band", "must be an integer from 100 to 654")
-			band = ports.DefaultBand
-		}
+	band, isValid := r.effectiveBand()
+	if !isValid {
+		r.add(manifest.CodeSelectionInvalid, selectionSource, "/ports/band", "must be an integer from 100 to 654")
 	}
 	return PortPlan{RefBand: r.cat.PortBand, Band: band}
+}
+
+// effectiveBand returns the band of the selection, else the default, and
+// whether the selected band is in range. An out-of-range band falls back to the
+// default. It reports no issue.
+func (r *resolver) effectiveBand() (band int, isValid bool) {
+	if r.sel.Ports == nil {
+		return ports.DefaultBand, true
+	}
+	if !ports.ValidBand(r.sel.Ports.Band) {
+		return ports.DefaultBand, false
+	}
+	return r.sel.Ports.Band, true
 }
 
 // tokenOffsets maps every declared offset to the offset a token carries in the

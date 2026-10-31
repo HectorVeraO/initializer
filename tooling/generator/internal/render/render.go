@@ -124,6 +124,9 @@ func goSrvEnv(pairs []EnvPair) []EnvPair {
 type ReadmeRun struct {
 	// PortLow and PortHigh are the first and last host port of the band (10100, 10199).
 	PortLow, PortHigh int
+	// ComposeProject is the top-level name of the local compose file
+	// ("acme-101").
+	ComposeProject string
 	// Instances holds one entry per backend component in lock order; exactly one
 	// until multiple backend components are supported.
 	Instances []ReadmeInstance
@@ -148,6 +151,9 @@ type ReadmeInstance struct {
 func (run ReadmeRun) validate() error {
 	if run.PortLow >= run.PortHigh {
 		return fmt.Errorf("port range %d-%d must have PortLow below PortHigh", run.PortLow, run.PortHigh)
+	}
+	if run.ComposeProject == "" || strings.ContainsAny(run.ComposeProject, "`\r\n\x00") {
+		return errors.New("ComposeProject must be set and must not contain a backtick or a line break")
 	}
 	if len(run.Instances) == 0 {
 		return errors.New("the README needs at least one backend instance")

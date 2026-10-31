@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "generator": "0.1.0",
-  "catalogSha256": "8cd334c9da0a1c63f9bd87ae337f40f45f2fd7b4cfe586dbeaa3b4a5f1d87994",
+  "catalogSha256": "004ff90b194d94938318731c7138ec8fe5a8e16c9b1ad7eb730cf44309af5d6b",
   "selection": {
     "schema": 1,
     "project": {
@@ -218,7 +218,7 @@
   "generated": [
     {
       "path": "README.md",
-      "sha256": "52e859047a73237449c417879c3e17ab24821863d3bd61b9b31118ee5e1e8da7"
+      "sha256": "0afdf248dc62b1fa3e6a489ef3877a3274028bab47c2fcfc8cae7c66783d4f30"
     },
     {
       "path": "acme-backend-srv/cmd/server/modules.go",

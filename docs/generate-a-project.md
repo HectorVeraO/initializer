@@ -188,6 +188,20 @@ Ports       band 103
 
 Names are lowercase letters, digits and inner hyphens, 2 to 63 characters, starting with a letter. Anything else answers `NAME_INVALID` with an example.
 
+### Running several local stacks
+
+The generated `.deploy/local/docker-compose.yml` is named `<project name>-<port band>` (`acme-101`, `acme-103`). Docker Compose keys containers and volumes (the Postgres data) by that name, so:
+
+- Two projects keep separate containers and volumes when their project name or their port band differs: `mise run up`, `down` and `down -v` in one never touch the other. To run both at the same time their port bands must differ too, because the host ports come from the band.
+- Two projects with the same name and the same band share one compose project: the same containers and the same Postgres volume, and their host ports clash. Give each its own name (`--name`) or its own band (`--port-band`).
+
+```bash
+initializer generate acme-a -f acme.yaml
+initializer generate acme-b -f acme.yaml --port-band 103
+```
+
+Both folders hold the project `acme`; the first runs as compose project `acme-101`, the second as `acme-103`.
+
 ## 6. Components
 
 A component is one copy of one stack, in the folder named after it. Without `--component`, each stack produces one component named `<name>-<suffix>`. A project can hold several components of one stack, up to 7 backends. Each backend is an instance with its own origin, ports, Postgres and, with identity, its own Kratos and session key; a frontend binds to exactly one backend, and a backend serves at most one frontend.
