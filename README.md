@@ -6,7 +6,7 @@ initializer is a deterministic project generator in the spirit of Spring Initial
 
 Pre-alpha. The first catalog modules (`core`, `identity`, `parameters`, `feature-flags`) are on `main` for both stacks, and the generator writes go-srv and ng-web projects that pass their module TCKs in CI.
 
-Terms (TCK, catalog, selection, active tenant and the rest): `GLOSSARY.md`.
+Generate a project with the CLI: `docs/generate-a-project.md`. Terms (TCK, catalog, selection, active tenant and the rest): `GLOSSARY.md`.
 
 ## Layout
 

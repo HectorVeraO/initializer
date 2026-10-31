@@ -166,6 +166,56 @@ initializer generate starter -f starter.json
 
 The `selection` member is valid `-f` input for every project, also one with several backends: each backend entry then holds its own modules, Go module, database and services, and each frontend entry its `backend`.
 
+### File keys
+
+`schema` is required and is `1` or `2`; any other value answers `SELECTION_INVALID` (`must be 1 or 2`). A key marked `2` in the table answers `<key> needs schema 2` in a `schema: 1` file (`SELECTION_INVALID`), so use `schema: 2` as soon as the file holds one of them. An unknown key and a duplicate key are errors, not ignored.
+
+| Key | Holds | Schema | Flag |
+|---|---|---|---|
+| `schema` | `1` or `2` | 1 | - |
+| `project.name` | Project name (rule in section 5); required in schema 1 | 1 | `--name` |
+| `project.goModule` | Go module path | 1 | `--go-module` |
+| `stacks` | List of stack ids; required in schema 1 | 1 | `--stacks` |
+| `modules` | List of module ids; required in schema 1 | 1 | `--modules` |
+| `displayName` | Brand text of the web console | 2 | `--display-name` |
+| `database.name`, `database.user` | Database and its user | 2 | `--db-name`, `--db-user` |
+| `services` | Map of compose service key to name (`postgres`, `postgres-init`, `kratos-migrate`, `kratos`) | 2 | `--service` |
+| `ports.band` | Host port band, `100` to `654` | 2 | `--port-band` |
+| `components[]` | One entry per component (section 6); `stack` is required in each | 2 | `--component` |
+| `components[].stack`, `.name`, `.backend`, `.modules`, `.goModule` | Stack id, component name, bound backend (frontends), module list (backends), Go module (backends) | 2 | `--component` keys |
+| `components[].database.name`, `.database.user`, `.services` | Per-component database, user and service names (backends) | 2 | `--component` keys |
+
+`--all-modules` has no file key: list the modules.
+
+A backend with the smallest file (`schema: 1`):
+
+```yaml
+schema: 1
+project:
+  name: acme-min
+stacks: [go-srv]
+modules: [identity]
+```
+
+A backend and a console with every optional module, a brand text, a database name and a port band (`schema: 2`):
+
+```yaml
+schema: 2
+project:
+  name: acme-shop
+  goModule: example.com/acme-shop
+displayName: Acme Shop
+stacks: [go-srv, ng-web]
+modules: [identity, tenancy, api-keys, parameters, feature-flags]
+database:
+  name: acme_shop
+  user: acme_shop
+ports:
+  band: 102
+```
+
+A file with components, including two backends, is in section 6.
+
 Every generated project carries its choices as `initializer.selection.json` (with the port band when you set one), so `-f <project>/initializer.selection.json` regenerates it. The file records the project name, also when it came from the folder; the Go module, folders, database and services you did not set are derived from the name again. `--name` on the replay renames the project and every derived name, and a frontend bound to the derived backend follows it.
 
 ## 5. Names, database, services, display name, port band
