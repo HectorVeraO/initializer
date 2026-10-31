@@ -374,9 +374,6 @@ func TestResolveDefaultsName(t *testing.T) {
 		{"dot is the working directory", manifest.Input{}, ".", "workspace",
 			[]string{`project name "workspace" comes from the folder; pass --name to set it`, "Go module defaults to example.com/workspace; pass --go-module to set yours"},
 			wd},
-		{"demo without name or folder", manifest.Input{}, "", "demo",
-			[]string{`no name given; using "demo"`, "Go module defaults to example.com/demo; pass --go-module to set yours"},
-			filepath.Join(wd, "demo")},
 		{"absolute folder", manifest.Input{}, filepath.Join(wd, "abs", "shop"), "shop",
 			[]string{`project name "shop" comes from the folder; pass --name to set it`, "Go module defaults to example.com/shop; pass --go-module to set yours"},
 			filepath.Join(wd, "abs", "shop")},
@@ -391,6 +388,17 @@ func TestResolveDefaultsName(t *testing.T) {
 				t.Fatalf("name %q notes %q out %q", resolved.Selection.Project.Name, notes, out)
 			}
 		})
+	}
+}
+
+func TestResolveDefaultsRequiresAName(t *testing.T) {
+	_, _, _, issues := manifest.ResolveDefaults(manifest.Input{}, "", "/w", []string{"go-srv"})
+	if len(issues) != 1 {
+		t.Fatalf("issues = %v", issues)
+	}
+	found := issues[0]
+	if found.Code != manifest.CodeNameRequired || found.Path != "flags#/project/name" {
+		t.Fatalf("issue = %+v", found)
 	}
 }
 

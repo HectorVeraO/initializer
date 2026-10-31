@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"sort"
 	"strings"
 
@@ -82,10 +83,31 @@ func compositionRoot(component plan.ComponentPlan) (string, bool) {
 	return component.Name + "/" + info.CompositionRoot, true
 }
 
+// CodeGoModulePathLeak is the code of the source module path found in a
+// delivered file: the selection names it where it must have been replaced.
+const CodeGoModulePathLeak = "GO_MODULE_PATH_LEAK"
+
+// LeakError reports the source module path in a file the generator writes from
+// the selection (the README, the recorded selection or the lock): the
+// selection keeps the path where it must differ. A leak in a copied file is an
+// inconsistent catalog and stays a plain ErrGoModulePathLeak.
+type LeakError struct {
+	// File is the project path of the generated file.
+	File string
+}
+
+// Error returns the message, which starts with the code.
+func (e *LeakError) Error() string {
+	return fmt.Sprintf("%s: source module path found in %s after the rewrite", CodeGoModulePathLeak, e.File)
+}
+
+// Unwrap lets errors.Is match ErrGoModulePathLeak.
+func (e *LeakError) Unwrap() error { return ErrGoModulePathLeak }
+
 // Errors of the module path scans; the message starts with the code.
 var (
 	// ErrGoModulePathLeak reports the source module path in a delivered file.
-	ErrGoModulePathLeak = errors.New("GO_MODULE_PATH_LEAK")
+	ErrGoModulePathLeak = errors.New(CodeGoModulePathLeak)
 	// ErrGoModuleCrossReference reports the module path of another Go
 	// component in a file of a Go component folder.
 	ErrGoModuleCrossReference = errors.New("GO_MODULE_CROSS_REFERENCE")
@@ -891,7 +913,9 @@ func (b *builder) goComponents() []plan.ComponentPlan {
 
 // scanSourceLeak refuses a delivered file that still holds the source module
 // path. It runs whenever some target differs from the source, and skips the
-// folder of a component whose target is the source path itself.
+// folder of a component whose target is the source path itself. An occurrence
+// inside a target module path that extends the source path (the source path
+// plus "-fork" or "/v2", or one that contains it) is the target, not a leak.
 func (b *builder) scanSourceLeak(files []File) error {
 	goComponents := b.goComponents()
 	anyDiffers := len(goComponents) == 0 && b.firstTarget != b.source
@@ -905,17 +929,75 @@ func (b *builder) scanSourceLeak(files []File) error {
 	if !anyDiffers {
 		return nil
 	}
-	needle := []byte(b.source)
+	extending := b.extendingTargets()
 	for _, file := range files {
 		isOwn := false
 		for _, folder := range ownFolders {
 			isOwn = isOwn || strings.HasPrefix(file.Path, folder)
 		}
-		if !isOwn && bytes.Contains(file.Data, needle) {
-			return fmt.Errorf("%w: source module path found in %s after the rewrite", ErrGoModulePathLeak, file.Path)
+		if isOwn || !holdsSourcePath(file.Data, b.source, extending) {
+			continue
 		}
+		switch file.Path {
+		case readmeName, lockfile.SelectionName, lockfile.Name:
+			return &LeakError{File: file.Path}
+		}
+		return fmt.Errorf("%w: source module path found in %s after the rewrite", ErrGoModulePathLeak, file.Path)
 	}
 	return nil
+}
+
+// extendingTargets returns the distinct target module paths of the plan that
+// differ from the source path and contain it.
+func (b *builder) extendingTargets() []string {
+	candidates := []string{b.firstTarget}
+	for _, component := range b.goComponents() {
+		candidates = append(candidates, component.GoModule)
+	}
+	var found []string
+	for _, candidate := range candidates {
+		isExtending := candidate != b.source && strings.Contains(candidate, b.source)
+		if isExtending && !slices.Contains(found, candidate) {
+			found = append(found, candidate)
+		}
+	}
+	return found
+}
+
+// holdsSourcePath reports whether data holds an occurrence of source that is
+// not inside an occurrence of one of the extending target module paths.
+func holdsSourcePath(data []byte, source string, extending []string) bool {
+	covered := make([]bool, len(data))
+	for _, target := range extending {
+		offset := 0
+		for {
+			at := bytes.Index(data[offset:], []byte(target))
+			if at < 0 {
+				break
+			}
+			start := offset + at
+			for within := 0; within <= len(target)-len(source); within++ {
+				if strings.HasPrefix(target[within:], source) {
+					for i := start + within; i < start+within+len(source); i++ {
+						covered[i] = true
+					}
+				}
+			}
+			offset = start + 1
+		}
+	}
+	offset := 0
+	for {
+		at := bytes.Index(data[offset:], []byte(source))
+		if at < 0 {
+			return false
+		}
+		start := offset + at
+		if !covered[start] {
+			return true
+		}
+		offset = start + 1
+	}
 }
 
 // scanCrossReferences refuses a file under a Go component folder that holds

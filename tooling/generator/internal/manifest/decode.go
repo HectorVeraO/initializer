@@ -22,6 +22,7 @@ const (
 	CodeStackUnknown     = "STACK_UNKNOWN"
 	CodeSelectionInvalid = "SELECTION_INVALID"
 	CodeNameInvalid      = "NAME_INVALID"
+	CodeNameRequired     = "NAME_REQUIRED"
 )
 
 // decoder collects the issues of one input. At most one issue is kept per

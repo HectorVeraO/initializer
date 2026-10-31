@@ -29,14 +29,15 @@ const generateHelpText = `Usage:
   initializer generate [DIR] [flags]
 
 Create a project in DIR from the module catalog. DIR is relative to the
-working directory and must be absent or empty. Values come from flags, then
-from the input file (-f), then from defaults.
+working directory and must be absent or empty. Give DIR, --name or an input
+file (-f) that names the project. Values come from flags, then from the
+input file, then from defaults.
 
 Flags:
   -f, --file PATH
         Input file: .yaml, .yml or .json; - reads stdin (default: none)
   --name NAME
-        Project name (default: the folder's name, else "demo")
+        Project name (default: the folder's name; required without DIR or -f)
   --display-name TEXT
         Brand text of the web console (default: the project name)
   --go-module PATH
@@ -359,18 +360,34 @@ func TestGenerateWithoutAFolderUsesTheNameAndSaysSo(t *testing.T) {
 	}
 }
 
-func TestGenerateWithNeitherNameNorFolderFallsBackToDemo(t *testing.T) {
+func TestGenerateWithNeitherNameNorFolderIsAUsageError(t *testing.T) {
 	e := newEnv(t)
 	dir := inFreshDir(t)
 	code, _, stderr := execute(t, append([]string{"generate"}, e.flagSelection()...)...)
-	if code != exitOK {
+	if code != exitUsage {
+		t.Fatalf("exit %d, want %d: %s", code, exitUsage, stderr)
+	}
+	for _, want := range []string{
+		"error: needs a project name or a folder [NAME_REQUIRED]\n",
+		"  hint: name the project: initializer generate <name>  (or --name <name>, or -f <file>)\n",
+		"1 problem.\n",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr lacks %q: %s", want, stderr)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("the working directory holds %v (%v)", entries, err)
+	}
+}
+
+func TestGenerateWithNeitherNameNorFolderReportsEveryProblemAtOnce(t *testing.T) {
+	e := newEnv(t)
+	inFreshDir(t)
+	code, _, stderr := execute(t, append([]string{"generate", "--all-modules", "--modules", "parameters"}, e.flagSelection()[:4]...)...)
+	if code != exitUsage || !strings.Contains(stderr, "[NAME_REQUIRED]") || !strings.Contains(stderr, "cannot be combined with --modules") || !strings.Contains(stderr, "2 problems.") {
 		t.Fatalf("exit %d: %s", code, stderr)
-	}
-	if recordedName(t, filepath.Join(dir, "demo")) != "demo" {
-		t.Fatalf("the fallback project must be ./demo")
-	}
-	if notes := linesWithPrefix(stderr, "note:"); len(notes) != 1 || notes[0] != `note: no name given; using "demo"` {
-		t.Fatalf("notes = %q", notes)
 	}
 }
 

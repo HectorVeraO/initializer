@@ -64,14 +64,15 @@ func generateCommand() *Command {
 		Summary: "Create a project in DIR (default ./<name>)",
 		Usage:   "generate [DIR] [flags]",
 		Description: "Create a project in DIR from the module catalog. DIR is relative to the\n" +
-			"working directory and must be absent or empty. Values come from flags, then\n" +
-			"from the input file (-f), then from defaults.",
+			"working directory and must be absent or empty. Give DIR, --name or an input\n" +
+			"file (-f) that names the project. Values come from flags, then from the\n" +
+			"input file, then from defaults.",
 		MaxArgs: 1,
 		Flags: func(set *flagSet) any {
 			o := &generateOptions{}
 			set.str(&o.file, flagSpec{Name: "file", Short: "f", Placeholder: "PATH", Usage: "Input file: .yaml, .yml or .json; - reads stdin", Default: "none"})
 			set.str(&o.name, flagSpec{Name: "name", Placeholder: "NAME", Usage: "Project name",
-				Default: `the folder's name, else "demo"`})
+				Default: "the folder's name; required without DIR or -f"})
 			set.str(&o.displayName, flagSpec{Name: "display-name", Placeholder: "TEXT", Usage: "Brand text of the web console",
 				Default: "the project name"})
 			set.str(&o.goModule, flagSpec{Name: "go-module", Placeholder: "PATH", Usage: "Go module path",
@@ -164,6 +165,10 @@ func sniffFormat(data []byte) manifest.Format {
 func checkGenerate(set *flagSet, opts any, positionals []string) []Problem {
 	o := opts.(*generateOptions)
 	var problems []Problem
+	namesProject := o.file != "" || set.given["name"] > 0 || len(positionals) > 0
+	if !namesProject {
+		problems = append(problems, Problem{Message: "needs a project name or a folder", Code: manifest.CodeNameRequired})
+	}
 	problems = append(problems, duplicateComponentProblems(o.components)...)
 	problems = append(problems, duplicateServiceProblems(o.services)...)
 	if o.file != "" && !isKnownPath(o.file) {

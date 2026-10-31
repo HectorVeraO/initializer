@@ -117,26 +117,6 @@
       "reason": "Angular's word"
     },
     {
-      "path": "ng-web/angular.json",
-      "context": "ng-web",
-      "reason": "Angular project id, stack-internal (L115)"
-    },
-    {
-      "path": "ng-web/package.json",
-      "context": "ng-web",
-      "reason": "Angular project id, stack-internal (L115)"
-    },
-    {
-      "path": "ng-web/package-lock.json",
-      "context": "ng-web",
-      "reason": "Angular project id, stack-internal (L115)"
-    },
-    {
-      "path": "ng-web/Dockerfile",
-      "context": "dist/ng-web",
-      "reason": "Angular output folder"
-    },
-    {
       "path": "go-srv/internal/platform/core/coretest/coretest.go",
       "context": "\"go-srv\"",
       "reason": "test literal, an arbitrary service name"

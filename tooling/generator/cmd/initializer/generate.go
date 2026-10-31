@@ -39,6 +39,9 @@ type inputRun struct {
 	issues []issue.Issue
 	notes  []string
 	view   issueView
+	// fileBroken is true when the input file has parse or decode problems: it
+	// may hold the project name, so a missing name is not reported.
+	fileBroken bool
 }
 
 // readFailure is an input file that could not be read (exit 3).
@@ -92,9 +95,11 @@ func (o *generateOptions) readSelection(ctx *Context, dir string) (inputRun, *re
 			tree, parseIssues = manifest.ParseJSON(source, data)
 		}
 		run.issues = append(run.issues, parseIssues...)
+		run.fileBroken = len(parseIssues) > 0
 		if tree != nil {
 			decoded, decodeIssues := manifest.DecodeInput(source, tree)
 			run.issues = append(run.issues, decodeIssues...)
+			run.fileBroken = run.fileBroken || len(decodeIssues) > 0
 			file = &decoded
 		}
 	}
@@ -280,6 +285,13 @@ func generateProject(ctx *Context, in generateInput) int {
 	}
 	resolvedInput, defaultNotes, outDir, defaultIssues := manifest.ResolveDefaults(in.run.merged, in.dir, workDir, backendStackIDs(built))
 	issues := append(append([]issue.Issue(nil), in.run.issues...), defaultIssues...)
+	if hasCode(defaultIssues, manifest.CodeNameRequired) {
+		// Every other name derives from the project name; nothing else can be checked.
+		if in.run.fileBroken {
+			issues = in.run.issues
+		}
+		return reportIssues(ctx, issues, in.run.view)
+	}
 	notes := append(append(append([]string(nil), in.run.notes...), defaultNotes...), sourceNotes...)
 	componentIssues := plan.ResolveComponents(built, resolvedInput)
 	componentIssues = relocate(addNameHints(ctx.Args, resolvedInput, componentIssues), resolvedInput)
@@ -351,6 +363,16 @@ func generateProject(ctx *Context, in generateInput) int {
 		Recorded:      recorded,
 	})
 	if err != nil {
+		var leak *emit.LeakError
+		if errors.As(err, &leak) {
+			// The selection keeps the source module path where it must be replaced.
+			found := issue.Issue{
+				Code:    emit.CodeGoModulePathLeak,
+				Path:    leak.File,
+				Message: fmt.Sprintf("still holds the Go module path of the source, %q", resolved.GoModule),
+			}
+			return reportIssues(ctx, []issue.Issue{found}, in.run.view)
+		}
 		return fail(ctx, "project_build_failed", codeInternalError, err)
 	}
 	if in.dryRun {

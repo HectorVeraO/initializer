@@ -10,10 +10,6 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 )
 
-// DefaultProjectName names a project when neither a flag, the file nor the
-// folder does.
-const DefaultProjectName = "demo"
-
 // Origin sources of a value the generator filled in.
 const (
 	ArgsSource    = "args"
@@ -21,7 +17,7 @@ const (
 )
 
 // ResolveDefaults fills the project-level defaults on a merged input: the name
-// from DIR or "demo", the stacks from the components or the one backend stack,
+// from DIR, the stacks from the components or the one backend stack,
 // the modules as an empty list, and the Go module when a selected stack needs
 // one. dir is the DIR argument as given ("" when absent); wd is the working
 // directory; backendStacks are the catalog's stack ids with role backend. It
@@ -71,19 +67,23 @@ func ResolveDefaults(in Input, dir, wd string, backendStacks []string) (resolved
 	return resolved, notes, outDir, issues
 }
 
-// resolveName applies flag > file > DIR's base name > "demo" and reports the
-// notes and the NAME_INVALID of a folder name that is not a project name.
+// resolveName applies flag > file > DIR's base name and reports the notes, the
+// NAME_REQUIRED of a project no source names and the NAME_INVALID of a folder
+// name that is not a project name.
 func resolveName(resolved *Input, dir, wd string) (name string, notes []string, issues []issue.Issue) {
 	s := &resolved.Selection
 	if s.Has.Name {
 		return s.Project.Name, nil, nil
 	}
-	s.Has.Name = true
 	if dir == "" {
-		s.Project.Name = DefaultProjectName
-		resolved.Origins[patternName] = Origin{Source: DefaultSource, Pointer: patternName}
-		return DefaultProjectName, []string{fmt.Sprintf("no name given; using %q", DefaultProjectName)}, nil
+		issues = append(issues, issue.Issue{
+			Code:    CodeNameRequired,
+			Path:    issue.Path(FlagsSource, "/project/name"),
+			Message: "no project name: neither --name, a folder nor the input file gives one",
+		})
+		return "", nil, issues
 	}
+	s.Has.Name = true
 	name = folderBase(dir, wd)
 	s.Project.Name = name
 	resolved.Origins[patternName] = Origin{Source: ArgsSource, Pointer: "/dir"}

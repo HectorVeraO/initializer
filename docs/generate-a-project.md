@@ -82,10 +82,20 @@ Defaults when a flag is absent:
 | Value | Default |
 |---|---|
 | Folder | the `DIR` argument, else `./<name>` |
-| Project name | the folder's name, else `demo` |
+| Project name | the folder's name; none when `DIR`, `--name` and `-f` are all absent |
 | Stacks | the catalog's backend stack (`go-srv`) |
 | Modules | none beyond `core` and what the chosen modules require; `--all-modules` installs every module |
 | Go module | `example.com/<name>`; pass `--go-module` for yours |
+
+A project needs a name from `DIR`, `--name` or the input file. With none of them the command writes nothing and exits 2:
+
+```text
+error: needs a project name or a folder [NAME_REQUIRED]
+  hint: name the project: initializer generate <name>  (or --name <name>, or -f <file>)
+1 problem.
+```
+
+An input file without a project name, with no `DIR` or `--name`, answers `NAME_REQUIRED` as an issue (exit 1, nothing written).
 
 The folder must be absent or empty; otherwise nothing is written and the command answers `OUTPUT_NOT_EMPTY`:
 
@@ -160,7 +170,7 @@ Every generated project carries the resolved choices as `initializer.selection.j
 
 | Flag | Sets | Default |
 |---|---|---|
-| `--name NAME` | Project name | the folder's name, else `demo` |
+| `--name NAME` | Project name | the folder's name; required without `DIR` or `-f` |
 | `--display-name TEXT` | Brand text of the web console | the project name |
 | `--component STACK[=NAME][,KEY=VALUE...]` | Add or override a component of STACK (section 6) | one component per stack, named `<name>-<suffix>` (`acme-srv`, `acme-web`) |
 | `--db-name NAME`, `--db-user NAME` | Database and its user | `<name>` with `-` replaced by `_` |
@@ -187,6 +197,8 @@ Ports       band 103
 ```
 
 Names are lowercase letters, digits and inner hyphens, 2 to 63 characters, starting with a letter. Anything else answers `NAME_INVALID` with an example.
+
+A frontend component's name is also its Angular project id: the project key and the `dist/<name>` output folder in `angular.json`, the `name` in `package.json` and `package-lock.json`, and the build output folder in the `Dockerfile`.
 
 ### Running several local stacks
 
@@ -215,6 +227,8 @@ A component is one copy of one stack, in the folder named after it. Without `--c
 | `db-name`, `db-user` | Database and its user | backends |
 | `service.<key>` | Rename one compose service of the component | backends |
 | `backend` | Name of the backend the frontend binds to | frontends |
+
+`go-module` may extend the repository's own Go module path (`<repository module>-fork`, `<repository module>/v2`). A path that is still the repository's own, next to components with another module, answers `GO_MODULE_PATH_LEAK` (exit 1, nothing written).
 
 A frontend installs what its backend installs, so it takes no `modules`. A top-level `--modules` seeds every backend that sets no `modules` of its own. With several backends, set `--db-name` and `--db-user` per component.
 
