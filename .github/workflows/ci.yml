@@ -189,7 +189,13 @@ jobs:
               README.md|initializer.selection.json|initializer.lock.json|flags.yaml) continue ;;
             esac
             compared=$((compared + 1))
-            if ! cmp -s "${file}" "${GITHUB_WORKSPACE}/${path}"; then
+            expected="${GITHUB_WORKSPACE}/${path}"
+            if [ "${path}" = ".deploy/local/docker-compose.yml" ]; then
+              # The delivered compose project is "<project>-<band>"; the repository copy keeps the bare name.
+              expected="${RUNNER_TEMP}/compose-expected.yml"
+              sed 's/^name: initializer$/name: initializer-101/' "${GITHUB_WORKSPACE}/${path}" > "${expected}"
+            fi
+            if ! cmp -s "${file}" "${expected}"; then
               echo "round-trip difference: ${path}" >&2
               status=1
             fi
