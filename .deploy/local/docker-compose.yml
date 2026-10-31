@@ -31,9 +31,9 @@ services:
           role="$${variable#PG_ROLE_}"
           value="$${!variable}"
           psql -v ON_ERROR_STOP=1 --set role="$$role" --set database="$${value%%:*}" --set password="$${value#*:}" <<'SQL'
-        SELECT format('CREATE ROLE %I LOGIN', :'role')
+        SELECT format('CREATE ROLE %I LOGIN CREATEDB', :'role')
         WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'role')\gexec
-        SELECT format('ALTER ROLE %I PASSWORD %L', :'role', :'password')\gexec
+        SELECT format('ALTER ROLE %I CREATEDB PASSWORD %L', :'role', :'password')\gexec
         SELECT format('CREATE DATABASE %I OWNER %I', :'database', :'role')
         WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'database')\gexec
         SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', :'database')\gexec
