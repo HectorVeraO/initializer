@@ -79,7 +79,7 @@
     { "path": ".deploy/local/docker-compose.yml", "text": "- %{service.postgres}-data:/" },
     { "path": ".deploy/local/.example.env", "text": "Overriding %{envPrefix}_PG_PASSWORD in .env" },
     { "path": ".deploy/local/README.md", "text": "`%{component.go-srv}` HTTP API" },
-    { "path": ".deploy/local/README.md", "text": "passes it to `%{component.go-srv}`" },
+    { "path": ".deploy/local/README.md", "text": "compose %{composeEnvUse.go-srv} `%{component.go-srv}`" },
     { "path": ".deploy/local/README.md", "text": "Overrides go in `.deploy/local/%{instanceDir.go-srv}.env`" },
     { "path": ".deploy/local/README.md", "text": "`%{component.ng-web}` console, the public origin" },
     { "path": ".deploy/local/README.md", "text": "- %{component.go-srv} applies its own migrations" },
@@ -110,6 +110,12 @@
     },
     { "path": ".deploy/local/.example.env", "text": "and the %{component.go-srv} session" },
     { "path": ".deploy/local/.example.env", "text": "host-dev runs from %{component.go-srv}/." },
+    { "path": ".deploy/local/.example.env", "text": "Overrides go in .deploy/local/%{instanceDir.go-srv}.env" },
+    { "path": ".deploy/local/.example.env", "text": "(`mise run dev:%{task.go-srv}`)" },
+    { "path": ".deploy/local/README.md", "text": "`mise run dev:%{task.go-srv}`" },
+    { "path": ".deploy/local/README.md", "text": "`mise run dev:%{task.ng-web}`" },
+    { "path": ".deploy/local/README.md", "text": "mise run dev:%{task.go-srv}\n```" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "${APP_PUBLIC_BASE_URL%{instanceEnvSuffix.go-srv}:-" },
     { "path": ".deploy/local/README.md", "text": "`%{component.go-srv}` on 10100 also proxies" },
     { "path": "go-srv/internal/platform/core/core.go", "text": "defaultService    = \"%{component.go-srv}\"" }
   ]

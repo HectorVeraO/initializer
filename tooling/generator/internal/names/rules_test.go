@@ -194,7 +194,8 @@ func TestResolvedSlotsIncludeDerivedAndSkipEmpty(t *testing.T) {
 	}.Slots()
 	want := map[string]string{
 		"project": "acme-backend", "composeProject": "acme-backend", "envPrefix": "ACME_BACKEND", "component.go-srv": "acme-backend-srv",
-		"instanceDir.go-srv": "", "instanceSuffix.go-srv": "", "task.go-srv": "srv",
+		"instanceDir.go-srv": "", "instanceEnvSuffix.go-srv": "", "instanceSuffix.go-srv": "",
+		"composeEnvUse.go-srv": "reads it for its `${...}` values and passes it to", "task.go-srv": "srv",
 		"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -232,6 +233,7 @@ func TestInstanceSlotsTakeTheirMultiForm(t *testing.T) {
 	}.Slots()
 	want := map[string]string{
 		"instanceDir.go-srv": "acme-srv-first/", "instanceSuffix.go-srv": "-acme-srv-first",
+		"instanceEnvSuffix.go-srv": "_ACME_SRV_FIRST", "composeEnvUse.go-srv": "passes it to",
 		"task.go-srv": "acme-srv-first", "task.ng-web": "acme-web",
 		"tckTask.go-srv": `"tck:acme-srv-first"`, "tckArgs.go-srv": " -- --component acme-srv-first",
 	}
@@ -243,7 +245,7 @@ func TestInstanceSlotsTakeTheirMultiForm(t *testing.T) {
 }
 
 func TestDerivedSlotsAreNeverRecorded(t *testing.T) {
-	for _, slot := range []string{"instanceDir.go-srv", "instanceSuffix.go-srv", "task.go-srv", "task.ng-web", "tckTask.go-srv", "tckArgs.go-srv"} {
+	for _, slot := range []string{"instanceDir.go-srv", "instanceEnvSuffix.go-srv", "instanceSuffix.go-srv", "composeEnvUse.go-srv", "task.go-srv", "task.ng-web", "tckTask.go-srv", "tckArgs.go-srv"} {
 		if names.IsRecorded(slot) {
 			t.Errorf("%s is recorded", slot)
 		}
@@ -281,7 +283,8 @@ func TestReferenceReturnsTheSlotMap(t *testing.T) {
 	want := map[string]string{
 		"project": "initializer", "composeProject": "initializer", "envPrefix": "INITIALIZER",
 		"component.go-srv": "go-srv", "component.ng-web": "ng-web",
-		"instanceDir.go-srv": "", "instanceSuffix.go-srv": "", "task.go-srv": "srv", "task.ng-web": "web",
+		"instanceDir.go-srv": "", "instanceEnvSuffix.go-srv": "", "instanceSuffix.go-srv": "",
+		"composeEnvUse.go-srv": "reads it for its `${...}` values and passes it to", "task.go-srv": "srv", "task.ng-web": "web",
 		"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
 	}
 	if len(issues) > 0 || !reflect.DeepEqual(got, want) {

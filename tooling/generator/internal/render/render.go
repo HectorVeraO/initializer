@@ -298,8 +298,9 @@ func readmeMulti(in ReadmeInput) ([]byte, error) {
 		Modules                []ReadmeModule
 		Run                    ReadmeRun
 		Instances              []multiInstance
+		HasIdentity            bool
 		CookieNote             bool
-	}{in.Name, in.GeneratorVersion, in.Modules, in.Run, instances, identities > 1})
+	}{in.Name, in.GeneratorVersion, in.Modules, in.Run, instances, identities > 0, identities > 1})
 }
 
 // moduleIDPattern is the module id grammar shared by both stacks.

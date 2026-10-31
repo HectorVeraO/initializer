@@ -200,6 +200,8 @@ Ports       band 103
 
 Names are lowercase letters, digits and inner hyphens, 2 to 63 characters, starting with a letter. Anything else answers `NAME_INVALID` with an example.
 
+With the identity module, Kratos keeps the fixed role and database `kratos` and the password key `KRATOS_PG_PASSWORD` in a single-component project. The project name `kratos` (its prefix `KRATOS` makes the app's password key that fixed key), `--db-name kratos` and `--db-user kratos` answer `NAME_RESERVED` with an example; a project without identity keeps every name. A several-backend project derives the Kratos names (`<database>_kratos`), so only the project name is reserved there.
+
 A frontend component's name is also its Angular project id: the project key and the `dist/<name>` output folder in `angular.json`, the `name` in `package.json` and `package-lock.json`, and the build output folder in the `Dockerfile`.
 
 ### Running several local stacks
@@ -309,7 +311,9 @@ Past that, the command answers `PORT_BAND_EXHAUSTED`, names the port and its com
 
 In a multi-component project:
 
-- Per-component files live in `.deploy/local/<component>/`: `.example.env` (local-only defaults, read by compose and the host-dev task) and, with identity, `kratos/`. Put overrides in `.deploy/local/<component>/.env` (optional, gitignored, same keys as `.example.env`). `.deploy/local/.env` is read only by compose interpolation and reaches every instance.
+- Per-component files live in `.deploy/local/<component>/`: `.example.env` (local-only defaults, read by compose and the host-dev task) and, with identity, `kratos/`. Put overrides in `.deploy/local/<component>/.env` (optional, gitignored, same keys as `.example.env`); compose passes it to the container and `mise run dev:<component>` reads it. `.deploy/local/.env` is read only by compose interpolation and reaches every instance.
+- The host-dev tasks are `dev:<component>` (`mise run dev:acme-srv-first`, `mise run dev:acme-web`); the generated READMEs and `.example.env` files name them.
+- Each Kratos reads its public origin in Docker mode from `APP_PUBLIC_BASE_URL_<COMPONENT>` in `.deploy/local/.env` (the backend's name in upper case, `-` as `_`; default: the instance's origin). To move an instance, set that variable and `APP_PUBLIC_BASE_URL` in the instance's `.env` to the same value.
 - A single-component project keeps `.example.env` and `kratos/` directly in `.deploy/local/`, and overrides go in `.deploy/local/.env`.
 - On `localhost` one browser profile is signed in to one identity instance at a time, because cookies are per host, not per port: signing in to the second backend overwrites the first's cookies. Use a second browser profile or a private window per instance.
 - `mise run tck:<component>` runs the TCK against one backend; the generated `README.md` lists the tags and the `.env` keys each needs.
@@ -417,7 +421,7 @@ Codes a person meets:
 | `COMPONENT_AMBIGUOUS` | A top-level `--db-name` or `--db-user` would be inherited by several backends; set it per component. |
 | `MODULES_UNUSED` | Top-level `--modules` while every backend sets its own; drop one of them. |
 | `PORT_BAND_EXHAUSTED` | The components' host ports do not fit the band (offsets 0-98); the hint says how many fit, use fewer components. |
-| `NAME_RESERVED` | A component name equals a folder of the project (for example `specs`); choose another. |
+| `NAME_RESERVED` | A component name equals a folder of the project (for example `specs`), or, with identity, the project name is `kratos` (also `--db-name` and `--db-user` in a single-component project), the fixed Kratos name; choose another. |
 | `COMPONENT_MERGE_AMBIGUOUS` | A `--component` flag names no component of the file; edit the file. |
 | `SOURCE_ROOT_NOT_FOUND` | No clone found from the working directory or the binary; run inside a clone, pass `--root <clone>`, or set `INITIALIZER_ROOT`. |
 | `REQUIRES_STACK_MISMATCH` | A catalog build error: a module names different required modules in its two stacks. |

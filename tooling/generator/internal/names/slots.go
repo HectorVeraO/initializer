@@ -25,6 +25,15 @@ const (
 	SlotInstanceDir = "instanceDir.go-srv"
 	// SlotInstanceSuffix is "" in a single project, "-<component>" in a multi project.
 	SlotInstanceSuffix = "instanceSuffix.go-srv"
+	// SlotInstanceEnvSuffix is "" in a single project, "_<COMPONENT>" in a multi
+	// project: it ends a compose variable of the bound backend so each instance
+	// reads a variable of its own.
+	SlotInstanceEnvSuffix = "instanceEnvSuffix.go-srv"
+	// SlotComposeEnvUse is the verb phrase that says what compose does with the
+	// override file of the bound backend: in a single project that file is
+	// .deploy/local/.env, which compose also reads for its ${...} values; in a
+	// multi project compose only passes the per-component file to the backend.
+	SlotComposeEnvUse = "composeEnvUse.go-srv"
 	// SlotTCKTask is the mise TCK task key, quoted in a multi project.
 	SlotTCKTask = "tckTask.go-srv"
 	// SlotTCKArgs is the extra argument text of the mise TCK run line.
@@ -128,12 +137,24 @@ type DerivedSlot struct {
 
 // Derived is the registry of derived slots, sorted by Name.
 var Derived = []DerivedSlot{
+	{Name: SlotComposeEnvUse, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		if r.Multi && r.Components[backendStack] != "" {
+			return "passes it to"
+		}
+		return "reads it for its `${...}` values and passes it to"
+	}},
 	{Name: SlotComposeProject, NotRecorded: true, Value: func(r Resolved, _ string) string {
 		return ComposeProject(r.Project, r.Band)
 	}},
 	{Name: SlotEnvPrefix, Value: func(r Resolved, _ string) string { return EnvPrefix(r.Project) }},
 	{Name: SlotInstanceDir, MayBeEmpty: true, NotRecorded: true, Value: func(r Resolved, _ string) string {
 		return instanceValue(r, "", "/")
+	}},
+	{Name: SlotInstanceEnvSuffix, MayBeEmpty: true, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		if !r.Multi || r.Components[backendStack] == "" {
+			return ""
+		}
+		return "_" + EnvPrefix(r.Components[backendStack])
 	}},
 	{Name: SlotInstanceSuffix, MayBeEmpty: true, NotRecorded: true, Value: func(r Resolved, _ string) string {
 		return instanceValue(r, "-", "")

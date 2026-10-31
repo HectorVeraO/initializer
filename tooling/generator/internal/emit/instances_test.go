@@ -162,8 +162,8 @@ func TestComposeGivesEachInstanceItsAppAndKratosAndSharesOnePostgres(t *testing.
 		`GO_SRV_ADDR: ":10101"`, "GO_SRV_HOST: acme-srv-second:10101",
 		"- path: ./acme-srv-first/.example.env", "- path: ./acme-srv-second/.env",
 		"- ./acme-srv-first/kratos:/etc/config/kratos:ro", "- ./acme-srv-second/kratos:/etc/config/kratos:ro",
-		"SERVE_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:10100}/kratos/",
-		"SERVE_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:10120}/kratos/",
+		"SERVE_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL_ACME_SRV_FIRST:-http://localhost:10100}/kratos/",
+		"SERVE_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL_ACME_SRV_SECOND:-http://localhost:10120}/kratos/",
 	} {
 		if !strings.Contains(compose, want) {
 			t.Errorf("compose lacks %q", want)
