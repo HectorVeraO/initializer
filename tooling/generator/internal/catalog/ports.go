@@ -35,6 +35,21 @@ const (
 // strideMessage is the text of a missing or out-of-range stride.
 const strideMessage = "stride must be an integer of at least 1"
 
+// sharedStrideMessage is the text of a shared port that also has a stride.
+const sharedStrideMessage = "a shared port has no stride: every component uses the one offset"
+
+// strideProblem returns why the stride of port is wrong, or "" when it is
+// right: at least 1 for a port per component, absent for a shared one.
+func strideProblem(port ports.Port) string {
+	switch {
+	case port.Shared && port.Stride != 0:
+		return sharedStrideMessage
+	case port.Shared || port.Stride >= 1:
+		return ""
+	}
+	return strideMessage
+}
+
 const portsReferenceMissing = "some manifest declares ports and the reference file is not tracked"
 
 // declaresPorts reports whether any module declares ports or port files.
@@ -96,8 +111,8 @@ func (b *builder) checkPortDeclarations() {
 			} else {
 				firstName[port.Name] = here
 			}
-			if port.Stride < 1 {
-				b.add(CodePortStrideInvalid, doc.path, pointer+"/stride", strideMessage)
+			if message := strideProblem(port); message != "" {
+				b.add(CodePortStrideInvalid, doc.path, pointer+"/stride", message)
 			}
 			isInRange := port.Offset >= bandLowOffset && port.Offset <= maxPortOffset
 			if !isInRange {
@@ -145,15 +160,22 @@ func ownedPaths(doc *moduleDoc) map[string]bool {
 	return owned
 }
 
-// declaredOffsets returns the offsets of every port of the catalog.
+// declaredOffsets returns the offsets of every port of the catalog, each
+// mapped to whether the port is shared by every component of its stack.
 func (b *builder) declaredOffsets() map[int]bool {
 	offsets := map[int]bool{}
 	for _, doc := range b.modules {
 		for _, port := range doc.module.Ports {
-			offsets[port.Offset] = true
+			offsets[port.Offset] = port.Shared
 		}
 	}
 	return offsets
+}
+
+// isDeclared reports whether some port of the catalog has the offset.
+func isDeclared(declared map[int]bool, offset int) bool {
+	_, found := declared[offset]
+	return found
 }
 
 // checkPortTokens applies PORT_BAND_MIXED and PORT_UNDECLARED to the tokens
@@ -185,8 +207,9 @@ func (b *builder) checkPortTokens() error {
 				case token.Band != b.portBand:
 					b.addPlain(CodePortBandMixed, path, fmt.Sprintf("line %d: token %s has band %d, the reference band is %d", token.Line, text, token.Band, b.portBand))
 				case isBound:
-				case declared[token.Offset]:
-					if isProject && !layout.inRun(token.Start) {
+				case isDeclared(declared, token.Offset):
+					isShared := declared[token.Offset]
+					if isProject && !isShared && !layout.inRun(token.Start) {
 						b.addPlain(CodePortUnscoped, path, fmt.Sprintf("line %d: token %s has offset %d, a port of one instance, outside every run of a project-scope file", token.Line, text, token.Offset))
 					}
 				default:
@@ -271,8 +294,8 @@ func (v *validator) modulePorts(pointer string, module ModuleEntry) {
 		if port.Offset < bandLowOffset || port.Offset > maxPortOffset {
 			v.add(at+"/offset", "must be from 0 to 98")
 		}
-		if port.Stride < 1 {
-			v.add(at+"/stride", "must be an integer of at least 1")
+		if message := strideProblem(port); message != "" {
+			v.add(at+"/stride", message)
 		}
 	}
 	for i, path := range module.PortFiles {

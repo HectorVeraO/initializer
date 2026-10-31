@@ -8,6 +8,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/markers"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 )
 
@@ -125,9 +126,14 @@ func (r *resolver) slotProviders(slot string) []string {
 					continue
 				}
 				for _, block := range rule.Blocks {
-					kind, id, _ := strings.Cut(block, ":")
-					if kind == "module" {
-						found[id] = true
+					kind, ids := markers.SplitRef(block)
+					if kind != "module" {
+						continue
+					}
+					for _, id := range ids {
+						if id != markers.MultiID {
+							found[id] = true
+						}
 					}
 				}
 			}
@@ -170,6 +176,8 @@ func (r *resolver) checkInfraNames(pairs []pairPlan) {
 		}
 	}
 	r.checkServiceConflicts(pairs)
+	r.checkSharedServices(pairs)
+	r.checkDatabaseNames(pairs)
 	r.checkGoModules(pairs)
 }
 
@@ -216,6 +224,9 @@ func (r *resolver) checkInfraOverrides(pair pairPlan) {
 		_, isKnown := r.cat.Reference[slot]
 		unknown := fmt.Sprintf("%s: no service key %q; keys: %s", pointer, key, strings.Join(keys, ", "))
 		switch {
+		case r.multi && names.IsSharedService(key):
+			r.addUnused(pointer, fmt.Sprintf("%s: the %q service is shared by every backend", pointer, key),
+				fmt.Sprintf("set it for the project: --service %s=<name>", key))
 		case isKnown && !live[slot]:
 			r.addUnused(pointer, r.notLiveMessage(pointer, fmt.Sprintf("a %q service", key), slot), "")
 		case isKnown, r.multi:
@@ -261,7 +272,7 @@ func (r *resolver) checkServiceLengths(pair pairPlan) {
 	longestSuffix := 0
 	var derived []string
 	for _, key := range liveServiceKeys(pair.live) {
-		if _, isGiven := pair.src.services[key]; isGiven {
+		if r.isGivenService(pair, key) {
 			continue
 		}
 		derived = append(derived, key)
@@ -278,8 +289,163 @@ func (r *resolver) checkServiceLengths(pair pairPlan) {
 		if r.multi {
 			found.Hint = fmt.Sprintf("shorten the component name to %d characters or fewer, or set service.%s on it", limit, key)
 		}
+		if r.multi && names.IsSharedService(key) {
+			found, _ = NameTooLong(selectionSource, "/project/name", "compose service", value)
+			found.Hint = fmt.Sprintf("shorten the project name to %d characters or fewer, or set services.%s", limit, key)
+		}
 		r.issues = append(r.issues, found)
 	}
+}
+
+// checkSharedServices reports NAME_OVERRIDE_UNUSED for a project-level service
+// of a multi project that no live rule uses, or that the catalog does not know.
+// The other top-level services of a multi project are reported by the
+// component checks.
+func (r *resolver) checkSharedServices(pairs []pairPlan) {
+	if !r.multi {
+		return
+	}
+	keys := r.serviceKeys()
+	for _, key := range sortedKeys(r.sel.Services) {
+		if !names.IsSharedService(key) {
+			continue
+		}
+		pointer := "/services" + issue.Pointer(key)
+		slot := names.ServiceSlot(key)
+		if _, isKnown := r.cat.Reference[slot]; !isKnown {
+			r.addUnused(pointer, fmt.Sprintf("%s: no service key %q; keys: %s", pointer, key, strings.Join(keys, ", ")), "")
+			continue
+		}
+		isLive := false
+		for _, pair := range pairs {
+			isLive = isLive || pair.live[slot]
+		}
+		if !isLive {
+			r.addUnused(pointer, r.notLiveMessage(pointer, fmt.Sprintf("a %q service", key), slot), "")
+		}
+	}
+}
+
+// pairUses reports whether a live name rule of the pair's backend modules uses
+// slot. A slot no lock records has no live flag, so it is read from the rules.
+func (r *resolver) pairUses(pair pairPlan, slot string) bool {
+	installed := map[string]bool{markers.MultiID: r.multi}
+	for _, module := range pair.backend.Modules {
+		installed[module.Module] = true
+	}
+	selected := map[string]bool{pair.backend.Stack: true}
+	for _, module := range pair.backend.Modules {
+		for _, rule := range module.Names {
+			used, err := names.Slots(rule.Text)
+			if err == nil && slices.Contains(used, slot) && ruleIsLive(rule, installed, selected) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// nameHolder is one database or role name of the shared Postgres server.
+type nameHolder struct {
+	label   string
+	pointer string
+}
+
+// checkDatabaseNames reports, in a multi project whose backends share one
+// Postgres server, NAME_CONFLICT for two databases or two roles that resolve to
+// one name (the server's own "postgres" included) and NAME_TOO_LONG for a Kratos
+// name derived past the identifier limit.
+func (r *resolver) checkDatabaseNames(pairs []pairPlan) {
+	if !r.multi {
+		return
+	}
+	databases := map[string][]nameHolder{"postgres": {{label: "the Postgres server's database"}}}
+	roles := map[string][]nameHolder{"postgres": {{label: "the Postgres server's superuser"}}}
+	for _, pair := range pairs {
+		if !pair.named {
+			continue
+		}
+		name := pair.backend.Name
+		namePointer, userPointer := pair.src.derivedAt, pair.src.derivedAt
+		if pair.src.database.Name != "" {
+			namePointer = pair.src.dbPointer + "/name"
+		}
+		if pair.src.database.User != "" {
+			userPointer = pair.src.dbPointer + "/user"
+		}
+		database, user := databaseNamesOf(pair.src)
+		databases[database] = append(databases[database], nameHolder{label: "database of " + name, pointer: namePointer})
+		roles[user] = append(roles[user], nameHolder{label: "database user of " + name, pointer: userPointer})
+		if !r.pairUses(pair, names.SlotKratosDatabase) {
+			continue
+		}
+		for _, derived := range []struct {
+			slot, label, pointer string
+			into                 map[string][]nameHolder
+		}{
+			{names.SlotKratosDatabase, "Kratos database of " + name, namePointer, databases},
+			{names.SlotKratosUser, "Kratos database user of " + name, userPointer, roles},
+		} {
+			value := pair.values[derived.slot]
+			if found, isLong := NameTooLong(selectionSource, derived.pointer, derived.label, value); isLong {
+				found.Hint = "shorten the database name and user to 56 characters or fewer"
+				r.issues = append(r.issues, found)
+				continue
+			}
+			derived.into[value] = append(derived.into[value], nameHolder{label: derived.label, pointer: derived.pointer})
+		}
+	}
+	for _, group := range []map[string][]nameHolder{databases, roles} {
+		for _, value := range sortedKeys(group) {
+			holders := group[value]
+			if len(holders) < 2 {
+				continue
+			}
+			labels := make([]string, 0, len(holders))
+			for _, holder := range holders {
+				labels = append(labels, holder.label)
+			}
+			message := fmt.Sprintf("%s all resolve to %q on the shared Postgres server", strings.Join(labels, ", "), value)
+			if len(holders) == 2 {
+				message = fmt.Sprintf("%s both resolve to %q on the shared Postgres server", strings.Join(labels, " and "), value)
+			}
+			for _, holder := range holders {
+				if holder.pointer == "" {
+					continue
+				}
+				r.issues = append(r.issues, issue.Issue{
+					Code: CodeNameConflict, Path: issue.Path(selectionSource, holder.pointer), Message: message,
+					Hint: "give each backend its own database name and user (db-name, db-user)",
+				})
+			}
+		}
+	}
+}
+
+// givenService returns the name the selection gives to a service key of the
+// pair: the pair's entry, and for a shared service of a multi project the
+// project's services.
+func (r *resolver) givenService(pair pairPlan, key string) (string, bool) {
+	if r.multi && names.IsSharedService(key) {
+		given, isGiven := r.sel.Services[key]
+		return given, isGiven
+	}
+	given, isGiven := pair.src.services[key]
+	return given, isGiven
+}
+
+// givenServicePointer locates the input givenService read.
+func (r *resolver) givenServicePointer(pair pairPlan, key string) string {
+	if r.multi && names.IsSharedService(key) {
+		return "/services" + issue.Pointer(key)
+	}
+	return pair.src.servicesPointer + issue.Pointer(key)
+}
+
+// isGivenService reports whether the selection names the service key of pair.
+func (r *resolver) isGivenService(pair pairPlan, key string) bool {
+	_, isGiven := r.givenService(pair, key)
+	return isGiven
 }
 
 // infraOwner is one live value that a conflict can name.
@@ -305,6 +471,7 @@ func (r *resolver) checkServiceConflicts(pairs []pairPlan) {
 		groups[input.name] = append(groups[input.name], infraOwner{label: input.label, pointer: input.namePointer, isGiven: input.given})
 		componentCount[input.name]++
 	}
+	sharedSeen := map[string]bool{}
 	for _, pair := range pairs {
 		if !pair.named {
 			continue
@@ -312,13 +479,21 @@ func (r *resolver) checkServiceConflicts(pairs []pairPlan) {
 		for _, key := range liveServiceKeys(pair.live) {
 			value := pair.values[names.ServiceSlot(key)]
 			owner := infraOwner{label: "service " + key, pointer: pair.src.derivedAt, isService: true}
-			if given, isGiven := pair.src.services[key]; isGiven {
+			isShared := r.multi && names.IsSharedService(key)
+			if isShared {
+				if sharedSeen[key] {
+					continue
+				}
+				sharedSeen[key] = true
+				owner.pointer = "/project/name"
+			}
+			if given, isGiven := r.givenService(pair, key); isGiven {
 				if !names.ValidLabel(given) {
 					continue
 				}
-				owner.pointer, owner.isGiven = pair.src.servicesPointer+issue.Pointer(key), true
+				owner.pointer, owner.isGiven = r.givenServicePointer(pair, key), true
 			}
-			if r.multi {
+			if r.multi && !isShared {
 				owner.label += " of " + pair.backend.Name
 			}
 			groups[value] = append(groups[value], owner)
@@ -418,6 +593,12 @@ func (r *resolver) defaultInfraSlot(slot string, src infraSource) (string, bool)
 	key, isService := strings.CutPrefix(slot, serviceSlotPrefix)
 	if !isService || !names.ValidLabel(key) {
 		return "", false
+	}
+	if r.multi && names.IsSharedService(key) {
+		if given, isGiven := r.sel.Services[key]; isGiven {
+			return given, true
+		}
+		return r.sel.Project.Name + "-" + key, true
 	}
 	if given, isGiven := src.services[key]; isGiven {
 		return given, true

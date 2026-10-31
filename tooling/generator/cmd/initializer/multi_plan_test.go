@@ -222,7 +222,7 @@ func TestADryRunDocumentOfAMultiPlanHasComponentsAndTheComponentOfEachAddition(t
 		t.Fatalf("second = %v", second)
 	}
 	names := second["names"].(map[string]any)
-	if names["component.go-srv"] != "acme-srv-second" || names["service.postgres"] != "acme-srv-second-postgres" || names["service.kratos"] != "acme-srv-second-kratos" {
+	if names["component.go-srv"] != "acme-srv-second" || names["service.postgres"] != "acme-postgres" || names["service.kratos"] != "acme-srv-second-kratos" {
 		t.Fatalf("names = %v", names)
 	}
 	if grep, _ := second["tck"].(map[string]any)["grep"].(string); !strings.HasPrefix(grep, "@(") || !strings.Contains(grep, "identity") {

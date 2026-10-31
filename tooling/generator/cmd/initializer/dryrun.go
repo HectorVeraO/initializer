@@ -34,9 +34,9 @@ type dryRun struct {
 // resolvedSelection returns the resolved document of a dry run: schema 2, every
 // default filled in, the installed modules and every component with its
 // effective name. It is valid input for -f. A project with several backends
-// holds the modules, Go module, database and services in each backend entry
-// and the bound backend in each frontend entry, with none of them at the top
-// level, where they would apply to every backend.
+// holds the modules, Go module, database and own services in each backend entry
+// and the bound backend in each frontend entry. At the top level it keeps only
+// the services every backend shares (the Postgres server and its init step).
 func (d dryRun) resolvedSelection() manifest.Selection {
 	selection := d.plan.Selection
 	selection.Schema = manifest.MaxSchema
@@ -44,6 +44,7 @@ func (d dryRun) resolvedSelection() manifest.Selection {
 	selection.AllModules = false
 	selection.Ports = &manifest.Ports{Band: d.plan.Ports.Band}
 	selection.Components = make([]manifest.Component, 0, len(d.plan.Components))
+	shared := map[string]string{}
 	if !d.plan.Multi() {
 		for _, component := range d.plan.Components {
 			selection.Components = append(selection.Components, manifest.Component{Stack: component.Stack, Name: component.Name})
@@ -62,15 +63,32 @@ func (d dryRun) resolvedSelection() manifest.Selection {
 				database := component.Database
 				entry.Database = &database
 			}
-			entry.Services = copyStrings(component.Services)
+			entry.Services = copyStrings(instanceServices(component.Services))
+			for key, value := range component.Services {
+				if names.IsSharedService(key) {
+					shared[key] = value
+				}
+			}
 		case manifest.RoleFrontend:
 			entry.Backend = component.Partner
 		}
 		selection.Components = append(selection.Components, entry)
 	}
 	selection.Modules, selection.Has.Modules = nil, false
-	selection.Database, selection.Services = nil, nil
+	selection.Database, selection.Services = nil, copyStrings(shared)
 	return selection
+}
+
+// instanceServices returns the services of one backend that belong to it: the
+// services every backend shares are set for the project.
+func instanceServices(services map[string]string) map[string]string {
+	own := map[string]string{}
+	for key, value := range services {
+		if !names.IsSharedService(key) {
+			own[key] = value
+		}
+	}
+	return own
 }
 
 // copyStrings returns a copy of values, nil when it is empty.

@@ -123,3 +123,18 @@ func TestIdentityOwnsPostgresInitUnderCoreDeployFolder(t *testing.T) {
 		t.Error("core must not own the identity folder")
 	}
 }
+
+func TestAMarkerWithAlternativesNamesKnownModulesOrMulti(t *testing.T) {
+	ok := cleanRepo(t)
+	put(ok, composeFile, "name: fixture-app\n# initializer:module identity|multi\nservices: {}\n# initializer:end identity|multi\n")
+	_, issues := buildRepo(t, ok)
+	assertCodes(t, issues)
+
+	unknown := cleanRepo(t)
+	put(unknown, composeFile, "name: fixture-app\n# initializer:module identity|ghost\nservices: {}\n# initializer:end identity|ghost\n")
+	_, issues = buildRepo(t, unknown)
+	assertCodes(t, issues, "MARKER_MODULE_UNKNOWN")
+	if len(issues) != 1 || issues[0].Message != "marker names ghost, which has no module manifest (line 2)" {
+		t.Errorf("issues = %+v", issues)
+	}
+}

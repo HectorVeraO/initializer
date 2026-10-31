@@ -55,7 +55,7 @@ func TestAValidTwoBackendSelectionGenerates(t *testing.T) {
 func TestComponentChecksAreCollectedInOneRun(t *testing.T) {
 	e := newEnv(t)
 	code, stdout, _ := executeJSON(t, e.args("--stacks", "go-srv,ng-web", "--modules", "parameters", "--db-name", "shared",
-		"--service", "postgres=shared-pg", "--component", "go-srv", "--component", "go-srv", "--component", "ng-web=acme-web")...)
+		"--service", "kratos=shared-id", "--component", "go-srv", "--component", "go-srv", "--component", "ng-web=acme-web")...)
 	doc := issuesOf(t, stdout)
 	want := []string{"COMPONENT_AMBIGUOUS", "COMPONENT_BACKEND_REQUIRED", "COMPONENT_NAME_REQUIRED", "NAME_OVERRIDE_UNUSED"}
 	if code != exitIssues || !reflect.DeepEqual(doc.codes(), want) {

@@ -318,10 +318,10 @@ func TestEntryNamesHoldTheInstanceSlotsAndTheTopLevelOnlyTheProjectOnes(t *testi
 	for i := range resolved.Components {
 		if resolved.Components[i].Name == "acme-srv-second" {
 			resolved.Components[i].Database = manifest.Database{Name: "acme_second", User: "acme_second_owner"}
-			resolved.Components[i].Services = map[string]string{"postgres": "acme-srv-second-postgres"}
+			resolved.Components[i].Services = map[string]string{"postgres": "acme-postgres", "kratos": "acme-srv-second-kratos"}
 		}
 	}
-	for slot, value := range map[string]string{"database": "acme_first", "dbUser": "acme_first", "service.postgres": "acme-srv-first-postgres"} {
+	for slot, value := range map[string]string{"database": "acme_first", "dbUser": "acme_first", "service.postgres": "acme-postgres"} {
 		resolved.Live[slot] = true
 		resolved.Slots[slot] = value
 	}
@@ -334,14 +334,18 @@ func TestEntryNamesHoldTheInstanceSlotsAndTheTopLevelOnlyTheProjectOnes(t *testi
 	if second.Database == nil || second.Database.Name != "acme_second" || second.Database.User != "acme_second_owner" || lock.Components[0].Database != nil {
 		t.Fatalf("databases: first %+v, second %+v", lock.Components[0].Database, second.Database)
 	}
-	want := map[string]string{"component.go-srv": "acme-srv-second", "database": "acme_second", "dbUser": "acme_second_owner", "service.postgres": "acme-srv-second-postgres"}
+	want := map[string]string{
+		"component.go-srv": "acme-srv-second", "database": "acme_second", "dbUser": "acme_second_owner",
+		"service.postgres": "acme-postgres", "service.kratos": "acme-srv-second-kratos",
+	}
 	for key, value := range want {
 		if second.Names[key] != value {
 			t.Errorf("names[%s] = %q, want %q", key, second.Names[key], value)
 		}
 	}
-	if len(lock.Names) != 1 || lock.Names["project"] != "acme" {
-		t.Errorf("top-level names = %v, want only the project", lock.Names)
+	// The top level holds the project and the services every backend shares.
+	if len(lock.Names) != 2 || lock.Names["project"] != "acme" || lock.Names["service.postgres"] != "acme-postgres" {
+		t.Errorf("top-level names = %v, want the project and the shared postgres service", lock.Names)
 	}
 }
 

@@ -116,46 +116,135 @@ func TestATokenMeansThePortOfTheComponentOrItsPartner(t *testing.T) {
 	}
 }
 
-func TestMaxBackendComponentsIsTheLargestCountWithUniquePorts(t *testing.T) {
-	cat := repoCatalog(t)
-	// The planner's own output gives each port's host offset at index 0 and
-	// at index 1; the next count fits only while its last index stays in the band.
-	p := mustResolve(t, cat, backendsSelection(2))
-	first, second := byName(t, p, "b1"), byName(t, p, "b2")
-	highestNext := 0
-	for name, port := range first.Ports {
-		stride := second.Ports[name] - port
-		last := port - p.Ports.Band*100 + plan.MaxBackendComponents*stride
-		if last > highestNext {
-			highestNext = last
+// sharedPorts are the ports every backend uses: one Postgres server.
+var sharedPorts = map[string]bool{"postgres": true}
+
+// assertUniqueOffsets fails unless every offset of the plan is inside the band
+// and used by one port; a shared port has one owner per component, all naming
+// the same port.
+func assertUniqueOffsets(t *testing.T, label string, p plan.Plan) {
+	t.Helper()
+	for offset, owners := range offsetsOf(p) {
+		portNames := map[string]bool{}
+		for _, owner := range owners {
+			_, port, _ := strings.Cut(owner, "/")
+			portNames[port] = true
 		}
-	}
-	if highestNext <= 98 {
-		t.Errorf("%d backends would still fit the band (highest offset %d); plan.MaxBackendComponents is too low", plan.MaxBackendComponents+1, highestNext)
-	}
-	atLimit := mustResolve(t, cat, backendsSelection(plan.MaxBackendComponents))
-	for offset, owners := range offsetsOf(atLimit) {
-		if len(owners) != 1 || offset > 98 {
-			t.Errorf("%d backends: offset %d is used by %v", plan.MaxBackendComponents, offset, owners)
+		isOnePort := len(portNames) == 1
+		isShared := false
+		for name := range portNames {
+			isShared = sharedPorts[name]
+		}
+		if offset > 98 || !isOnePort || (len(owners) > 1 && !isShared) {
+			t.Errorf("%s: offset %d is used by %v", label, offset, owners)
 		}
 	}
 }
 
-func TestEveryBackendCountUpToTheLimitPlansUniquePorts(t *testing.T) {
+// modulesSelection selects n backends b1..bn with the given modules, and a
+// console bound to each of the first webs backends.
+func modulesSelection(n, webs int, modules ...string) manifest.Selection {
+	sel := manifest.Selection{
+		Schema:  2,
+		Project: manifest.Project{Name: "acme", GoModule: "example.com/acme"},
+		Stacks:  []string{"go-srv"},
+	}
+	for i := 1; i <= n; i++ {
+		sel.Components = append(sel.Components, manifest.Component{Stack: "go-srv", Name: fmt.Sprintf("b%d", i), Modules: modules, HasModules: true})
+	}
+	for i := 1; i <= webs; i++ {
+		if i == 1 {
+			sel.Stacks = append(sel.Stacks, "ng-web")
+		}
+		sel.Components = append(sel.Components, manifest.Component{Stack: "ng-web", Name: fmt.Sprintf("w%d", i), Backend: fmt.Sprintf("b%d", i)})
+	}
+	return sel
+}
+
+// largestBackendCount returns the most backends the band holds for the shape,
+// found by planning one more backend until the plan reports PORT_BAND_EXHAUSTED.
+func largestBackendCount(t *testing.T, cat catalog.Catalog, webs func(n int) int, modules ...string) int {
+	t.Helper()
+	largest := 0
+	for n := 1; n <= 60; n++ {
+		p, issues := plan.Resolve(cat, modulesSelection(n, webs(n), modules...))
+		if len(issues) > 0 {
+			for _, found := range issues {
+				if found.Code != plan.CodePortBandExhausted {
+					t.Fatalf("%d backends: %+v", n, found)
+				}
+			}
+			return largest
+		}
+		assertUniqueOffsets(t, fmt.Sprintf("%d backends", n), p)
+		largest = n
+	}
+	t.Fatalf("the band still fits 60 backends")
+	return largest
+}
+
+func TestTheBandLimitsBackendsOnlyByTheOffsetsItHolds(t *testing.T) {
 	cat := repoCatalog(t)
-	for n := 1; n <= plan.MaxBackendComponents; n++ {
-		p := mustResolve(t, cat, backendsSelection(n))
-		for offset, owners := range offsetsOf(p) {
-			if len(owners) != 1 || offset > 98 {
-				t.Errorf("%d backends: offset %d is used by %v", n, offset, owners)
+	identityAndMore := []string{"identity", "api-keys", "tenancy"}
+	cases := []struct {
+		name    string
+		webs    func(n int) int
+		modules []string
+		want    int
+	}{
+		// srv takes offsets 0..n-1 and stops before the shared Postgres at 32.
+		{"core only, no console", func(int) int { return 0 }, nil, 32},
+		{"identity and more, no console", func(int) int { return 0 }, identityAndMore, 32},
+		// srv runs into the console at offset 20 as soon as one console exists.
+		{"identity and more, one console", func(int) int { return 1 }, identityAndMore, 20},
+		// consoles take offsets 20..19+n and stop before the shared Postgres at 32.
+		{"identity and more, a console per backend", func(n int) int { return n }, identityAndMore, 12},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := largestBackendCount(t, cat, tc.webs, tc.modules...); got != tc.want {
+				t.Errorf("the band holds %d backends, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestOneMoreBackendThanTheBandHoldsIsPortBandExhausted(t *testing.T) {
+	_, issues := plan.Resolve(repoCatalog(t), modulesSelection(33, 0, "identity"))
+	if len(issues) == 0 {
+		t.Fatal("33 backends planned")
+	}
+	for _, found := range issues {
+		if found.Code != plan.CodePortBandExhausted {
+			t.Errorf("unexpected issue %+v", found)
+		}
+	}
+	first := issues[0]
+	if !strings.Contains(first.Message, "b33 (index 32)") || !strings.Contains(first.Message, "offset 32") {
+		t.Errorf("message = %q", first.Message)
+	}
+	wantHint := "the band holds offsets 0-98 and each component takes its own: with these modules and the other components of this selection at most 32 go-srv components fit"
+	if !strings.Contains(first.Hint, wantHint) {
+		t.Errorf("hint = %q", first.Hint)
+	}
+}
+
+func TestBackendsShareOnePostgresPort(t *testing.T) {
+	cat := repoCatalog(t)
+	for n := 2; n <= 6; n++ {
+		p := mustResolve(t, cat, modulesSelection(n, 0, "identity"))
+		for _, component := range p.Components {
+			if component.Ports["postgres"] != 10132 {
+				t.Errorf("%d backends: %s postgres port = %d, want the shared 10132", n, component.Name, component.Ports["postgres"])
 			}
 		}
-		if n == 1 {
-			continue
-		}
-		first := byName(t, p, "b1")
-		if first.Ports["srv"] != 10100 || first.Ports["postgres"] != 10132 || first.Ports["kratos-public"] != 10133 || first.Ports["kratos-admin"] != 10134 {
+		first, last := byName(t, p, "b1"), byName(t, p, fmt.Sprintf("b%d", n))
+		if first.Ports["srv"] != 10100 || first.Ports["kratos-public"] != 10133 || first.Ports["kratos-admin"] != 10134 {
 			t.Errorf("%d backends: index 0 moved: %v", n, first.Ports)
+		}
+		wantPublic := 10133 + 2*(n-1)
+		if last.Ports["kratos-public"] != wantPublic || last.Ports["kratos-admin"] != wantPublic+1 {
+			t.Errorf("%d backends: last kratos ports = %v, want %d and %d", n, last.Ports, wantPublic, wantPublic+1)
 		}
 	}
 }
@@ -220,15 +309,6 @@ func TestPortBandExhaustedReportsAClashOnce(t *testing.T) {
 	_, issues := plan.Resolve(cat, sel)
 	if len(issues) != 1 || issues[0].Code != plan.CodePortBandExhausted || !strings.Contains(issues[0].Message, "offset 33") {
 		t.Fatalf("issues = %+v", issues)
-	}
-}
-
-func TestPortBandIsNotCheckedPastTheComponentLimit(t *testing.T) {
-	_, issues := plan.Resolve(repoCatalog(t), backendsSelection(plan.MaxBackendComponents+1))
-	for _, found := range issues {
-		if found.Code == plan.CodePortBandExhausted {
-			t.Fatalf("the band check ran past the limit: %+v", found)
-		}
 	}
 }
 

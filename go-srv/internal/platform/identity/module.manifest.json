@@ -9,14 +9,13 @@
   "requiresModules": [],
   "tablePrefixes": ["iam"],
   "ports": [
-    { "name": "kratos-public", "offset": 33, "stride": 10 },
-    { "name": "kratos-admin", "offset": 34, "stride": 10 }
+    { "name": "kratos-public", "offset": 33, "stride": 2 },
+    { "name": "kratos-admin", "offset": 34, "stride": 2 }
   ],
   "portFiles": [".deploy/local/kratos/kratos.yml"],
   "perComponent": [".deploy/local/kratos/"],
   "files": [
     ".deploy/local/kratos/",
-    ".deploy/local/postgres-init/",
     "go-srv/internal/platform/identity/",
     "specs/tck-support/actors/"
   ],

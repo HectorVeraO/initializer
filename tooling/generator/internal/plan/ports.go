@@ -142,50 +142,89 @@ func (r *resolver) fillPorts(components []ComponentPlan, layout PortPlan) {
 	}
 }
 
-// checkPortBand reports PORT_BAND_EXHAUSTED once per clash or overflow: a
-// computed offset of an installed port that another port already uses or that
-// passes the band. It runs only when no stack passes MaxBackendComponents.
-func (r *resolver) checkPortBand(components []ComponentPlan) {
-	counts := map[string]int{}
-	for _, component := range components {
-		counts[component.Stack]++
-		if counts[component.Stack] > MaxBackendComponents {
-			return
-		}
-	}
+// portClash is one installed port that cannot take its computed offset.
+type portClash struct {
+	component string
+	index     int
+	stack     string
+	port      string
+	detail    string
+}
+
+// findPortClashes returns the first clash of each port of components, in
+// component order: a computed offset of an installed port that another port
+// already uses or that passes the band.
+func findPortClashes(components []ComponentPlan) []portClash {
 	type user struct {
 		component string
 		index     int
 		port      string
 	}
+	var clashes []portClash
 	used := map[int]user{}
 	for _, component := range components {
 		for _, module := range component.Modules {
 			for _, port := range module.Ports {
 				offset := port.OffsetAt(component.Index)
 				here := user{component: component.Name, index: component.Index, port: port.Name}
+				clash := portClash{component: here.component, index: here.index, stack: component.Stack, port: here.port}
 				if offset > highestOffset {
-					r.addPortBand(here.port, here.component, here.index,
-						fmt.Sprintf("would use offset %d; the band has 0-%d", offset, highestOffset))
+					clash.detail = fmt.Sprintf("would use offset %d; the band has 0-%d", offset, highestOffset)
+					clashes = append(clashes, clash)
 					continue
 				}
-				if first, taken := used[offset]; taken {
-					r.addPortBand(here.port, here.component, here.index,
-						fmt.Sprintf("would use offset %d, which port %s of %s (index %d) uses", offset, first.port, first.component, first.index))
+				first, taken := used[offset]
+				if taken && port.Shared && first.port == port.Name {
+					continue
+				}
+				if taken {
+					clash.detail = fmt.Sprintf("would use offset %d, which port %s of %s (index %d) uses", offset, first.port, first.component, first.index)
+					clashes = append(clashes, clash)
 					continue
 				}
 				used[offset] = here
 			}
 		}
 	}
+	return clashes
 }
 
-// addPortBand records one PORT_BAND_EXHAUSTED issue.
-func (r *resolver) addPortBand(port, component string, index int, detail string) {
-	r.issues = append(r.issues, issue.Issue{
-		Code:    CodePortBandExhausted,
-		Path:    issue.Path(selectionSource, "/components"),
-		Message: fmt.Sprintf("port %s of %s (index %d) %s", port, component, index, detail),
-		Hint:    "use fewer components, or a catalog whose port strides fit the band",
-	})
+// largestFit returns the most components of stack the band holds with the same
+// modules per component and the components of every other stack unchanged: the
+// components of stack past the returned count are dropped from the layout.
+func largestFit(components []ComponentPlan, stack string) int {
+	count := 0
+	for _, component := range components {
+		if component.Stack == stack {
+			count++
+		}
+	}
+	for fit := count; fit > 0; fit-- {
+		kept := make([]ComponentPlan, 0, len(components))
+		for _, component := range components {
+			if component.Stack != stack || component.Index < fit {
+				kept = append(kept, component)
+			}
+		}
+		if len(findPortClashes(kept)) == 0 {
+			return fit
+		}
+	}
+	return 0
+}
+
+// checkPortBand reports PORT_BAND_EXHAUSTED once per clash or overflow: a
+// computed offset of an installed port that another port already uses or that
+// passes the band. The number of components of a stack has no other limit.
+func (r *resolver) checkPortBand(components []ComponentPlan) {
+	for _, clash := range findPortClashes(components) {
+		fit := largestFit(components, clash.stack)
+		r.issues = append(r.issues, issue.Issue{
+			Code:    CodePortBandExhausted,
+			Path:    issue.Path(selectionSource, "/components"),
+			Message: fmt.Sprintf("port %s of %s (index %d) %s", clash.port, clash.component, clash.index, clash.detail),
+			Hint: fmt.Sprintf("the band holds offsets 0-%d and each component takes its own: with these modules and the other components of this selection at most %d %s components fit; use fewer, or a catalog whose port strides fit the band",
+				highestOffset, fit, clash.stack),
+		})
+	}
 }

@@ -1,6 +1,7 @@
 package names
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,7 +31,41 @@ const (
 	SlotTCKArgs = "tckArgs.go-srv"
 	// SlotTaskPrefix starts the per-stack dev task slot ("task.go-srv").
 	SlotTaskPrefix = "task."
+	// SlotServerDatabase and SlotServerUser name the maintenance database and
+	// the superuser role of the Postgres server: the backend's own database and
+	// user in a single project, "postgres" and "postgres" in a multi project.
+	SlotServerDatabase = "serverDatabase"
+	SlotServerUser     = "serverUser"
+	// SlotKratosDatabase and SlotKratosUser name the database and the role of
+	// the Kratos of one backend: "kratos" in a single project,
+	// "<database>_kratos" and "<user>_kratos" in a multi project.
+	SlotKratosDatabase = "kratosDatabase"
+	SlotKratosUser     = "kratosUser"
 )
+
+// sharedServiceKeys are the compose services one project has once, whatever
+// its number of backends: the Postgres server and its init step.
+var sharedServiceKeys = []string{"postgres", "postgres-init"}
+
+// IsSharedService reports whether the service key names a service the backends
+// of a project share.
+func IsSharedService(key string) bool {
+	return slices.Contains(sharedServiceKeys, key)
+}
+
+// kratosName returns the name of a Kratos database or role: "kratos" in a
+// single project and "<base>_kratos" in a multi project, where base is the
+// backend's database or user. It is empty when base is: a project without a
+// database has no Kratos database either.
+func kratosName(r Resolved, base string) string {
+	switch {
+	case base == "":
+		return ""
+	case r.Multi:
+		return base + "_kratos"
+	}
+	return "kratos"
+}
 
 const (
 	backendStack = "go-srv"
@@ -103,6 +138,24 @@ var Derived = []DerivedSlot{
 	{Name: SlotInstanceSuffix, MayBeEmpty: true, NotRecorded: true, Value: func(r Resolved, _ string) string {
 		return instanceValue(r, "-", "")
 	}},
+	{Name: SlotKratosDatabase, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		return kratosName(r, r.Database)
+	}},
+	{Name: SlotKratosUser, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		return kratosName(r, r.DBUser)
+	}},
+	{Name: SlotServerDatabase, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		if !r.Multi {
+			return r.Database
+		}
+		return "postgres"
+	}},
+	{Name: SlotServerUser, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		if !r.Multi {
+			return r.DBUser
+		}
+		return "postgres"
+	}},
 	{Name: SlotTaskPrefix, NotRecorded: true, Value: func(r Resolved, stack string) string {
 		if r.Multi && r.Components[stack] != "" {
 			return r.Components[stack]
@@ -157,14 +210,16 @@ func derivedOf(slot string) (DerivedSlot, string, bool) {
 }
 
 // IsProjectLevel reports whether slot has one value for the whole project:
-// the project name, the display name and the environment prefix. Every other
-// slot takes the value of one component or instance.
+// the project name, the display name, the environment prefix, the Postgres
+// server's own database and user, and the shared services. Every other slot
+// takes the value of one component or instance.
 func IsProjectLevel(slot string) bool {
 	switch slot {
-	case SlotProject, SlotDisplayName, SlotEnvPrefix, SlotComposeProject:
+	case SlotProject, SlotDisplayName, SlotEnvPrefix, SlotComposeProject, SlotServerDatabase, SlotServerUser:
 		return true
 	}
-	return false
+	key, isService := strings.CutPrefix(slot, servicePrefix)
+	return isService && IsSharedService(key)
 }
 
 // IsRecorded reports whether a lock may record slot: false for the derived

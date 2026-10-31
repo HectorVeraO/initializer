@@ -27,15 +27,15 @@ const runsComposeText = `name: fixture
 
 services:
   # initializer:stack go-srv
-  postgres:
-    image: postgres:18
+  cache:
+    image: redis:8
   # initializer:end go-srv
   # initializer:module identity
 
   kratos:
     image: oryd/kratos:v26.2.0
     depends_on:
-      - postgres
+      - cache
   # initializer:end identity
   # initializer:stack go-srv
 
@@ -105,9 +105,9 @@ run = "npm --prefix specs run tck"
 // runsRules are the name rules of the overlay.
 var runsRules = []struct{ path, text string }{
 	{runsCompose, "name: %{project}"},
-	{runsCompose, "\n  %{service.postgres}:\n"},
+	{runsCompose, "\n  %{service.cache}:\n"},
 	{runsCompose, "\n  %{service.kratos}:\n"},
-	{runsCompose, "\n      - %{service.postgres}\n"},
+	{runsCompose, "\n      - %{service.cache}\n"},
 	{runsCompose, "\n  %{component.go-srv}:\n"},
 	{runsCompose, "\n      - %{component.go-srv}\n"},
 	{runsCompose, "\n  %{component.ng-web}:\n"},
@@ -167,7 +167,7 @@ func runsFixture(t *testing.T) (string, catalog.Catalog, []byte) {
 
 	referencePath := ".initializer/reference.json"
 	reference := read(referencePath)
-	withServices := strings.Replace(reference, `"ports": {`, `"services": {"kratos": "kratos", "postgres": "postgres"},`+"\n  "+`"ports": {`, 1)
+	withServices := strings.Replace(reference, `"ports": {`, `"services": {"cache": "cache", "kratos": "kratos"},`+"\n  "+`"ports": {`, 1)
 	if withServices == reference {
 		t.Fatal("the reference file was not changed")
 	}
@@ -219,12 +219,12 @@ func TestRunsRepeatTheComposeInstanceOncePerBackend(t *testing.T) {
 	project := buildRuns(t, multiSelection())
 	compose := projectFile(t, project, runsCompose)
 	assertContainsAll(t, "compose", compose,
-		"\n  acme-srv-first-postgres:\n", "\n  acme-srv-second-postgres:\n",
+		"\n  acme-srv-first-cache:\n", "\n  acme-srv-second-cache:\n",
 		"\n  acme-srv-first-kratos:\n", "\n  acme-srv-second-kratos:\n",
 		"\n  acme-srv-first:\n", "\n  acme-srv-second:\n",
-		"- acme-srv-first-postgres\n", "- acme-srv-second-postgres\n",
+		"- acme-srv-first-cache\n", "- acme-srv-second-cache\n",
 		"- path: ./acme-srv-first/.example.env", "- path: ./acme-srv-second/.example.env")
-	if strings.Contains(compose, "\n  postgres:\n") || strings.Contains(compose, "\n  go-srv:\n") {
+	if strings.Contains(compose, "\n  cache:\n") || strings.Contains(compose, "\n  go-srv:\n") {
 		t.Errorf("a reference service key survived:\n%s", compose)
 	}
 	assertCount(t, "compose", compose, "name: acme\n", 1)
@@ -278,7 +278,7 @@ func TestRunsKeepOneInstanceAtTheReference(t *testing.T) {
 	project := buildRuns(t, webSelection("tenancy"))
 	compose := projectFile(t, project, runsCompose)
 	assertContainsAll(t, "compose", compose,
-		"\n  acme-backend-postgres:\n", "\n  acme-backend-kratos:\n", "\n  acme-backend-srv:\n", "\n  acme-backend-web:\n",
+		"\n  acme-backend-cache:\n", "\n  acme-backend-kratos:\n", "\n  acme-backend-srv:\n", "\n  acme-backend-web:\n",
 		"- path: ./.example.env", "labels: [tenancy]", "      - acme-backend-srv\n")
 	mise := projectFile(t, project, runsMise)
 	assertContainsAll(t, "mise.toml", mise, `[tasks."dev:srv"]`, `[tasks."dev:web"]`, "[tasks.tck]",

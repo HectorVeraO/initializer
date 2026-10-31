@@ -289,17 +289,19 @@ func multiReadmeInput() render.ReadmeInput {
 			{Component: "acme-srv-second", Stack: "go-srv", Module: "feature-flags", Version: "0.1.0"},
 			{Component: "acme-web", Stack: "ng-web", Module: "core", Version: "0.1.0"},
 		},
-		Run: render.ReadmeRun{PortLow: 10100, PortHigh: 10199, ComposeProject: "acme-101", Instances: []render.ReadmeInstance{
-			{Backend: "acme-srv-first", OriginURL: "http://localhost:10100", HasIdentity: true, DevSrvTask: "dev:acme-srv-first", TCKTask: "tck:acme-srv-first"},
-			{Backend: "acme-srv-second", Web: "acme-web", OriginURL: "http://localhost:10120", HasIdentity: true,
-				DevSrvTask: "dev:acme-srv-second", DevWebTask: "dev:acme-web", TCKTask: "tck:acme-srv-second"},
-		}},
+		Run: render.ReadmeRun{PortLow: 10100, PortHigh: 10199, ComposeProject: "acme-101",
+			PostgresService: "acme-postgres", PostgresInitService: "acme-postgres-init", PostgresPort: 10132,
+			Instances: []render.ReadmeInstance{
+				{Backend: "acme-srv-first", OriginURL: "http://localhost:10100", HasIdentity: true, DevSrvTask: "dev:acme-srv-first", TCKTask: "tck:acme-srv-first"},
+				{Backend: "acme-srv-second", Web: "acme-web", OriginURL: "http://localhost:10120", HasIdentity: true,
+					DevSrvTask: "dev:acme-srv-second", DevWebTask: "dev:acme-web", TCKTask: "tck:acme-srv-second"},
+			}},
 		Components: []render.ReadmeComponent{
 			{Name: "acme-srv-first", Stack: "go-srv", Origin: "http://localhost:10100",
 				Ports:   []render.ReadmePort{{Name: "srv", Port: 10100}, {Name: "postgres", Port: 10132}, {Name: "kratos-public", Port: 10133}},
 				TCKTags: []string{"@core", "@identity", "@otel"}},
 			{Name: "acme-srv-second", Stack: "go-srv", Origin: "http://localhost:10120",
-				Ports:   []render.ReadmePort{{Name: "srv", Port: 10101}, {Name: "postgres", Port: 10142}, {Name: "kratos-public", Port: 10143}},
+				Ports:   []render.ReadmePort{{Name: "srv", Port: 10101}, {Name: "postgres", Port: 10132}, {Name: "kratos-public", Port: 10143}},
 				TCKTags: []string{"@core", "@feature-flags", "@identity", "@otel"},
 				TCKEnv:  []render.EnvPair{{Key: "APP_FLAGS_FILE", Value: "specs/feature-flags/tck/fixtures/flags.yaml"}}},
 			{Name: "acme-web", Stack: "ng-web", Backend: "acme-srv-second", Ports: []render.ReadmePort{{Name: "web", Port: 10120}}},
@@ -331,6 +333,7 @@ func TestReadmeMultiStatesTheOverridesAndTheCookieNote(t *testing.T) {
 		"one browser profile is signed in to one identity instance at a time",
 		"mise run dev:acme-srv-first", "mise run dev:acme-web", "mise run tck:acme-srv-first",
 		"to `.deploy/local/acme-srv-second/.env`",
+		"The backends share one Postgres server, `acme-postgres` on host port 10132: every backend and every Kratos has its own database and user on it, created by `acme-postgres-init` on every `up`.",
 	} {
 		if !strings.Contains(string(got), want) {
 			t.Errorf("README lacks %q:\n%s", want, got)

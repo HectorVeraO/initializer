@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
@@ -29,8 +30,20 @@ const (
 // coreModule is the one id a marker may never name.
 const coreModule = "core"
 
+// MultiID is the pseudo module a module marker may name: it is installed in
+// every context of a project with two or more backend components, and in no
+// other. A marker lists several ids joined by IDSeparator and is kept when any
+// of them is installed.
+const MultiID = "multi"
+
+// IDSeparator joins the module ids of one marker ("identity|multi").
+const IDSeparator = "|"
+
 // maxIDLength is the longest module id a marker may name.
 const maxIDLength = 31
+
+// maxIDsLength is the longest id text of one marker.
+const maxIDsLength = 63
 
 var (
 	idPattern        = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
@@ -161,12 +174,49 @@ func (s Syntax) parseMarker(text string) (marker, bool) {
 			continue
 		}
 		id := text[len(formPrefix) : len(text)-len(s.suffix)]
-		if len(id) > maxIDLength || !idPattern.MatchString(id) {
+		if !validIDs(id, form.kind) {
 			continue
 		}
 		return marker{isOpen: form.isOpen, kind: form.kind, id: id}, true
 	}
 	return marker{}, false
+}
+
+// validIDs reports whether id is the id text of a marker: one id, or for a
+// module marker (or a closing marker, whose kind is unknown) ids joined by
+// IDSeparator.
+func validIDs(id string, kind Kind) bool {
+	if len(id) > maxIDsLength {
+		return false
+	}
+	parts := strings.Split(id, IDSeparator)
+	if kind == KindStack && len(parts) > 1 {
+		return false
+	}
+	for _, part := range parts {
+		if len(part) > maxIDLength || !idPattern.MatchString(part) {
+			return false
+		}
+	}
+	return true
+}
+
+// IDs returns the ids the block names: one, or several for a module block that
+// lists alternatives.
+func (b Block) IDs() []string {
+	return strings.Split(b.ID, IDSeparator)
+}
+
+// Ref returns the canonical text of the block in a name rule: "module:<ids>" or
+// "stack:<id>".
+func (b Block) Ref() string {
+	return string(b.Kind) + ":" + b.ID
+}
+
+// SplitRef splits a block text of a name rule into its kind and ids.
+func SplitRef(ref string) (kind string, ids []string) {
+	kind, id, _ := strings.Cut(ref, ":")
+	return kind, strings.Split(id, IDSeparator)
 }
 
 // Parse returns the blocks of src in file order, or every issue found (MARKER_INVALID
@@ -209,7 +259,7 @@ func Parse(p string, src []byte) ([]Block, []issue.Issue) {
 		if !found.isOpen && open != nil {
 			namedKind = open.Kind
 		}
-		if namedKind != KindStack && found.id == coreModule {
+		if namedKind != KindStack && slices.Contains(strings.Split(found.id, IDSeparator), coreModule) {
 			report(i+1, "a marker may not name core")
 		}
 		switch {
@@ -235,7 +285,8 @@ func Parse(p string, src []byte) ([]Block, []issue.Issue) {
 
 // Keep holds the two predicates of Drop. Both must be non-nil.
 type Keep struct {
-	// Module reports whether the module id is installed in the context.
+	// Module reports whether the module id is installed in the context; for
+	// MultiID, whether the project has two or more backend components.
 	Module func(id string) bool
 	// Stack reports whether the stack id is selected in the context.
 	Stack func(id string) bool
@@ -271,12 +322,16 @@ func Drop(p string, src []byte, keep Keep) ([]byte, error) {
 				runStack = block.ID
 			}
 		}
-		isKept := keep.Module
-		if block.Kind == KindStack {
-			isKept = keep.Stack
+		isKept := false
+		for _, id := range block.IDs() {
+			if block.Kind == KindStack {
+				isKept = isKept || keep.Stack(id)
+				continue
+			}
+			isKept = isKept || keep.Module(id)
 		}
 		isRunDropped := runStack != "" && !keep.Stack(runStack)
-		if isKept(block.ID) && !isRunDropped {
+		if isKept && !isRunDropped {
 			continue
 		}
 		anyRemoved = true
