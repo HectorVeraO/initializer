@@ -427,7 +427,7 @@ func (d *decoder) ports(raw json.RawMessage) []ports.Port {
 	declared := []ports.Port{}
 	for i, item := range items {
 		pointer := fmt.Sprintf("/ports/%d", i)
-		fields, ok := d.object(item, pointer, []string{"name", "offset", "origin", "stride"})
+		fields, ok := d.object(item, pointer, []string{"name", "offset", "origin", "shared", "stride"})
 		if !ok {
 			continue
 		}
@@ -451,6 +451,11 @@ func (d *decoder) ports(raw json.RawMessage) []ports.Port {
 			origin, isBool := d.boolean(rawOrigin, pointer+"/origin")
 			complete = complete && isBool
 			port.Origin = origin
+		}
+		if rawShared, found := fields["shared"]; found {
+			shared, isBool := d.boolean(rawShared, pointer+"/shared")
+			complete = complete && isBool
+			port.Shared = shared
 		}
 		if rawStride, found := fields["stride"]; found {
 			stride, isInteger := d.integer(rawStride, pointer+"/stride")

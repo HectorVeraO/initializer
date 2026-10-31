@@ -12,14 +12,9 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 )
 
-// MaxBackendComponents is the most backend components (and frontends) one
-// project may have.
-const MaxBackendComponents = 7
-
 // Issue codes of the component input checks.
 const (
 	CodeComponentNameRequired    = "COMPONENT_NAME_REQUIRED"
-	CodeComponentLimit           = "COMPONENT_LIMIT"
 	CodeComponentFieldNotAllowed = "COMPONENT_FIELD_NOT_ALLOWED"
 	CodeComponentBackendRequired = "COMPONENT_BACKEND_REQUIRED"
 	CodeComponentBackendUnknown  = "COMPONENT_BACKEND_UNKNOWN"
@@ -63,7 +58,6 @@ func ResolveComponents(cat catalog.Catalog, in manifest.Input) []issue.Issue {
 	c := &componentCheck{sel: in.Selection, in: in, cat: cat, byStack: map[string][]int{}}
 	c.collect()
 	c.nameRequired()
-	c.limits()
 	c.fieldsNotAllowed()
 	c.binding()
 	c.ambiguousDatabase()
@@ -228,17 +222,6 @@ func suggestedName(project, suffix string, ordinal int) string {
 	return cut + tail
 }
 
-// limits reports more than MaxBackendComponents components of a role.
-func (c *componentCheck) limits() {
-	for _, role := range []string{roleBackend, roleFrontend} {
-		found := c.ofRole(role)
-		if len(found) > MaxBackendComponents {
-			c.add(CodeComponentLimit, found[MaxBackendComponents].pointer,
-				fmt.Sprintf("%d %s components; a project has at most %d", len(found), role, MaxBackendComponents), "")
-		}
-	}
-}
-
 // fieldsNotAllowed reports the entry keys the component's role does not take.
 func (c *componentCheck) fieldsNotAllowed() {
 	for _, inst := range c.instances {
@@ -378,9 +361,12 @@ func (c *componentCheck) overrides() {
 		return
 	}
 	for _, key := range sortedKeys(c.sel.Services) {
+		if names.IsSharedService(key) {
+			continue
+		}
 		pointer := "/services" + issue.Pointer(key)
 		c.add(CodeNameOverrideUnused, pointer,
-			fmt.Sprintf("%s: services apply to one backend and this project has %d", pointer, backends),
+			fmt.Sprintf("%s: this service belongs to one backend and this project has %d", pointer, backends),
 			fmt.Sprintf("per component: --component go-srv=<name>,service.%s=<value>", key))
 	}
 	keys := serviceKeysOf(c.cat)

@@ -1,7 +1,6 @@
 name: initializer
 
 services:
-  # initializer:stack go-srv
   postgres:
     image: postgres:18
     environment:
@@ -17,25 +16,87 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-  # initializer:end go-srv
-  # initializer:module identity
-  # One-shot, idempotent: creates or updates role and database `kratos` (L11).
+  # initializer:module identity|multi
+  # One-shot, idempotent: creates or updates the role and database of every backend and of every Kratos on the shared server (L11).
   postgres-init:
     image: postgres:18
     depends_on:
       postgres:
         condition: service_healthy
+    entrypoint:
+      - bash
+      - -ec
+      - |
+        for variable in $$(compgen -e | grep '^PG_ROLE_' | sort); do
+          role="$${variable#PG_ROLE_}"
+          value="$${!variable}"
+          psql -v ON_ERROR_STOP=1 --set role="$$role" --set database="$${value%%:*}" --set password="$${value#*:}" <<'SQL'
+        SELECT format('CREATE ROLE %I LOGIN CREATEDB', :'role')
+        WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'role')\gexec
+        SELECT format('ALTER ROLE %I CREATEDB PASSWORD %L', :'role', :'password')\gexec
+        SELECT format('CREATE DATABASE %I OWNER %I', :'database', :'role')
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'database')\gexec
+        SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', :'database')\gexec
+        SQL
+        done
+    restart: "no"
     environment:
       PGHOST: postgres
       PGPORT: "5432"
       PGUSER: initializer
       PGDATABASE: initializer
       PGPASSWORD: ${INITIALIZER_PG_PASSWORD:-change-me-local-only}
-      KRATOS_PG_PASSWORD: ${KRATOS_PG_PASSWORD:-change-me-local-only-kratos}
+      # PG_ROLE_<role>: <database>:<password>, one line per backend and per Kratos.
+  # initializer:end identity|multi
+
+  # initializer:stack go-srv
+  # initializer:end go-srv
+  # initializer:module identity|multi
+      PG_ROLE_initializer: initializer:${INITIALIZER_PG_PASSWORD:-change-me-local-only}
+  # initializer:end identity|multi
+  # initializer:module identity
+      PG_ROLE_kratos: kratos:${KRATOS_PG_PASSWORD:-change-me-local-only-kratos}
+  # initializer:end identity
+
+  # initializer:stack go-srv
+  # Built from its component folder, behind profile app: `up -d` alone starts infrastructure only.
+  # The project root is mounted read-only so relative config paths resolve as in host-dev.
+  go-srv:
+    build: ../../go-srv
+    profiles: [app]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  # initializer:end go-srv
+  # initializer:module identity|multi
+      postgres-init:
+        condition: service_completed_successfully
+  # initializer:end identity|multi
+  # initializer:module identity
+      kratos:
+        condition: service_started
+  # initializer:end identity
+  # initializer:stack go-srv
+    working_dir: /project/go-srv
     volumes:
-      - ./postgres-init:/postgres-init:ro
-    entrypoint: ["bash", "/postgres-init/10-kratos-database.sh"]
-    restart: "no"
+      - ../..:/project:ro
+    env_file:
+      - path: ./.example.env
+      - path: ./.env
+        required: false
+    environment:
+      GO_SRV_ADDR: ":10100"
+      APP_DATABASE_URL: postgres://initializer:${INITIALIZER_PG_PASSWORD:-change-me-local-only}@postgres:5432/initializer?sslmode=disable
+  # initializer:end go-srv
+  # initializer:module identity
+      APP_KRATOS_PUBLIC_URL: http://kratos:4433
+      APP_KRATOS_ADMIN_URL: http://kratos:4434
+  # initializer:end identity
+  # initializer:stack go-srv
+    ports:
+      - "127.0.0.1:10100:10100"
+  # initializer:end go-srv
+  # initializer:module identity
 
   kratos-migrate:
     image: oryd/kratos:v26.2.0
@@ -67,40 +128,6 @@ services:
     command: serve -c /etc/config/kratos/kratos.yml --dev --sqa-opt-out
     restart: unless-stopped
   # initializer:end identity
-  # initializer:stack go-srv
-  # Built from its component folder, behind profile app: `up -d` alone starts infrastructure only.
-  # The project root is mounted read-only so relative config paths resolve as in host-dev.
-  go-srv:
-    build: ../../go-srv
-    profiles: [app]
-    depends_on:
-      postgres:
-        condition: service_healthy
-  # initializer:end go-srv
-  # initializer:module identity
-      kratos:
-        condition: service_started
-  # initializer:end identity
-  # initializer:stack go-srv
-    working_dir: /project/go-srv
-    volumes:
-      - ../..:/project:ro
-    env_file:
-      - path: ./.example.env
-      - path: ./.env
-        required: false
-    environment:
-      GO_SRV_ADDR: ":10100"
-      APP_DATABASE_URL: postgres://initializer:${INITIALIZER_PG_PASSWORD:-change-me-local-only}@postgres:5432/initializer?sslmode=disable
-  # initializer:end go-srv
-  # initializer:module identity
-      APP_KRATOS_PUBLIC_URL: http://kratos:4433
-      APP_KRATOS_ADMIN_URL: http://kratos:4434
-  # initializer:end identity
-  # initializer:stack go-srv
-    ports:
-      - "127.0.0.1:10100:10100"
-  # initializer:end go-srv
 
   # initializer:stack ng-web
   ng-web:
@@ -120,6 +147,4 @@ services:
   # initializer:end ng-web
 
 volumes:
-  # initializer:stack go-srv
   postgres-data:
-  # initializer:end go-srv

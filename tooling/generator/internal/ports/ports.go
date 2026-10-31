@@ -29,11 +29,18 @@ type Port struct {
 	Origin bool `json:"origin,omitempty"`
 	// Stride is the distance between the ports of two components of one
 	// stack: the host offset of the component at index i is Offset + i*Stride.
+	// A shared port has no stride.
 	Stride int `json:"stride,omitempty"`
+	// Shared marks a port every component of the stack uses: the host offset
+	// is Offset for every index (the shared database server).
+	Shared bool `json:"shared,omitempty"`
 }
 
 // OffsetAt returns the host offset of the port for the component at index.
 func (p Port) OffsetAt(index int) int {
+	if p.Shared {
+		return p.Offset
+	}
 	return p.Offset + index*p.Stride
 }
 

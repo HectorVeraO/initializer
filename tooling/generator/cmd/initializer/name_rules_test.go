@@ -78,8 +78,8 @@ func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 	if unprefixed != renamedSource {
 		t.Error("the compose file differs from the repo copy beyond the renamed reference names")
 	}
-	// The Kratos role and database and the init folder keep their fixed names.
-	for _, kept := range []string{"postgres://kratos:", "./postgres-init:/postgres-init:ro", "./kratos:/etc/config/kratos:ro"} {
+	// A single project keeps the Kratos role and database names; the init step creates the backend's own role and Kratos's.
+	for _, kept := range []string{"postgres://kratos:", "PG_ROLE_acme: acme:", "PG_ROLE_kratos: kratos:", "./kratos:/etc/config/kratos:ro"} {
 		if !strings.Contains(text, kept) {
 			t.Errorf("the compose file lost %q", kept)
 		}

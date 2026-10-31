@@ -52,8 +52,8 @@ func TestGeneratingFromTheDryRunSelectionOfAMultiBackendProjectMatchesTheFlagLin
 	e := env{root: root, catalog: catalogPath}
 	wd := t.TempDir()
 	flags := []string{"--name", "acme", "--go-module", "example.com/acme", "--stacks", "go-srv,ng-web",
-		"--modules", "identity",
-		"--component", "go-srv=acme-srv-first,db-name=first_db,service.postgres=first-pg",
+		"--modules", "identity", "--service", "postgres=shared-pg",
+		"--component", "go-srv=acme-srv-first,db-name=first_db,service.kratos=first-id",
 		"--component", "go-srv=acme-srv-second,modules=identity+tenancy,go-module=example.com/acme/second",
 		"--component", "ng-web=acme-web,backend=acme-srv-second"}
 	_, starter := dryRunSelection(t, e, wd, append([]string{"dry"}, flags...)...)

@@ -40,9 +40,14 @@ func (b *builder) markerChecks(p string, data []byte, owner *moduleDoc) {
 		case block.Kind == markers.KindStack && !knownStacks[block.ID]:
 			b.addPlain(markers.CodeMarkerStackUnknown, p,
 				fmt.Sprintf("marker names stack %q (line %d), which is not a stack of the stack table", block.ID, block.Start+1))
-		case block.Kind == markers.KindModule && !knownModules[block.ID]:
-			b.addPlain(markers.CodeMarkerModuleUnknown, p,
-				fmt.Sprintf("marker names %s, which has no module manifest (line %d)", block.ID, block.Start+1))
+		case block.Kind == markers.KindModule:
+			for _, id := range block.IDs() {
+				if id == markers.MultiID || knownModules[id] {
+					continue
+				}
+				b.addPlain(markers.CodeMarkerModuleUnknown, p,
+					fmt.Sprintf("marker names %s, which has no module manifest (line %d)", id, block.Start+1))
+			}
 		}
 	}
 }

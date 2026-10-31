@@ -124,22 +124,15 @@ func contains(list []string, want string) bool {
 	return false
 }
 
-func TestResolveComponentsLimitsBackendsToSeven(t *testing.T) {
-	backends := func(count int) manifest.Input {
-		var entries []manifest.Component
-		for i := 0; i < count; i++ {
-			entries = append(entries, backend(fmt.Sprintf("acme-srv-%c", 'a'+i)))
-		}
-		in := inputOf(entries...)
-		in.Selection.Stacks = []string{"go-srv"}
-		return in
+func TestResolveComponentsHasNoCountLimit(t *testing.T) {
+	var entries []manifest.Component
+	for i := 0; i < 40; i++ {
+		entries = append(entries, backend(fmt.Sprintf("acme-srv-%02d", i)))
 	}
-	if got := codesAt(resolveComponents(t, backends(7))); len(got) != 0 {
-		t.Fatalf("7 backends: %v", got)
-	}
-	got := codesAt(resolveComponents(t, backends(8)))
-	if !reflect.DeepEqual(got, []string{"COMPONENT_LIMIT /components/7"}) {
-		t.Fatalf("8 backends: %v", got)
+	in := inputOf(entries...)
+	in.Selection.Stacks = []string{"go-srv"}
+	if got := codesAt(resolveComponents(t, in)); len(got) != 0 {
+		t.Fatalf("40 backends: %v", got)
 	}
 }
 
@@ -259,16 +252,16 @@ func TestResolveComponentsModulesUnused(t *testing.T) {
 	}
 }
 
-func TestResolveComponentsTopLevelServicesNeedOneBackend(t *testing.T) {
+func TestResolveComponentsTopLevelServicesOfAMultiProjectAreTheSharedOnes(t *testing.T) {
 	multi := inputOf(backend("a-one"), backend("a-two"))
 	multi.Selection.Stacks = []string{"go-srv"}
-	multi.Selection.Services = map[string]string{"postgres": "shared-pg"}
+	multi.Selection.Services = map[string]string{"postgres": "shared-pg", "postgres-init": "shared-init", "kratos": "one-kratos"}
 	unused := issuesAt(resolveComponents(t, multi), plan.CodeNameOverrideUnused)
-	if len(unused) != 1 || unused[0].Path != "selection#/services/postgres" || !strings.Contains(unused[0].Hint, "service.postgres=") {
+	if len(unused) != 1 || unused[0].Path != "selection#/services/kratos" || !strings.Contains(unused[0].Hint, "service.kratos=") {
 		t.Fatalf("multi: %+v", unused)
 	}
 	single := inputOf(backend("acme-srv"))
-	single.Selection.Services = map[string]string{"postgres": "shared-pg"}
+	single.Selection.Services = map[string]string{"postgres": "shared-pg", "kratos": "acme-kratos"}
 	if got := issuesAt(resolveComponents(t, single), plan.CodeNameOverrideUnused); len(got) != 0 {
 		t.Fatalf("single: %+v", got)
 	}

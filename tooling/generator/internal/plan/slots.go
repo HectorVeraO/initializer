@@ -6,6 +6,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/catalog"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/markers"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/names"
 )
 
@@ -25,6 +26,7 @@ func (r *resolver) slots(stacks []ComponentPlan, src infraSource, others []Compo
 	project := r.sel.Project.Name
 	band, _ := r.effectiveBand()
 	resolved := names.Resolved{Project: project, Band: band, Components: map[string]string{}, Multi: r.multi}
+	resolved.Database, resolved.DBUser = databaseNamesOf(src)
 	live = map[string]bool{names.SlotProject: true}
 	selected := map[string]bool{}
 	for _, component := range stacks {
@@ -34,7 +36,7 @@ func (r *resolver) slots(stacks []ComponentPlan, src infraSource, others []Compo
 	}
 	values = resolved.Slots()
 	for _, stack := range stacks {
-		installed := map[string]bool{}
+		installed := map[string]bool{markers.MultiID: r.multi}
 		for _, module := range stack.Modules {
 			installed[module.Module] = true
 		}
@@ -92,17 +94,21 @@ func (r *resolver) fillOtherSlots(values map[string]string, others []ComponentPl
 }
 
 // ruleIsLive reports whether one of the blocks of rule is kept: no block, an
-// installed module or a selected stack.
+// installed module (the pseudo module multi in a multi project) or a selected
+// stack.
 func ruleIsLive(rule catalog.NameRule, installed, selected map[string]bool) bool {
 	for _, block := range rule.Blocks {
-		kind, id, _ := strings.Cut(block, ":")
-		switch {
-		case block == "":
+		if block == "" {
 			return true
-		case kind == "module" && installed[id]:
-			return true
-		case kind == "stack" && selected[id]:
-			return true
+		}
+		kind, ids := markers.SplitRef(block)
+		for _, id := range ids {
+			switch {
+			case kind == "module" && installed[id]:
+				return true
+			case kind == "stack" && selected[id]:
+				return true
+			}
 		}
 	}
 	return false
@@ -129,4 +135,18 @@ func (r *resolver) defaultSlot(slot string, src infraSource) (string, bool) {
 func isUnselectedComponentSlot(slot string, selected map[string]bool) bool {
 	stack, isComponent := strings.CutPrefix(slot, "component.")
 	return isComponent && !selected[stack]
+}
+
+// databaseNamesOf returns the effective database name and user of an
+// instance: the given value, else the default derived from the project or the
+// component.
+func databaseNamesOf(src infraSource) (database, user string) {
+	database, user = src.database.Name, src.database.User
+	if database == "" {
+		database = src.dbDefault
+	}
+	if user == "" {
+		user = src.dbDefault
+	}
+	return database, user
 }

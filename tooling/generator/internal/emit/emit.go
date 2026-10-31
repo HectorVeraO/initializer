@@ -452,7 +452,7 @@ func (b *builder) projectContext() context {
 // slots, a module block kept when the component installs the module, a stack
 // block kept for the component's own stack and its partner's stack.
 func (b *builder) contextOf(component plan.ComponentPlan) context {
-	installed := map[string]bool{}
+	installed := map[string]bool{markers.MultiID: b.opts.Plan.Multi()}
 	for _, module := range component.Modules {
 		installed[module.Module] = true
 	}
@@ -590,13 +590,16 @@ func lockComponent(component plan.ComponentPlan, multi bool) lockfile.Component 
 }
 
 // projectNames returns the project-level slots of a multi lock: everything
-// except the component slots and the instance's database and service slots,
-// which the component entries hold.
+// except the component slots and the instance's database and per-instance
+// service slots, which the component entries hold. The services every backend
+// shares (the Postgres server and its init step) stay at the project level, and
+// each component entry names them too.
 func projectNames(all map[string]string) map[string]string {
 	kept := map[string]string{}
 	for key, value := range all {
+		service, isService := strings.CutPrefix(key, names.ServiceSlot(""))
 		isInstance := key == names.SlotDatabase || key == names.SlotDBUser ||
-			strings.HasPrefix(key, names.ComponentSlot("")) || strings.HasPrefix(key, names.ServiceSlot(""))
+			strings.HasPrefix(key, names.ComponentSlot("")) || (isService && !names.IsSharedService(service))
 		if !isInstance {
 			kept[key] = value
 		}
@@ -617,6 +620,16 @@ func (b *builder) readmeRun() render.ReadmeRun {
 	p := b.opts.Plan
 	band := p.Ports.Band
 	run := render.ReadmeRun{PortLow: band * 100, PortHigh: band*100 + 99, ComposeProject: names.ComposeProject(b.project, band)}
+	if p.Multi() {
+		run.PostgresService = p.Slots[names.ServiceSlot("postgres")]
+		run.PostgresInitService = p.Slots[names.ServiceSlot("postgres-init")]
+		for _, component := range p.Components {
+			if port, hasPort := component.Ports["postgres"]; hasPort {
+				run.PostgresPort = port
+				break
+			}
+		}
+	}
 	for _, component := range p.Components {
 		if component.Role != manifest.RoleBackend {
 			continue
@@ -716,8 +729,12 @@ func (b *builder) recorded() manifest.Selection {
 	return b.opts.Recorded
 }
 
-// hasModule reports whether any selected stack installs the module.
+// hasModule reports whether any selected stack installs the module; the pseudo
+// module multi is installed when the plan has several backend components.
 func (b *builder) hasModule(id string) bool {
+	if id == markers.MultiID {
+		return b.opts.Plan.Multi()
+	}
 	for _, stack := range b.opts.Plan.Components {
 		for _, module := range stack.Modules {
 			if module.Module == id {

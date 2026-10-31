@@ -143,16 +143,6 @@
     },
     {
       "path": ".deploy/local/docker-compose.yml",
-      "context": "./postgres-init:/postgres-init:ro",
-      "reason": "source folder of the init scripts"
-    },
-    {
-      "path": ".deploy/local/docker-compose.yml",
-      "context": "/postgres-init/10-kratos-database.sh",
-      "reason": "source folder and script name"
-    },
-    {
-      "path": ".deploy/local/docker-compose.yml",
       "context": "oryd/kratos:",
       "reason": "image name"
     },
@@ -173,8 +163,8 @@
     },
     {
       "path": ".deploy/local/docker-compose.yml",
-      "context": "`kratos`",
-      "reason": "the Kratos role and database"
+      "context": "PG_ROLE_kratos: kratos:",
+      "reason": "the Kratos role and database of a single project"
     },
     {
       "path": ".deploy/local/docker-compose.yml",
@@ -190,11 +180,6 @@
       "path": ".deploy/local/docker-compose.yml",
       "context": "}/kratos/",
       "reason": "proxy path"
-    },
-    {
-      "path": ".deploy/local/postgres-init/**",
-      "context": "kratos",
-      "reason": "Kratos role and database"
     },
     {
       "path": ".deploy/local/kratos/**",

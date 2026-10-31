@@ -245,17 +245,16 @@ func TestGeneratedMultiComposeConfig(t *testing.T) {
 	if err := json.Unmarshal([]byte(rendered), &config); err != nil {
 		t.Fatalf("parse the resolved configuration: %v", err)
 	}
+	// One Postgres server and one init step for both backends.
 	want := map[string][]string{
 		"acme-srv-first":                 {"10100:10100"},
-		"acme-srv-first-postgres":        {"10132:5432"},
+		"acme-postgres":                  {"10132:5432"},
+		"acme-postgres-init":             nil,
 		"acme-srv-first-kratos":          {"10133:4433", "10134:4434"},
 		"acme-srv-first-kratos-migrate":  nil,
-		"acme-srv-first-postgres-init":   nil,
 		"acme-srv-second":                {"10101:10101"},
-		"acme-srv-second-postgres":       {"10142:5432"},
-		"acme-srv-second-kratos":         {"10143:4433", "10144:4434"},
+		"acme-srv-second-kratos":         {"10135:4433", "10136:4434"},
 		"acme-srv-second-kratos-migrate": nil,
-		"acme-srv-second-postgres-init":  nil,
 		"acme-web":                       {"10120:80"},
 	}
 	if len(config.Services) != len(want) {

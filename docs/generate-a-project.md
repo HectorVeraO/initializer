@@ -176,7 +176,7 @@ Every generated project carries its choices as `initializer.selection.json` (wit
 | `--display-name TEXT` | Brand text of the web console | the project name |
 | `--component STACK[=NAME][,KEY=VALUE...]` | Add or override a component of STACK (section 6) | one component per stack, named `<name>-<suffix>` (`acme-srv`, `acme-web`) |
 | `--db-name NAME`, `--db-user NAME` | Database and its user | `<name>` with `-` replaced by `_` |
-| `--service KEY=NAME` | Rename one compose service | `<name>-<key>` |
+| `--service KEY=NAME` | Rename one compose service; with several backends only `postgres` and `postgres-init` (section 6) | `<name>-<key>` |
 | `--port-band NNN` | Host ports `1NNxx`, from 100 to 654 | `101` |
 
 ```bash
@@ -218,7 +218,7 @@ Both folders hold the project `acme`; the first runs as compose project `acme-10
 
 ## 6. Components
 
-A component is one copy of one stack, in the folder named after it. Without `--component`, each stack produces one component named `<name>-<suffix>`. A project can hold several components of one stack, up to 7 backends. Each backend is an instance with its own origin, ports, Postgres and, with identity, its own Kratos and session key; a frontend binds to exactly one backend, and a backend serves at most one frontend.
+A component is one copy of one stack, in the folder named after it. Without `--component`, each stack produces one component named `<name>-<suffix>`. A project can hold several components of one stack. Each backend is an instance with its own origin, ports, database and user on the project's one Postgres server and, with identity, its own Kratos (with its own database and user) and session key; a frontend binds to exactly one backend, and a backend serves at most one frontend. How many backends fit is set by the host ports (see "How many backends fit").
 
 `--component STACK[=NAME][,KEY=VALUE...]` is repeatable. With several components of one stack, each needs a `NAME`. Keys:
 
@@ -227,7 +227,7 @@ A component is one copy of one stack, in the folder named after it. Without `--c
 | `modules` | Modules the component starts from, ids joined by `+`; required modules are added | backends |
 | `go-module` | Go module path | backends |
 | `db-name`, `db-user` | Database and its user | backends |
-| `service.<key>` | Rename one compose service of the component | backends |
+| `service.<key>` | Rename one compose service of the component (`kratos`, `kratos-migrate`); the Postgres services are the project's, see below | backends |
 | `backend` | Name of the backend the frontend binds to | frontends |
 
 `go-module` may extend the repository's own Go module path (`<repository module>-fork`, `<repository module>/v2`). A path that is still the repository's own, next to components with another module, answers `GO_MODULE_PATH_LEAK` (exit 1, nothing written).
@@ -272,13 +272,40 @@ Both print the same plan (`INDEX` counts components of one stack; `PORTS` are th
 Project acme-backend in ./acme-backend (dry run, nothing written)
 COMPONENT                 STACK    INDEX   BACKEND                   GO MODULE                                          DATABASE                                          PORTS                                                                MODULES
 acme-backend-srv-first    go-srv   0                                 example.com/acme/backend/acme-backend-srv-first    acme_backend_srv_first/acme_backend_srv_first     srv 10100, postgres 10132, kratos-public 10133, kratos-admin 10134   core, identity
-acme-backend-srv-second   go-srv   1                                 example.com/acme/backend/acme-backend-srv-second   acme_backend_srv_second/acme_backend_srv_second   srv 10101, postgres 10142, kratos-public 10143, kratos-admin 10144   core, identity, api-keys, feature-flags, parameters, tenancy
+acme-backend-srv-second   go-srv   1                                 example.com/acme/backend/acme-backend-srv-second   acme_backend_srv_second/acme_backend_srv_second   srv 10101, postgres 10132, kratos-public 10135, kratos-admin 10136   core, identity, api-keys, feature-flags, parameters, tenancy
 acme-backend-web          ng-web   0       acme-backend-srv-second                                                                                                        web 10120                                                            core, identity, api-keys, feature-flags, parameters, tenancy
 note: go modules derived from example.com/acme/backend; pass go-module= per component to change them
-811 files
+810 files
 ```
 
-The `note:` line names the derived Go modules; the plan prints it after the table. Without `--dry-run` the command writes the project (811 files) and `initializer verify acme-backend` answers `No differences.`
+The `note:` line names the derived Go modules; the plan prints it after the table. Without `--dry-run` the command writes the project (810 files) and `initializer verify acme-backend` answers `No differences.`
+
+### One Postgres server for all backends
+
+A project with several backends runs one Postgres server, one volume and one host port (`10132` on band 101), whatever the number of backends:
+
+| What | Value |
+|---|---|
+| Server service | `<name>-postgres` (`--service postgres=NAME`), superuser `postgres` |
+| Init service | `<name>-postgres-init` (`--service postgres-init=NAME`): a one-shot that runs on every `up` and creates, idempotently, the database and user of every backend and, with identity, of every Kratos. Backends and Kratos start after it |
+| Backend database and user | `--db-name` and `--db-user` per component; default `<component>` with `-` replaced by `_` |
+| Kratos database and user | `<database>_kratos` and `<user>_kratos` of its backend |
+| Passwords | `<NAME>_PG_PASSWORD` (the name in upper case, `-` as `_`) for the superuser and every backend user; `KRATOS_PG_PASSWORD` for every Kratos user. Local-only defaults in `docker-compose.yml`, overridden through the environment or `.deploy/local/.env` |
+| Connection string of a backend | `postgres://<user>:${<NAME>_PG_PASSWORD}@<server>:5432/<database>`: inside the compose network the server is `<name>-postgres`; on the host it is `localhost:10132` |
+
+The `postgres` and `postgres-init` services are the project's, so `--service postgres=NAME` applies to all backends and `service.postgres` on one component answers `NAME_OVERRIDE_UNUSED`. Two databases, or two users, that resolve to the same name (the server's own `postgres` included) answer `NAME_CONFLICT`; set `db-name` and `db-user` on one of them. A single-backend project keeps one Postgres whose superuser is the backend's own user.
+
+### How many backends fit
+
+There is no fixed count: the host ports of a band (`1NN00-1NN98`) decide. Each port is at an offset of the band: a backend takes `00+i` (its HTTP port, `i` counting backends from 0), a frontend `20+i`, the shared Postgres `32`, and a backend with identity `33+2i` and `34+2i` for Kratos. With every module, the band holds:
+
+| Shape | Backends |
+|---|---|
+| No console | 32 (offsets `00`-`31`, up to the Postgres) |
+| One console | 20 (the 21st backend would use the console's offset `20`) |
+| A console per backend | 12 (consoles at `20`-`31`, up to the Postgres) |
+
+Past that, the command answers `PORT_BAND_EXHAUSTED`, names the port and its component, and states how many components fit with the same modules. A band holds one project of this size; projects that should run side by side use different bands.
 
 In a multi-component project:
 
@@ -382,14 +409,14 @@ Codes a person meets:
 | `OUTPUT_NOT_EMPTY` | The folder already holds files; choose another one. |
 | `NAME_INVALID` | A name breaks the name rule of section 5. |
 | `COMPONENT_NAME_REQUIRED` | A stack has several components and one has no name; the error's hint (`suggestedNames` in JSON) lists names to use. |
-| `COMPONENT_LIMIT` | A stack has more than 7 components; use fewer. |
 | `COMPONENT_BACKEND_REQUIRED` | A frontend does not say which of several backends it binds to; set `backend=`. |
 | `COMPONENT_BACKEND_UNKNOWN` | `backend=` names no backend component; use one the hint lists. |
 | `COMPONENT_BACKEND_TAKEN` | Two frontends bind to one backend; a backend serves at most one. |
 | `COMPONENT_FIELD_NOT_ALLOWED` | A key does not apply to that component (for example `modules` on a frontend). |
+| `NAME_CONFLICT` | Two names resolve to one: components, services, or databases and users on the shared Postgres server; set one of them. |
 | `COMPONENT_AMBIGUOUS` | A top-level `--db-name` or `--db-user` would be inherited by several backends; set it per component. |
 | `MODULES_UNUSED` | Top-level `--modules` while every backend sets its own; drop one of them. |
-| `PORT_BAND_EXHAUSTED` | A catalog build or a component count whose ports do not fit the band; use fewer components. |
+| `PORT_BAND_EXHAUSTED` | The components' host ports do not fit the band (offsets 0-98); the hint says how many fit, use fewer components. |
 | `NAME_RESERVED` | A component name equals a folder of the project (for example `specs`); choose another. |
 | `COMPONENT_MERGE_AMBIGUOUS` | A `--component` flag names no component of the file; edit the file. |
 | `SOURCE_ROOT_NOT_FOUND` | No clone found from the working directory or the binary; run inside a clone, pass `--root <clone>`, or set `INITIALIZER_ROOT`. |

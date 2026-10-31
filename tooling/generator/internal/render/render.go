@@ -127,6 +127,11 @@ type ReadmeRun struct {
 	// ComposeProject is the top-level name of the local compose file
 	// ("acme-101").
 	ComposeProject string
+	// PostgresService, PostgresInitService and PostgresPort describe the one
+	// Postgres server the backends of a multi project share: its compose
+	// service, the service that creates the databases and the host port.
+	PostgresService, PostgresInitService string
+	PostgresPort                         int
 	// Instances holds one entry per backend component in lock order; exactly one
 	// until multiple backend components are supported.
 	Instances []ReadmeInstance

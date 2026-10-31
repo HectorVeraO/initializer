@@ -455,7 +455,7 @@ func dropDerivedBackendReferences(recorded *manifest.Selection, resolved plan.Pl
 // A missing name or backend does not block it: the plan skips what those leave
 // open and still reports its own problems.
 var planBlockingCodes = []string{
-	manifest.CodeSelectionInvalid, plan.CodeComponentLimit, plan.CodeComponentFieldNotAllowed,
+	manifest.CodeSelectionInvalid, plan.CodeComponentFieldNotAllowed,
 	plan.CodeComponentAmbiguous, plan.CodeModulesUnused,
 }
 

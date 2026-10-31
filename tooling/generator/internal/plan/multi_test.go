@@ -207,11 +207,12 @@ func TestMultiDefaultsAreDerivedPerComponent(t *testing.T) {
 	if first.Database != (manifest.Database{Name: "acme_srv_first", User: "acme_srv_first"}) {
 		t.Fatalf("database = %+v", first.Database)
 	}
-	if want := map[string]string{"postgres": "acme-srv-first-postgres"}; !reflect.DeepEqual(first.Services, want) {
+	// The Postgres server is the project's: one name for every backend.
+	if want := map[string]string{"postgres": "acme-postgres"}; !reflect.DeepEqual(first.Services, want) {
 		t.Fatalf("services = %v, want %v", first.Services, want)
 	}
 	wantSecond := map[string]string{
-		"postgres": "acme-srv-second-postgres", "kratos": "acme-srv-second-kratos", "kratos-migrate": "acme-srv-second-kratos-migrate",
+		"postgres": "acme-postgres", "kratos": "acme-srv-second-kratos", "kratos-migrate": "acme-srv-second-kratos-migrate",
 	}
 	if !reflect.DeepEqual(second.Services, wantSecond) {
 		t.Fatalf("services = %v, want %v", second.Services, wantSecond)
@@ -227,15 +228,19 @@ func TestEntryValuesOverrideTheDerivedDefaults(t *testing.T) {
 	first := backendEntry("acme-srv-first")
 	first.GoModule = "example.org/billing"
 	first.Database = &manifest.Database{Name: "ledger", User: "ledger_owner"}
-	first.Services = map[string]string{"postgres": "ledger-db"}
 	second := backendEntry("acme-srv-second", "identity")
 	second.GoModule = "example.org/orders"
+	second.Services = map[string]string{"kratos": "orders-kratos"}
 	sel := multiSelection(first, second)
 	sel.Stacks = []string{"go-srv"}
 	sel.Database = &manifest.Database{Name: "shared", User: "shared_owner"}
+	sel.Services = map[string]string{"postgres": "ledger-db"}
 	p := mustResolve(t, cat, sel)
 	gotFirst, gotSecond := byName(t, p, "acme-srv-first"), byName(t, p, "acme-srv-second")
-	if gotFirst.GoModule != "example.org/billing" || gotFirst.Database.Name != "ledger" || gotFirst.Services["postgres"] != "ledger-db" {
+	if gotFirst.Services["postgres"] != "ledger-db" || gotSecond.Services["postgres"] != "ledger-db" || gotSecond.Services["kratos"] != "orders-kratos" {
+		t.Fatalf("services = %v %v", gotFirst.Services, gotSecond.Services)
+	}
+	if gotFirst.GoModule != "example.org/billing" || gotFirst.Database.Name != "ledger" {
 		t.Fatalf("first = %+v", gotFirst)
 	}
 	if gotSecond.GoModule != "example.org/orders" || gotSecond.Database != (manifest.Database{Name: "shared", User: "shared_owner"}) {
@@ -272,18 +277,30 @@ func TestGoModulePathsMayNotBeEqualOrNested(t *testing.T) {
 
 func TestServiceNamesMayNotRepeatAcrossInstancesOrMatchAComponent(t *testing.T) {
 	cat := withInfraRules(t)
-	first, second := backendEntry("acme-srv-first"), backendEntry("acme-srv-second")
-	first.Services = map[string]string{"postgres": "shared-db"}
-	second.Services = map[string]string{"postgres": "shared-db"}
+	first, second := backendEntry("acme-srv-first", "identity"), backendEntry("acme-srv-second", "identity")
+	first.Services = map[string]string{"kratos": "shared-kratos"}
+	second.Services = map[string]string{"kratos": "shared-kratos"}
 	sel := multiSelection(first, second)
 	sel.Stacks = []string{"go-srv"}
 	issues := wantCodes(t, cat, sel, plan.CodeNameConflict, plan.CodeNameConflict)
-	if !strings.HasSuffix(issues[0].Path, "#/components/0/services/postgres") {
+	if !strings.HasSuffix(issues[0].Path, "#/components/0/services/kratos") {
 		t.Fatalf("path = %s", issues[0].Path)
 	}
-	derived := multiSelection(backendEntry("acme-srv-first"), backendEntry("acme-srv-first-postgres"))
+	derived := multiSelection(backendEntry("acme-srv-first"), backendEntry("acme-postgres"))
 	derived.Stacks = []string{"go-srv"}
 	wantCodes(t, cat, derived, plan.CodeNameConflict, plan.CodeNameConflict)
+}
+
+func TestTheSharedServicesAreSetForTheProjectNotPerBackend(t *testing.T) {
+	cat := withInfraRules(t)
+	first := backendEntry("acme-srv-first")
+	first.Services = map[string]string{"postgres": "ledger-db"}
+	sel := multiSelection(first, backendEntry("acme-srv-second"))
+	sel.Stacks = []string{"go-srv"}
+	issues := wantCodes(t, cat, sel, plan.CodeNameOverrideUnused)
+	if issues[0].Path != "selection#/components/0/services/postgres" || !strings.Contains(issues[0].Hint, "--service postgres=") {
+		t.Fatalf("issue = %+v", issues[0])
+	}
 }
 
 func TestDerivedServiceNamesAreCheckedAgainst63BytesPerInstance(t *testing.T) {

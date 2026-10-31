@@ -337,7 +337,7 @@ func (l lineLayout) enclosing(o names.Occurrence) string {
 	line := l.lineOf(position)
 	for _, block := range l.blocks {
 		if block.Start < line && line < block.End {
-			return string(block.Kind) + ":" + block.ID
+			return block.Ref()
 		}
 	}
 	return ""
