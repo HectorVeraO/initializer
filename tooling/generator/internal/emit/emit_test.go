@@ -3,6 +3,7 @@ package emit_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"io/fs"
 	"os"
@@ -306,11 +307,14 @@ func TestIdentityTargetOmitsSourceHashes(t *testing.T) {
 	}
 }
 
-func TestSourceModulePathLeakIsRefused(t *testing.T) {
+// buildWithNote builds the module "parameters" under goModule with a delivered
+// text file that holds note.
+func buildWithNote(t *testing.T, goModule, note string) error {
+	t.Helper()
 	repo := fixture.Load(t)
 	root := t.TempDir()
 	copyTree(t, repo.Root, root)
-	leak := []byte("see " + fixtureModule + " for details\n")
+	leak := []byte(note)
 	if err := os.WriteFile(filepath.Join(root, "specs", "parameters", "leak.txt"), leak, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -328,9 +332,32 @@ func TestSourceModulePathLeakIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = build(t, os.DirFS(root), crafted, encoded, selection(targetModule, "parameters"))
-	if err == nil || !strings.Contains(err.Error(), "specs/parameters/leak.txt") {
+	_, err = build(t, os.DirFS(root), crafted, encoded, selection(goModule, "parameters"))
+	return err
+}
+
+func TestSourceModulePathLeakIsRefused(t *testing.T) {
+	err := buildWithNote(t, targetModule, "see "+fixtureModule+" for details\n")
+	if !errors.Is(err, emit.ErrGoModulePathLeak) || !strings.Contains(err.Error(), "specs/parameters/leak.txt") {
 		t.Fatalf("want a leak error naming the file, got %v", err)
+	}
+}
+
+func TestATargetThatExtendsTheSourcePathIsNotALeak(t *testing.T) {
+	for _, extended := range []string{fixtureModule + "-fork", fixtureModule + "/v2", fixtureModule + "/v2/api"} {
+		t.Run(extended, func(t *testing.T) {
+			if err := buildWithNote(t, extended, "module "+extended+"\n"); err != nil {
+				t.Fatalf("the target itself was refused: %v", err)
+			}
+			err := buildWithNote(t, extended, "module "+extended+" copied from "+fixtureModule+"\n")
+			if !errors.Is(err, emit.ErrGoModulePathLeak) {
+				t.Fatalf("the source path next to the target was accepted: %v", err)
+			}
+			err = buildWithNote(t, extended, "see "+fixtureModule+" then "+extended+"\n")
+			if !errors.Is(err, emit.ErrGoModulePathLeak) {
+				t.Fatalf("the source path before the target was accepted: %v", err)
+			}
+		})
 	}
 }
 

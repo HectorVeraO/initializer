@@ -109,32 +109,42 @@ func lockedModules(t *testing.T, dir, stack string) []string {
 	return modules
 }
 
-func TestGenerateWithNoInputWritesDemo(t *testing.T) {
+func TestGenerateWithABrokenFileReportsTheFileNotAMissingName(t *testing.T) {
 	e := newEnv(t)
 	wd := t.TempDir()
-	code, stdout, stderr := executeIn(t, wd, "", e.inputArgs("--format", "json")...)
-	if code != exitOK {
-		t.Fatalf("exit %d: %s", code, stderr)
+	file := writeNamed(t, "broken.json", `{"schema":2,"stacks":[`)
+	code, _, stderr := executeIn(t, wd, "", e.inputArgs("-f", file)...)
+	if code == exitOK {
+		t.Fatalf("exit %d, want a refusal: %s", code, stderr)
 	}
-	var doc struct {
-		Project string
-		Path    string
-		Notes   []string
+	if strings.Contains(stderr, "NAME_REQUIRED") {
+		t.Errorf("a file that fails to parse was reported as a missing name: %s", stderr)
 	}
-	decodeDocument(t, stdout, &doc)
-	wantNotes := []string{`no name given; using "demo"`, "Go module defaults to example.com/demo; pass --go-module to set yours"}
-	if doc.Project != "demo" || doc.Path != "demo" || strings.Join(doc.Notes, "|") != strings.Join(wantNotes, "|") {
-		t.Fatalf("document = %+v", doc)
+	if !strings.Contains(stderr, "broken.json") {
+		t.Errorf("stderr does not name the broken file: %s", stderr)
 	}
-	if lines := linesWithPrefix(stderr, "note:"); len(lines) != 2 {
-		t.Fatalf("want two note lines, got %q", lines)
+	entries, err := os.ReadDir(wd)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("the working directory holds %v (%v)", entries, err)
 	}
-	project := filepath.Join(wd, "demo")
-	if goModuleOf(t, project) != "example.com/demo" || lockedName(t, project) != "demo" {
-		t.Fatalf("module %q name %q", goModuleOf(t, project), lockedName(t, project))
+}
+
+func TestGenerateWithAFileThatNamesNoProjectAndNoFolderIsRefused(t *testing.T) {
+	e := newEnv(t)
+	wd := t.TempDir()
+	file := writeNamed(t, "starter.json", `{"schema":2,"stacks":["go-srv"]}`)
+	code, _, stderr := executeIn(t, wd, "", e.inputArgs("-f", file)...)
+	if code != exitIssues {
+		t.Fatalf("exit %d, want %d: %s", code, exitIssues, stderr)
 	}
-	if stacks := lockedStacks(t, project); strings.Join(stacks, ",") != "go-srv" {
-		t.Fatalf("stacks = %v", stacks)
+	for _, want := range []string{"error: --name: no project name", "[NAME_REQUIRED]", "  hint: name the project: initializer generate <name>", "1 problem; nothing was written.\n"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr lacks %q: %s", want, stderr)
+		}
+	}
+	entries, err := os.ReadDir(wd)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("the working directory holds %v (%v)", entries, err)
 	}
 }
 

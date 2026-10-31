@@ -14,6 +14,13 @@
     { "path": "ng-web/src/app/core/config/brand.ts", "text": "BRAND = '%{displayName}'" },
     { "path": "ng-web/src/index.html", "text": "<title>%{displayName}</title>" },
     { "path": "ng-web/src/assets/i18n/en.json", "text": "{{year}} %{displayName}" },
-    { "path": "ng-web/src/assets/i18n/es.json", "text": "{{year}} %{displayName}" }
+    { "path": "ng-web/src/assets/i18n/es.json", "text": "{{year}} %{displayName}" },
+    { "path": "ng-web/angular.json", "text": "\"%{component.ng-web}\": {" },
+    { "path": "ng-web/angular.json", "text": "\"outputPath\": \"dist/%{component.ng-web}\"" },
+    { "path": "ng-web/angular.json", "text": "\"buildTarget\": \"%{component.ng-web}:build:production\"" },
+    { "path": "ng-web/angular.json", "text": "\"buildTarget\": \"%{component.ng-web}:build:development\"" },
+    { "path": "ng-web/package.json", "text": "\"name\": \"%{component.ng-web}\"" },
+    { "path": "ng-web/package-lock.json", "text": "\"name\": \"%{component.ng-web}\"" },
+    { "path": "ng-web/Dockerfile", "text": "/dist/%{component.ng-web}/browser" }
   ]
 }

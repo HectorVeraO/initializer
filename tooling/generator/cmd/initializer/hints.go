@@ -43,6 +43,10 @@ func hintFor(found issue.Issue, moduleIDs []string) string {
 	switch found.Code {
 	case emit.CodeOutputNotEmpty:
 		return "choose another folder: initializer generate <dir>"
+	case manifest.CodeNameRequired:
+		return "name the project: initializer generate <name>  (or --name <name>, or -f <file>)"
+	case emit.CodeGoModulePathLeak:
+		return "use your own Go module path for the project and for every component: --go-module <path>, go-module=<path> in --component"
 	case plan.CodeGeneratorMismatch, plan.CodeFileMismatch:
 		return rebuildCatalogHint
 	case codeInputFormatUnknown:

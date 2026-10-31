@@ -354,7 +354,7 @@ func TestDryRunSelectionIsValidInputWithTheLiveServices(t *testing.T) {
 }
 
 func TestServiceFlagProblemsAreAllListed(t *testing.T) {
-	code, _, stderr := execute(t, "generate", "--service", "postgres", "--service", "=x", "--service", "kratos=",
+	code, _, stderr := execute(t, "generate", "--name", "acme", "--service", "postgres", "--service", "=x", "--service", "kratos=",
 		"--service", "postgres=a", "--service", "postgres=b")
 	if code != exitUsage {
 		t.Fatalf("exit %d: %s", code, stderr)
