@@ -25,6 +25,7 @@ Each backend is an instance with its own origin, ports and database and, with id
 - acme-srv-second: http://localhost:10120 (console acme-web); ports srv 10101, postgres 10132, kratos-public 10143
 
 Defaults are local-only placeholders. Per-instance overrides go in `.deploy/local/<component>/.env` (optional, keys as in the `.example.env` beside it). `.deploy/local/.env` is read only by compose interpolation and reaches every instance.
+In Docker mode each Kratos takes its public origin from `APP_PUBLIC_BASE_URL_<COMPONENT>` in `.deploy/local/.env` (the component name in upper case, `-` as `_`; the default is the instance's origin above). To move an instance, set that variable and `APP_PUBLIC_BASE_URL` in the instance's `.env` to the same value.
 Without mise: `docker compose -f .deploy/local/docker-compose.yml --profile app up -d --build`.
 Stop with `mise run down` (volumes kept). `.deploy/local/README.md` lists every port and service.
 The compose project is `acme-101` (`<project name>-<port band>`). Two local stacks keep separate containers and volumes when their project name or port band differs; to run both at the same time their port bands must differ too. Projects with the same name and band share one compose project (containers, Postgres volume), and their host ports clash. Give each project its own name or port band.

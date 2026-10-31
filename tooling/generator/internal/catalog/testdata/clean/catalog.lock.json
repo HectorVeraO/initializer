@@ -5,9 +5,11 @@
   "reference": {
     "component.go-srv": "go-srv",
     "component.ng-web": "ng-web",
+    "composeEnvUse.go-srv": "reads it for its `${...}` values and passes it to",
     "composeProject": "fixture-app",
     "envPrefix": "FIXTURE_APP",
     "instanceDir.go-srv": "",
+    "instanceEnvSuffix.go-srv": "",
     "instanceSuffix.go-srv": "",
     "project": "fixture-app",
     "task.go-srv": "srv",

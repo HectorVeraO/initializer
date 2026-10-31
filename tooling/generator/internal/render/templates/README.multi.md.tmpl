@@ -19,7 +19,8 @@ Each backend is an instance with its own origin, ports and database and, with id
 {{range .Instances}}- {{.Backend}}: {{.OriginURL}}{{if .Web}} (console {{.Web}}){{end}}; ports {{.Ports}}
 {{end}}
 Defaults are local-only placeholders. Per-instance overrides go in `.deploy/local/<component>/.env` (optional, keys as in the `.example.env` beside it). `.deploy/local/.env` is read only by compose interpolation and reaches every instance.
-Without mise: `docker compose -f .deploy/local/docker-compose.yml --profile app up -d --build`.
+{{if .HasIdentity}}In Docker mode each Kratos takes its public origin from `APP_PUBLIC_BASE_URL_<COMPONENT>` in `.deploy/local/.env` (the component name in upper case, `-` as `_`; the default is the instance's origin above). To move an instance, set that variable and `APP_PUBLIC_BASE_URL` in the instance's `.env` to the same value.
+{{end}}Without mise: `docker compose -f .deploy/local/docker-compose.yml --profile app up -d --build`.
 Stop with `mise run down` (volumes kept). `.deploy/local/README.md` lists every port and service.
 The compose project is `{{.Run.ComposeProject}}` (`<project name>-<port band>`). Two local stacks keep separate containers and volumes when their project name or port band differs; to run both at the same time their port bands must differ too. Projects with the same name and band share one compose project (containers, Postgres volume), and their host ports clash. Give each project its own name or port band.
 {{if .CookieNote}}On `localhost` one browser profile is signed in to one identity instance at a time: signing in to the second overwrites the first's cookies. Use a second browser profile or a private window per instance.

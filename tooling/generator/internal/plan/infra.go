@@ -178,6 +178,7 @@ func (r *resolver) checkInfraNames(pairs []pairPlan) {
 	r.checkServiceConflicts(pairs)
 	r.checkSharedServices(pairs)
 	r.checkDatabaseNames(pairs)
+	r.checkKratosNames(pairs)
 	r.checkGoModules(pairs)
 }
 
@@ -420,6 +421,56 @@ func (r *resolver) checkDatabaseNames(pairs []pairPlan) {
 			}
 		}
 	}
+}
+
+// fixedKratosName is the role and database name of the Kratos of a single
+// project, and kratosPasswordPrefix the environment prefix whose password key
+// is the Kratos role's fixed KRATOS_PG_PASSWORD.
+const (
+	fixedKratosName      = "kratos"
+	kratosPasswordPrefix = "KRATOS"
+)
+
+// checkKratosNames reports NAME_RESERVED for a name that collides with a fixed
+// name of the Kratos the identity module delivers: the project name "kratos" in
+// any project (its environment prefix makes the app's password key the fixed
+// KRATOS_PG_PASSWORD), and a given database name or user "kratos" in a single
+// project (a multi project derives "<database>_kratos" and "<user>_kratos").
+// A backend without identity has no Kratos and keeps every name.
+func (r *resolver) checkKratosNames(pairs []pairPlan) {
+	hasKratos := false
+	for _, pair := range pairs {
+		isKratosPair := pair.named && r.pairUses(pair, names.SlotKratosDatabase)
+		hasKratos = hasKratos || isKratosPair
+		if !isKratosPair || r.multi {
+			continue
+		}
+		database, user := databaseNamesOf(pair.src)
+		if pair.src.database.Name != "" && database == fixedKratosName {
+			r.addKratosReserved(pair.src.dbPointer+"/name", "database",
+				"the database \"kratos\" belongs to Kratos", "acme")
+		}
+		if pair.src.database.User != "" && user == fixedKratosName {
+			r.addKratosReserved(pair.src.dbPointer+"/user", "database user",
+				"the role \"kratos\" belongs to Kratos", "acme")
+		}
+	}
+	if hasKratos && names.EnvPrefix(r.sel.Project.Name) == kratosPasswordPrefix {
+		r.addKratosReserved("/project/name", "project",
+			"its environment prefix KRATOS makes the project's database password key KRATOS_PG_PASSWORD, the fixed key of the Kratos role", "acme")
+	}
+}
+
+// addKratosReserved reports NAME_RESERVED at pointer for a value of kind that
+// collides with a fixed Kratos name; reason says which, example is a name that
+// works.
+func (r *resolver) addKratosReserved(pointer, kind, reason, example string) {
+	r.issues = append(r.issues, issue.Issue{
+		Code:    CodeNameReserved,
+		Path:    issue.Path(selectionSource, pointer),
+		Message: fmt.Sprintf("%q is reserved as a %s name while the identity module is installed: %s", fixedKratosName, kind, reason),
+		Hint:    fmt.Sprintf("choose another %s name, for example %q", kind, example),
+	})
 }
 
 // givenService returns the name the selection gives to a service key of the
