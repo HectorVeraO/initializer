@@ -21,6 +21,7 @@ The API opens on http://localhost:10100. Host ports 10100-10199, bound to `127.0
 Defaults are local-only placeholders; overrides go in `.deploy/local/.env` (optional, keys as in `.deploy/local/.example.env`).
 Without mise: `docker compose -f .deploy/local/docker-compose.yml --profile app up -d --build`.
 Stop with `mise run down` (volumes kept). `.deploy/local/README.md` lists every port and service.
+The compose project is `acme-backend-101` (`<project name>-<port band>`). Two local stacks keep separate containers and volumes when their project name or port band differs; to run both at the same time their port bands must differ too. Projects with the same name and band share one compose project (containers, Postgres volume), and their host ports clash. Give each project its own name or port band.
 One browser profile is signed in to one project at a time on `localhost`: cookies are per host, not per port.
 
 ## Edit a component on the host

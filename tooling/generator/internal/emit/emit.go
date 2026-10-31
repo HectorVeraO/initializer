@@ -594,7 +594,7 @@ const (
 func (b *builder) readmeRun() render.ReadmeRun {
 	p := b.opts.Plan
 	band := p.Ports.Band
-	run := render.ReadmeRun{PortLow: band * 100, PortHigh: band*100 + 99}
+	run := render.ReadmeRun{PortLow: band * 100, PortHigh: band*100 + 99, ComposeProject: names.ComposeProject(b.project, band)}
 	for _, component := range p.Components {
 		if component.Role != manifest.RoleBackend {
 			continue

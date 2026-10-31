@@ -5,6 +5,7 @@
   "reference": {
     "component.go-srv": "go-srv",
     "component.ng-web": "ng-web",
+    "composeProject": "fixture-app",
     "envPrefix": "FIXTURE_APP",
     "instanceDir.go-srv": "",
     "instanceSuffix.go-srv": "",

@@ -23,7 +23,8 @@ func (p Plan) LockNames() map[string]string {
 // the catalog and the generator disagree.
 func (r *resolver) slots(stacks []ComponentPlan, src infraSource, others []ComponentPlan) (values map[string]string, live map[string]bool) {
 	project := r.sel.Project.Name
-	resolved := names.Resolved{Project: project, Components: map[string]string{}, Multi: r.multi}
+	band, _ := r.effectiveBand()
+	resolved := names.Resolved{Project: project, Band: band, Components: map[string]string{}, Multi: r.multi}
 	live = map[string]bool{names.SlotProject: true}
 	selected := map[string]bool{}
 	for _, component := range stacks {

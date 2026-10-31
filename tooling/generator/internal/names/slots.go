@@ -2,6 +2,7 @@ package names
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
@@ -14,6 +15,10 @@ const (
 	SlotDatabase    = "database"
 	SlotDBUser      = "dbUser"
 	SlotEnvPrefix   = "envPrefix"
+	// SlotComposeProject is the top-level name of the local compose file: the
+	// project name plus the port band, so projects on different bands never
+	// share containers or volumes.
+	SlotComposeProject = "composeProject"
 	// SlotInstanceDir is the directory prefix of a per-component file of the
 	// bound backend: "" in a single project, "<component>/" in a multi project.
 	SlotInstanceDir = "instanceDir.go-srv"
@@ -60,6 +65,9 @@ type Resolved struct {
 	DisplayName string
 	Database    string
 	DBUser      string
+	// Band is the effective port band of a generated project; 0 for the
+	// reference, whose compose project name carries no band suffix.
+	Band int
 	// Components maps a stack id to its component name.
 	Components map[string]string
 	// Services maps a service key to its compose service name.
@@ -85,6 +93,9 @@ type DerivedSlot struct {
 
 // Derived is the registry of derived slots, sorted by Name.
 var Derived = []DerivedSlot{
+	{Name: SlotComposeProject, NotRecorded: true, Value: func(r Resolved, _ string) string {
+		return ComposeProject(r.Project, r.Band)
+	}},
 	{Name: SlotEnvPrefix, Value: func(r Resolved, _ string) string { return EnvPrefix(r.Project) }},
 	{Name: SlotInstanceDir, MayBeEmpty: true, NotRecorded: true, Value: func(r Resolved, _ string) string {
 		return instanceValue(r, "", "/")
@@ -150,7 +161,7 @@ func derivedOf(slot string) (DerivedSlot, string, bool) {
 // slot takes the value of one component or instance.
 func IsProjectLevel(slot string) bool {
 	switch slot {
-	case SlotProject, SlotDisplayName, SlotEnvPrefix:
+	case SlotProject, SlotDisplayName, SlotEnvPrefix, SlotComposeProject:
 		return true
 	}
 	return false
@@ -187,6 +198,15 @@ func Snake(s string) string {
 // EnvPrefix returns upper(snake(project)): "acme-backend" gives "ACME_BACKEND".
 func EnvPrefix(project string) string {
 	return strings.ToUpper(Snake(project))
+}
+
+// ComposeProject returns the compose project name of a project on a port band:
+// "<project>-<band>", or the bare project when band is 0.
+func ComposeProject(project string, band int) string {
+	if band == 0 {
+		return project
+	}
+	return project + "-" + strconv.Itoa(band)
 }
 
 // IsSlot reports whether name is a slot of the vocabulary or of Derived,

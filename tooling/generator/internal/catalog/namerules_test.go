@@ -120,7 +120,7 @@ func TestReferenceFileIsNeverCatalogued(t *testing.T) {
 func TestCatalogRecordsTheReferenceSlotMap(t *testing.T) {
 	built, _ := buildRepo(t, cleanRepo(t))
 	want := map[string]string{
-		"project": "fixture-app", "envPrefix": "FIXTURE_APP", "component.go-srv": "go-srv", "component.ng-web": "ng-web",
+		"project": "fixture-app", "composeProject": "fixture-app", "envPrefix": "FIXTURE_APP", "component.go-srv": "go-srv", "component.ng-web": "ng-web",
 		"instanceDir.go-srv": "", "instanceSuffix.go-srv": "", "task.go-srv": "srv", "task.ng-web": "web",
 		"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
 	}

@@ -108,7 +108,7 @@ func readmeRun(name string, withWeb, withIdentity bool) render.ReadmeRun {
 		instance.OriginURL = "http://localhost:10120"
 		instance.DevWebTask = "dev:web"
 	}
-	return render.ReadmeRun{PortLow: 10100, PortHigh: 10199, Instances: []render.ReadmeInstance{instance}}
+	return render.ReadmeRun{PortLow: 10100, PortHigh: 10199, ComposeProject: name + "-101", Instances: []render.ReadmeInstance{instance}}
 }
 
 // readmeInput returns the README data of an acme project with the identity
@@ -233,6 +233,9 @@ func TestReadmeRefusesAnInvalidRun(t *testing.T) {
 	cases := map[string]func(run *render.ReadmeRun){
 		"port range reversed":     func(run *render.ReadmeRun) { run.PortLow, run.PortHigh = 10199, 10100 },
 		"port range empty":        func(run *render.ReadmeRun) { run.PortHigh = run.PortLow },
+		"no compose project":      func(run *render.ReadmeRun) { run.ComposeProject = "" },
+		"backtick in compose":     func(run *render.ReadmeRun) { run.ComposeProject = "acme`-101" },
+		"line break in compose":   func(run *render.ReadmeRun) { run.ComposeProject = "acme\n# injected-101" },
 		"no instance":             func(run *render.ReadmeRun) { run.Instances = nil },
 		"empty backend":           func(run *render.ReadmeRun) { run.Instances[0].Backend = "" },
 		"web without a web task":  func(run *render.ReadmeRun) { run.Instances[0].DevWebTask = "" },
@@ -286,7 +289,7 @@ func multiReadmeInput() render.ReadmeInput {
 			{Component: "acme-srv-second", Stack: "go-srv", Module: "feature-flags", Version: "0.1.0"},
 			{Component: "acme-web", Stack: "ng-web", Module: "core", Version: "0.1.0"},
 		},
-		Run: render.ReadmeRun{PortLow: 10100, PortHigh: 10199, Instances: []render.ReadmeInstance{
+		Run: render.ReadmeRun{PortLow: 10100, PortHigh: 10199, ComposeProject: "acme-101", Instances: []render.ReadmeInstance{
 			{Backend: "acme-srv-first", OriginURL: "http://localhost:10100", HasIdentity: true, DevSrvTask: "dev:acme-srv-first", TCKTask: "tck:acme-srv-first"},
 			{Backend: "acme-srv-second", Web: "acme-web", OriginURL: "http://localhost:10120", HasIdentity: true,
 				DevSrvTask: "dev:acme-srv-second", DevWebTask: "dev:acme-web", TCKTask: "tck:acme-srv-second"},

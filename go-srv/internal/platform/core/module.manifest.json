@@ -37,7 +37,7 @@
     "go-srv/cookbooks/"
   ],
   "names": [
-    { "path": ".deploy/local/docker-compose.yml", "text": "name: %{project}" },
+    { "path": ".deploy/local/docker-compose.yml", "text": "name: %{composeProject}" },
     { "path": ".deploy/local/docker-compose.yml", "text": "POSTGRES_DB: %{database}" },
     { "path": ".deploy/local/docker-compose.yml", "text": "POSTGRES_USER: %{dbUser}" },
     { "path": ".deploy/local/docker-compose.yml", "text": "${%{envPrefix}_PG_PASSWORD" },

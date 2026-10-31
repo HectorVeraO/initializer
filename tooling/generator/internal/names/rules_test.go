@@ -37,6 +37,7 @@ func TestIsSlot(t *testing.T) {
 		{"database", nil, true},
 		{"dbUser", nil, true},
 		{"envPrefix", nil, true},
+		{"composeProject", nil, true},
 		{"component.go-srv", []string{"go-srv"}, true},
 		{"component.go-srv", nil, false},
 		{"component.ng-web", []string{"go-srv"}, false},
@@ -192,12 +193,34 @@ func TestResolvedSlotsIncludeDerivedAndSkipEmpty(t *testing.T) {
 		Components: map[string]string{"go-srv": "acme-backend-srv"},
 	}.Slots()
 	want := map[string]string{
-		"project": "acme-backend", "envPrefix": "ACME_BACKEND", "component.go-srv": "acme-backend-srv",
+		"project": "acme-backend", "composeProject": "acme-backend", "envPrefix": "ACME_BACKEND", "component.go-srv": "acme-backend-srv",
 		"instanceDir.go-srv": "", "instanceSuffix.go-srv": "", "task.go-srv": "srv",
 		"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Slots = %v, want %v", got, want)
+	}
+}
+
+func TestComposeProjectCarriesThePortBand(t *testing.T) {
+	cases := []struct {
+		project string
+		band    int
+		want    string
+	}{
+		{"acme", 101, "acme-101"},
+		{"acme", 103, "acme-103"},
+		{"acme-backend", 654, "acme-backend-654"},
+		{"initializer", 0, "initializer"},
+	}
+	for _, c := range cases {
+		got := names.Resolved{Project: c.project, Band: c.band}.Slots()["composeProject"]
+		if got != c.want || names.ComposeProject(c.project, c.band) != c.want {
+			t.Errorf("composeProject(%q, %d) = %q, want %q", c.project, c.band, got, c.want)
+		}
+	}
+	if names.IsRecorded("composeProject") || !names.IsProjectLevel("composeProject") {
+		t.Error("composeProject must be derived (never recorded) and project-level")
 	}
 }
 
@@ -256,7 +279,7 @@ func TestReferenceReturnsTheSlotMap(t *testing.T) {
 		Components: map[string]string{"go-srv": "go-srv", "ng-web": "ng-web"},
 	})
 	want := map[string]string{
-		"project": "initializer", "envPrefix": "INITIALIZER",
+		"project": "initializer", "composeProject": "initializer", "envPrefix": "INITIALIZER",
 		"component.go-srv": "go-srv", "component.ng-web": "ng-web",
 		"instanceDir.go-srv": "", "instanceSuffix.go-srv": "", "task.go-srv": "srv", "task.ng-web": "web",
 		"tckTask.go-srv": "tck", "tckArgs.go-srv": "",
