@@ -33,20 +33,56 @@ type dryRun struct {
 
 // resolvedSelection returns the resolved document of a dry run: schema 2, every
 // default filled in, the installed modules and every component with its
-// effective name. It is valid input for -f.
+// effective name. It is valid input for -f. A project with several backends
+// holds the modules, Go module, database and services in each backend entry
+// and the bound backend in each frontend entry, with none of them at the top
+// level, where they would apply to every backend.
 func (d dryRun) resolvedSelection() manifest.Selection {
 	selection := d.plan.Selection
 	selection.Schema = manifest.MaxSchema
 	selection.Has = manifest.Presence{Name: true, GoModule: selection.Project.GoModule != "", Stacks: true, Modules: true}
 	selection.AllModules = false
-	selection.Components = make([]manifest.Component, 0, len(d.plan.Components))
-	for _, component := range d.plan.Components {
-		selection.Components = append(selection.Components, manifest.Component{Stack: component.Stack, Name: component.Name})
-	}
-	selection.Database = d.plan.Database()
-	selection.Services = d.plan.Services()
 	selection.Ports = &manifest.Ports{Band: d.plan.Ports.Band}
+	selection.Components = make([]manifest.Component, 0, len(d.plan.Components))
+	if !d.plan.Multi() {
+		for _, component := range d.plan.Components {
+			selection.Components = append(selection.Components, manifest.Component{Stack: component.Stack, Name: component.Name})
+		}
+		selection.Database = d.plan.Database()
+		selection.Services = d.plan.Services()
+		return selection
+	}
+	for _, component := range d.plan.Components {
+		entry := manifest.Component{Stack: component.Stack, Name: component.Name}
+		switch component.Role {
+		case manifest.RoleBackend:
+			entry.Modules, entry.HasModules = moduleIDsOf(component), true
+			entry.GoModule = component.GoModule
+			if component.Database != (manifest.Database{}) {
+				database := component.Database
+				entry.Database = &database
+			}
+			entry.Services = copyStrings(component.Services)
+		case manifest.RoleFrontend:
+			entry.Backend = component.Partner
+		}
+		selection.Components = append(selection.Components, entry)
+	}
+	selection.Modules, selection.Has.Modules = nil, false
+	selection.Database, selection.Services = nil, nil
 	return selection
+}
+
+// copyStrings returns a copy of values, nil when it is empty.
+func copyStrings(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	copied := make(map[string]string, len(values))
+	for key, value := range values {
+		copied[key] = value
+	}
+	return copied
 }
 
 // builtLock decodes the lock the project would carry.

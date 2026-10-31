@@ -51,6 +51,10 @@ func TestNameRuleIssueCodes(t *testing.T) {
 			put(r, composeFile, "name: fixture-app\n# initializer:module identity\nx: 1\n# initializer:end identity\n")
 			setRules(t, r, projectRule, `{"path": "`+composeFile+`", "text": "%{project}\n# initializer:module identity"}`)
 		}, []string{"NAME_RULE_OVERLAP"}},
+		{"occurrence starts on the newline that ends a run's end marker", func(t *testing.T, r fstest.MapFS) {
+			put(r, composeFile, "name: fixture-app\n# initializer:stack go-srv\nx: 1\n# initializer:end go-srv\nlabel: fixture-app\n")
+			setRules(t, r, projectRule, `{"path": "`+composeFile+`", "text": "\nlabel: %{project}"}`)
+		}, []string{"NAME_RULE_OVERLAP"}},
 		{"rules without a reference file", func(t *testing.T, r fstest.MapFS) {
 			delete(r, referenceFile)
 		}, []string{"REFERENCE_INVALID"}},

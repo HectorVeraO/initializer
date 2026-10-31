@@ -354,7 +354,8 @@ func generateProject(ctx *Context, in generateInput) int {
 	}
 
 	digest := found.CatalogSHA256
-	recorded := manifest.RecordedSelection(in.run.merged, backendModuleLists(resolved)...)
+	recorded := manifest.RecordedSelection(withProjectName(in.run.merged, selection.Project.Name), backendModuleLists(resolved)...)
+	dropDerivedBackendReferences(&recorded, resolved)
 	project, err := emit.Build(emit.BuildOptions{
 		Root:          root,
 		Plan:          resolved,
@@ -411,6 +412,42 @@ func generateProject(ctx *Context, in generateInput) int {
 		slog.Int("file_count", len(project.Files)),
 		slog.Int("module_count", len(resolved.Selection.Modules)))
 	return exitOK
+}
+
+// withProjectName returns the input with the project name set to name when no
+// source gave one: a name taken from the folder is a choice the replay of the
+// recorded selection must keep.
+func withProjectName(in manifest.Input, name string) manifest.Input {
+	if !in.Selection.Has.Name {
+		in.Selection.Project.Name, in.Selection.Has.Name = name, true
+	}
+	return in
+}
+
+// dropDerivedBackendReferences clears the backend of a frontend entry that
+// names the project's only backend by a name the project derived, so that a
+// replay with another --name binds the frontend to the re-derived backend.
+func dropDerivedBackendReferences(recorded *manifest.Selection, resolved plan.Plan) {
+	var backends []plan.ComponentPlan
+	for _, component := range resolved.Components {
+		if component.Role == roleBackend {
+			backends = append(backends, component)
+		}
+	}
+	if len(backends) != 1 {
+		return
+	}
+	only := backends[0]
+	for _, entry := range recorded.Components {
+		if entry.Stack == only.Stack && entry.Name == only.Name {
+			return
+		}
+	}
+	for i := range recorded.Components {
+		if recorded.Components[i].Backend == only.Name {
+			recorded.Components[i].Backend = ""
+		}
+	}
 }
 
 // planBlockingCodes are the issue codes after which the plan does not run: the
