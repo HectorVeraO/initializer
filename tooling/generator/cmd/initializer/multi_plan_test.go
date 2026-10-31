@@ -170,7 +170,7 @@ func dryRunOf(t *testing.T, resolved plan.Plan, added []moduleAdded) dryRun {
 		t.Fatal(err)
 	}
 	return dryRun{
-		path: "acme", plan: resolved, recorded: resolved.Selection, added: added, notes: resolved.Notes,
+		path: "acme", plan: resolved, recorded: resolved.Selection, added: added,
 		project: emit.Project{Files: []emit.File{{Path: lockfile.Name, Data: encoded}}},
 	}
 }
@@ -187,7 +187,6 @@ func TestADryRunOfAMultiPlanListsEveryComponentWithItsBackend(t *testing.T) {
 		"acme-srv-first    go-srv   0                        example.com/acme/acme-srv-first    acme_srv_first/acme_srv_first     srv 10100, postgres 10132, kratos-public 10133   core, identity, parameters\n" +
 		"acme-srv-second   go-srv   1                        example.com/acme/acme-srv-second   acme_srv_second/acme_srv_second   srv 10101, postgres 10142, kratos-public 10143   core, identity, tenancy\n" +
 		"acme-web          ng-web   0       acme-srv-first                                                                        web 10120                                        core, identity, parameters\n" +
-		"note: go modules derived from example.com/acme; pass go-module= per component to change them\n" +
 		"1 file\n"
 	if out.String() != want {
 		t.Fatalf("stdout\n%s\nwant\n%s", out.String(), want)

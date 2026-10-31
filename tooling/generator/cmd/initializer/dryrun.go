@@ -27,8 +27,6 @@ type dryRun struct {
 	source        sourceRef
 	catalog       catalogRef
 	added         []moduleAdded
-	// notes are the derived defaults of a multi project, printed after the table.
-	notes []string
 }
 
 // resolvedSelection returns the resolved document of a dry run: schema 2, every
@@ -355,7 +353,7 @@ func portsText(host map[string]int) string {
 }
 
 // writeMultiTable writes the component table of a multi project, one row per
-// component in lock order, then one line per derived default.
+// component in lock order.
 func (d dryRun) writeMultiTable(text *strings.Builder) {
 	rows := [][]string{{"COMPONENT", "STACK", "INDEX", "BACKEND", "GO MODULE", "DATABASE", "PORTS", "MODULES"}}
 	for _, component := range d.plan.Components {
@@ -373,7 +371,4 @@ func (d dryRun) writeMultiTable(text *strings.Builder) {
 		})
 	}
 	writeTable(text, rows)
-	for _, note := range d.notes {
-		fmt.Fprintf(text, "note: %s\n", note)
-	}
 }

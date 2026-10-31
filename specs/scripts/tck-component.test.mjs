@@ -62,10 +62,29 @@ test('--component selects the tags and the cooperation invert of that backend', 
   assert.doesNotMatch('a @identity', regexOf(second.passes[0], '--grep'));
   assert.match('a @parameters @identity', regexOf(second.passes[0], '--grep-invert'));
   assert.match('a @feature-flags @identity', regexOf(second.passes[1], '--grep-invert'));
-  // api-keys cooperates with @tenancy, but no backend installs api-keys.
-  for (const pass of second.passes) {
-    assert.doesNotMatch('a @tenancy', regexOf(pass, '--grep-invert'));
-  }
+});
+
+test('--component leaves out a scenario co-tagged with a module the backend lacks', () => {
+  // acme-srv-tenancy installs tenancy but neither api-keys nor parameters; the
+  // specs tree is the union of all backends, so those scenarios are on disk.
+  withLock((lock) => {
+    lock.components.push({
+      ...lock.components[0], name: 'acme-srv-tenancy', index: 2, goModule: 'example.com/acme/acme-srv-tenancy',
+      modules: ['core', 'identity', 'tenancy'], origin: 'http://localhost:10140',
+      tck: { tags: ['@core', '@identity', '@otel', '@tenancy'], grep: '@(core|identity|otel|tenancy)', env: {} },
+    });
+  }, (specs) => {
+    const { passes } = planComponentRun({ specsDir: specs, component: 'acme-srv-tenancy', env: {} });
+    const selects = (title) => passes.some((pass) => {
+      const grep = regexOf(pass, '--grep');
+      const invert = regexOf(pass, '--grep-invert');
+      return grep.test(title) && !(invert !== undefined && invert.test(title));
+    });
+    assert.equal(selects('a key resolves its tenant by slug or id @api-keys @tenancy'), false);
+    assert.equal(selects('a parameter is scoped to its tenant @parameters @tenancy'), false);
+    assert.equal(selects('a tenant lists its members @tenancy'), true);
+    assert.equal(selects('a session survives a restart @identity @tenancy'), true);
+  });
 });
 
 test('--component keeps --tags semantics inside the backend tags', () => {

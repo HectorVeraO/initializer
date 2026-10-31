@@ -327,13 +327,11 @@ func generateProject(ctx *Context, in generateInput) int {
 		outputIssues[i].Path = filepath.ToSlash(displayDir)
 	}
 	issues = append(issues, outputIssues...)
-	// The dry-run table of a multi project prints the derived-default notes itself.
-	isTableNote := in.dryRun && !ctx.isJSON()
-	if len(issues) == 0 && !isTableNote {
+	if len(issues) == 0 {
 		notes = append(notes, resolved.Notes...)
 	}
 	for _, note := range notes {
-		fmt.Fprintf(ctx.Stderr, "note: %s\n", note)
+		fmt.Fprintf(ctx.diagnostics(), "note: %s\n", note)
 	}
 	if len(issues) > 0 {
 		issues = folderNameIssues(dedupeIssues(relocate(issues, resolvedInput)), selection.Project.Name, in.dir)
@@ -379,7 +377,7 @@ func generateProject(ctx *Context, in generateInput) int {
 	if in.dryRun {
 		return writeDryRun(ctx, dryRun{
 			path: displayDir, project: project, plan: resolved, resolvedInput: resolvedInput, recorded: recorded,
-			source: ref, catalog: catalogOf(found), added: added, notes: resolved.Notes,
+			source: ref, catalog: catalogOf(found), added: added,
 		})
 	}
 	if err := emit.Write(outDir, project); err != nil {

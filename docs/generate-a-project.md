@@ -276,11 +276,10 @@ COMPONENT                 STACK    INDEX   BACKEND                   GO MODULE  
 acme-backend-srv-first    go-srv   0                                 example.com/acme/backend/acme-backend-srv-first    acme_backend_srv_first/acme_backend_srv_first     srv 10100, postgres 10132, kratos-public 10133, kratos-admin 10134   core, identity
 acme-backend-srv-second   go-srv   1                                 example.com/acme/backend/acme-backend-srv-second   acme_backend_srv_second/acme_backend_srv_second   srv 10101, postgres 10132, kratos-public 10135, kratos-admin 10136   core, identity, api-keys, feature-flags, parameters, tenancy
 acme-backend-web          ng-web   0       acme-backend-srv-second                                                                                                        web 10120                                                            core, identity, api-keys, feature-flags, parameters, tenancy
-note: go modules derived from example.com/acme/backend; pass go-module= per component to change them
 810 files
 ```
 
-The `note:` line names the derived Go modules; the plan prints it after the table. Without `--dry-run` the command writes the project (810 files) and `initializer verify acme-backend` answers `No differences.`
+The command also prints `note: go modules derived from example.com/acme/backend; pass go-module= per component to change them` on stderr (section 10). Without `--dry-run` the command writes the project (810 files) and `initializer verify acme-backend` answers `No differences.`
 
 ### One Postgres server for all backends
 
@@ -397,6 +396,7 @@ It prints nothing when every selection passes; each log is `try/<name>.log`.
 - `--format json` prints one JSON document: on stdout for exit 0 and 1, on stderr for exit 2 and 3 (stdout stays empty).
 - `--log json` writes structured log events to stderr.
 - `Sources:`, `note:`, `warning:` and `error:` lines go to stderr; stdout carries the result only.
+- With `--format json`, the `Sources:`, `note:` and `warning:` lines are printed only when the exit code is 0 or 1; an exit 2 or 3 leaves the one JSON document alone on stderr.
 
 | Exit | Meaning |
 |---|---|

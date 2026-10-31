@@ -60,7 +60,8 @@ function isMultiLock(lock) {
 
 /**
  * Plans the Playwright passes and the environment for one backend component of
- * a multi project, from the TCK selection its lock entry records. The two
+ * a multi project, from the TCK selection its lock entry records. A scenario
+ * runs only when every tag it carries is one the component installs. The two
  * origin keys come from the lock and win over exported values; every other
  * exported variable wins over the entry's `tck.env`.
  * @param {{ specsDir: string, component: string, tags?: string, env?: NodeJS.ProcessEnv }} options
@@ -89,9 +90,13 @@ export function planComponentRun({ specsDir, component, tags, env = process.env 
     throw new TckError(`component ${component} has no origin in the lock`, 2);
   }
   const installed = collectTags([{ spec: component, tckTags: tck.tags }]);
-  const componentManifests = loadManifests(specsDir).filter((manifest) => manifest.tckTags.every((tag) => installed.includes(tag)));
+  const allManifests = loadManifests(specsDir);
+  const componentManifests = allManifests.filter((manifest) => manifest.tckTags.every((tag) => installed.includes(tag)));
   const selected = narrowTags(installed, parseTagList(tags));
-  const invert = collectInvertTags(componentManifests, installed);
+  // The specs folder holds the union of every backend's specs: a scenario
+  // co-tagged with a module this backend lacks is left out.
+  const absentTags = collectTags(allManifests).filter((tag) => !installed.includes(tag));
+  const invert = [...new Set([...collectInvertTags(componentManifests, installed), ...absentTags])].sort();
   const passes = planPasses(selected, invert);
   const origin = entry.origin;
   const componentEnv = { ...(tck.env ?? {}), ...env, TCK_BASE_URL: origin, APP_PUBLIC_BASE_URL: origin };

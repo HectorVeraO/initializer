@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
@@ -51,6 +52,29 @@ type Context struct {
 	// Notes and Warnings are collected for the result document.
 	Notes    []string
 	Warnings []Warning
+	// held collects the stderr text lines (Sources:, note:, warning:) of a
+	// --format json run until its exit code is known.
+	held bytes.Buffer
+}
+
+// diagnostics returns the writer of the Sources:, note: and warning: lines.
+// With --format json they wait in memory: an exit-2 or exit-3 run leaves its
+// one JSON document alone on stderr, so those lines are kept only for exit 0
+// and 1 (see flushDiagnostics).
+func (c *Context) diagnostics() io.Writer {
+	if c.isJSON() {
+		return &c.held
+	}
+	return c.Stderr
+}
+
+// flushDiagnostics writes the held lines to stderr for exit 0 and 1 and drops
+// them for any other exit code.
+func (c *Context) flushDiagnostics(code int) {
+	if (code == exitOK || code == exitIssues) && c.held.Len() > 0 {
+		_, _ = c.Stderr.Write(c.held.Bytes())
+	}
+	c.held.Reset()
 }
 
 func main() {
@@ -191,7 +215,9 @@ func runCommand(ctx *Context, cmd *Command, args []string) int {
 		}
 		return reportProblemsAndIssues(ctx, problems, issues, view)
 	}
-	return cmd.Run(ctx, opts, positionals)
+	code := cmd.Run(ctx, opts, positionals)
+	ctx.flushDiagnostics(code)
+	return code
 }
 
 // runHelp prints the overview, a group's command list or one command's help.
