@@ -164,7 +164,9 @@ initializer generate starter --stacks go-srv --modules parameters --dry-run --fo
 initializer generate starter -f starter.json
 ```
 
-Every generated project carries the resolved choices as `initializer.selection.json` (with the port band when you set one), so `-f <project>/initializer.selection.json` regenerates it.
+The `selection` member is valid `-f` input for every project, also one with several backends: each backend entry then holds its own modules, Go module, database and services, and each frontend entry its `backend`.
+
+Every generated project carries its choices as `initializer.selection.json` (with the port band when you set one), so `-f <project>/initializer.selection.json` regenerates it. The file records the project name, also when it came from the folder; the Go module, folders, database and services you did not set are derived from the name again. `--name` on the replay renames the project and every derived name, and a frontend bound to the derived backend follows it.
 
 ## 5. Names, database, services, display name, port band
 

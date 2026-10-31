@@ -305,7 +305,9 @@ func (l lineLayout) lineRange(line int) (start, end int) {
 }
 
 // touchedMarker reports the 0-based line of the marker line an occurrence
-// intersects.
+// intersects. The newline that ends the last end marker of a run belongs to
+// the marker: generate splits the file there, so an occurrence starting on that
+// newline would span two segments and no rule could match it.
 func (l lineLayout) touchedMarker(o names.Occurrence) (int, bool) {
 	for _, block := range l.blocks {
 		for _, line := range []int{block.Start, block.End} {
@@ -313,6 +315,12 @@ func (l lineLayout) touchedMarker(o names.Occurrence) (int, bool) {
 			if o.Start < end && start < o.End {
 				return line, true
 			}
+		}
+	}
+	for _, run := range l.runs {
+		_, end := l.lineRange(run.End)
+		if o.Start == end && o.End > o.Start {
+			return run.End, true
 		}
 	}
 	return 0, false

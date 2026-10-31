@@ -160,7 +160,7 @@ func lockedStacks(t *testing.T, dir string) []string {
 	return stacks
 }
 
-func TestGenerateRecordsOnlyTheInputsGiven(t *testing.T) {
+func TestGenerateRecordsTheNameFromTheFolderAndNoOtherDefault(t *testing.T) {
 	e := newEnv(t)
 	wd := t.TempDir()
 	if code, _, stderr := executeIn(t, wd, "", e.inputArgs("acme", "--modules", "parameters")...); code != exitOK {
@@ -168,20 +168,11 @@ func TestGenerateRecordsOnlyTheInputsGiven(t *testing.T) {
 	}
 	recorded := readJSONFile(t, filepath.Join(wd, "acme", "initializer.selection.json"))
 	project, _ := recorded["project"].(map[string]any)
-	if _, hasName := project["name"]; hasName || recorded["stacks"] != nil || recorded["schema"] != float64(2) {
-		t.Fatalf("a defaulted name and stack list are not recorded: %v", recorded)
+	if project["name"] != "acme" {
+		t.Errorf("the name taken from the folder is not recorded: %v", recorded)
 	}
-	if lockedName(t, filepath.Join(wd, "acme")) != "acme" {
-		t.Fatalf("the lock holds the effective name")
-	}
-
-	// Replaying the recorded file into another folder derives the name from it.
-	replay := filepath.Join(wd, "acme", "initializer.selection.json")
-	if code, _, stderr := executeIn(t, wd, "", e.inputArgs("-f", replay, "shop")...); code != exitOK {
-		t.Fatalf("replay exit %d: %s", code, stderr)
-	}
-	if lockedName(t, filepath.Join(wd, "shop")) != "shop" || goModuleOf(t, filepath.Join(wd, "shop")) != "example.com/shop" {
-		t.Fatalf("replay name %q module %q", lockedName(t, filepath.Join(wd, "shop")), goModuleOf(t, filepath.Join(wd, "shop")))
+	if _, hasModule := project["goModule"]; hasModule || recorded["stacks"] != nil {
+		t.Errorf("a defaulted Go module and stack list are not recorded: %v", recorded)
 	}
 }
 
