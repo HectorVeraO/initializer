@@ -126,8 +126,14 @@ func relImport(modulePath, imp string) (string, bool) {
 
 const (
 	platformDir = "internal/platform"
+	internalDir = "internal"
 	coreDir     = "internal/platform/core"
 	serverDir   = "cmd/server"
+	// modulesGoFile is the generated module list of the server; every other
+	// file of the package may import the module roots it names.
+	modulesGoFile = "modules.go"
+	// productFile is the project-owned registration seam of the server.
+	productFile = "product.go"
 )
 
 // platformOwner returns the first path element below internal/platform ("core",
@@ -141,11 +147,42 @@ func platformOwner(rel string) (string, bool) {
 	return owner, true
 }
 
+// productOwner returns the vertical of a product package: the first path
+// element below internal/ when it is not the platform tree, or false.
+func productOwner(rel string) (string, bool) {
+	below, found := strings.CutPrefix(rel, internalDir+"/")
+	if !found {
+		return "", false
+	}
+	owner, _, _ := strings.Cut(below, "/")
+	if owner == "" || owner == "platform" {
+		return "", false
+	}
+	return owner, true
+}
+
+// moduleDirOf returns the directory a package belongs to: the root of its
+// platform module or of its product vertical, "" for everything else, core
+// included.
+func moduleDirOf(rel string) string {
+	if owner, isPlatform := platformOwner(rel); isPlatform {
+		if owner == "core" {
+			return ""
+		}
+		return platformDir + "/" + owner
+	}
+	if owner, isProduct := productOwner(rel); isProduct {
+		return internalDir + "/" + owner
+	}
+	return ""
+}
+
 func isUnder(rel, dir string) bool {
 	return rel == dir || strings.HasPrefix(rel, dir+"/")
 }
 
-// ruleCoreImportsNoModule is rule 1.
+// ruleCoreImportsNoModule is rule 1: a core package imports nothing under
+// internal/ outside the core tree.
 func ruleCoreImportsNoModule(modulePath string, packages []listedPackage) []string {
 	var problems []string
 	for _, p := range packages {
@@ -155,8 +192,7 @@ func ruleCoreImportsNoModule(modulePath string, packages []listedPackage) []stri
 		}
 		for _, imp := range p.allImports() {
 			target, internal := relImport(modulePath, imp)
-			owner, isPlatform := platformOwner(target)
-			if internal && isPlatform && owner != "core" {
+			if internal && isUnder(target, internalDir) && !isUnder(target, coreDir) {
 				problems = append(problems, fmt.Sprintf("rule 1: %s imports %s", p.ImportPath, imp))
 			}
 		}
@@ -164,23 +200,23 @@ func ruleCoreImportsNoModule(modulePath string, packages []listedPackage) []stri
 	return problems
 }
 
-// ruleModuleImports is rule 2: module packages import only core and their own subtree.
+// ruleModuleImports is rule 2: a platform module package imports only core and
+// its own subtree; a product package imports only non-internal core packages
+// and its own subtree.
 func ruleModuleImports(modulePath string, packages []listedPackage) []string {
 	var problems []string
 	for _, p := range packages {
 		rel, _ := relImport(modulePath, p.ImportPath)
-		owner, isPlatform := platformOwner(rel)
-		if !isPlatform || owner == "core" {
+		dir := moduleDirOf(rel)
+		if dir == "" {
 			continue
 		}
-		own := platformDir + "/" + owner
 		for _, imp := range p.allImports() {
 			target, internal := relImport(modulePath, imp)
 			if !internal {
 				continue
 			}
-			allowed := isUnder(target, own) || (isUnder(target, coreDir) && !strings.Contains(target, "/internal/") && !strings.HasSuffix(target, "/internal"))
-			if !allowed {
+			if !isUnder(target, dir) && !isPublicCore(target) {
 				problems = append(problems, fmt.Sprintf("rule 2: %s imports %s", p.ImportPath, imp))
 			}
 		}
@@ -188,11 +224,19 @@ func ruleModuleImports(modulePath string, packages []listedPackage) []string {
 	return problems
 }
 
-// modulesGoImports returns the import paths declared by modules.go in dir.
-func modulesGoImports(dir string) map[string]bool {
+// isPublicCore reports whether target is a core package another module may
+// import: core itself or one of its packages outside core/internal.
+func isPublicCore(target string) bool {
+	isCore := isUnder(target, coreDir)
+	hasInternal := strings.Contains(target, "/internal/") || strings.HasSuffix(target, "/internal")
+	return isCore && !hasInternal
+}
+
+// goFileImports returns the import paths one Go file in dir declares.
+func goFileImports(dir, name string) map[string]bool {
 	named := map[string]bool{}
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filepath.Join(dir, "modules.go"), nil, parser.ImportsOnly)
+	file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ImportsOnly)
 	if err != nil {
 		return named
 	}
@@ -205,7 +249,19 @@ func modulesGoImports(dir string) map[string]bool {
 	return named
 }
 
-// ruleServerImports is rule 3: cmd/server imports core and the module roots named in modules.go.
+// modulesGoImports returns the import paths declared by modules.go in dir.
+func modulesGoImports(dir string) map[string]bool {
+	return goFileImports(dir, modulesGoFile)
+}
+
+// productGoImports returns the import paths declared by product.go in dir.
+func productGoImports(dir string) map[string]bool {
+	return goFileImports(dir, productFile)
+}
+
+// ruleServerImports is rule 3, per file: product.go imports the core root and
+// product roots only; every other file of cmd/server imports the core root and
+// the platform module roots modules.go names.
 func ruleServerImports(modulePath string, packages []listedPackage) []string {
 	var problems []string
 	for _, p := range packages {
@@ -214,20 +270,47 @@ func ruleServerImports(modulePath string, packages []listedPackage) []string {
 			continue
 		}
 		named := modulesGoImports(p.Dir)
-		for _, imp := range p.allImports() {
-			target, internal := relImport(modulePath, imp)
-			if !internal {
-				continue
+		for _, name := range p.sourceFiles() {
+			imports := goFileImports(p.Dir, name)
+			if name == productFile {
+				imports = productGoImports(p.Dir)
 			}
-			owner, isPlatform := platformOwner(target)
-			isCoreRoot := target == coreDir
-			isModuleRoot := isPlatform && owner != "core" && target == platformDir+"/"+owner && named[imp]
-			if !isCoreRoot && !isModuleRoot {
-				problems = append(problems, fmt.Sprintf("rule 3: %s imports %s", p.ImportPath, imp))
+			for _, imp := range sortedKeys(imports) {
+				if !serverImportAllowed(modulePath, imp, name, named) {
+					problems = append(problems, fmt.Sprintf("rule 3: %s/%s imports %s", p.ImportPath, name, imp))
+				}
 			}
 		}
 	}
 	return problems
+}
+
+// serverImportAllowed reports whether imp may appear in file name of a
+// cmd/server package.
+func serverImportAllowed(modulePath, imp, name string, named map[string]bool) bool {
+	target, internal := relImport(modulePath, imp)
+	if !internal {
+		return true
+	}
+	if target == coreDir {
+		return true
+	}
+	if name == productFile {
+		owner, isProduct := productOwner(target)
+		return isProduct && target == internalDir+"/"+owner
+	}
+	owner, isPlatform := platformOwner(target)
+	return isPlatform && owner != "core" && target == platformDir+"/"+owner && named[imp]
+}
+
+// sortedKeys returns the keys of a set, sorted bytewise.
+func sortedKeys(values map[string]bool) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // ruleCoreSubpackagesNotRoot is rule 5. core/coretest is the one exception: it
@@ -499,6 +582,14 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 			want: "rule 1",
 		},
 		{
+			name: "rule 1 core imports a product vertical",
+			files: map[string]string{
+				"internal/platform/core/core.go": "package core\n\nimport _ \"example.com/boundary/internal/dispatch\"\n",
+				"internal/dispatch/dispatch.go":  "package dispatch\n",
+			},
+			want: "rule 1",
+		},
+		{
 			name: "rule 2 module imports another module",
 			files: map[string]string{
 				"internal/platform/core/core.go": "package core\n",
@@ -506,6 +597,41 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 				"internal/platform/b/b.go":       "package b\n",
 			},
 			want: "rule 2",
+		},
+		{
+			name: "rule 2 product vertical imports a platform module",
+			files: map[string]string{
+				"internal/platform/core/core.go":             "package core\n",
+				"internal/platform/parameters/parameters.go": "package parameters\n",
+				"internal/dispatch/dispatch.go":              "package dispatch\n\nimport _ \"example.com/boundary/internal/platform/parameters\"\n",
+			},
+			want: "rule 2",
+		},
+		{
+			name: "rule 2 product vertical imports another vertical",
+			files: map[string]string{
+				"internal/platform/core/core.go": "package core\n",
+				"internal/billing/billing.go":    "package billing\n",
+				"internal/dispatch/dispatch.go":  "package dispatch\n\nimport _ \"example.com/boundary/internal/billing\"\n",
+			},
+			want: "rule 2",
+		},
+		{
+			name: "rule 2 product vertical imports a core internal package",
+			files: map[string]string{
+				"internal/platform/core/core.go":         "package core\n",
+				"internal/platform/core/internal/x/x.go": "package x\n",
+				"internal/dispatch/dispatch.go":          "package dispatch\n\nimport _ \"example.com/boundary/internal/platform/core/internal/x\"\n",
+			},
+			want: "rule 2",
+		},
+		{
+			name: "rule 2 product vertical imports the core root",
+			files: map[string]string{
+				"internal/platform/core/core.go": "package core\n",
+				"internal/dispatch/dispatch.go":  "package dispatch\n\nimport _ \"example.com/boundary/internal/platform/core\"\n",
+			},
+			want: "",
 		},
 		{
 			name: "rule 2 module imports a core internal package",
@@ -533,6 +659,46 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 				"cmd/server/main.go":             "package main\n\nimport _ \"example.com/boundary/internal/platform/a/sub\"\n\nfunc main() {}\n",
 			},
 			want: "rule 3",
+		},
+		{
+			name: "rule 3 main.go imports a product vertical",
+			files: map[string]string{
+				"internal/platform/core/core.go": "package core\n",
+				"internal/dispatch/dispatch.go":  "package dispatch\n",
+				"cmd/server/main.go":             "package main\n\nimport _ \"example.com/boundary/internal/dispatch\"\n\nfunc main() {}\n",
+			},
+			want: "rule 3",
+		},
+		{
+			name: "rule 3 product.go imports a vertical subpackage",
+			files: map[string]string{
+				"internal/platform/core/core.go": "package core\n",
+				"internal/dispatch/dispatch.go":  "package dispatch\n",
+				"internal/dispatch/sub/sub.go":   "package sub\n",
+				"cmd/server/product.go":          "package main\n\nimport _ \"example.com/boundary/internal/dispatch/sub\"\n",
+			},
+			want: "rule 3",
+		},
+		{
+			name: "rule 3 product.go imports a platform module",
+			files: map[string]string{
+				"internal/platform/core/core.go":             "package core\n",
+				"internal/platform/parameters/parameters.go": "package parameters\n",
+				"cmd/server/modules.go":                      "package main\n\nimport _ \"example.com/boundary/internal/platform/parameters\"\n",
+				"cmd/server/product.go":                      "package main\n\nimport _ \"example.com/boundary/internal/platform/parameters\"\n",
+			},
+			want: "rule 3",
+		},
+		{
+			name: "rule 3 product.go registers a vertical root",
+			files: map[string]string{
+				"internal/platform/core/core.go": "package core\n",
+				"internal/dispatch/dispatch.go":  "package dispatch\n",
+				"cmd/server/modules.go":          "package main\n\nimport _ \"example.com/boundary/internal/platform/core\"\n",
+				"cmd/server/product.go":          "package main\n\nimport _ \"example.com/boundary/internal/dispatch\"\n",
+				"cmd/server/main.go":             "package main\n\nimport _ \"example.com/boundary/internal/platform/core\"\n\nfunc main() {}\n",
+			},
+			want: "",
 		},
 		{
 			name: "rule 4 string literal",

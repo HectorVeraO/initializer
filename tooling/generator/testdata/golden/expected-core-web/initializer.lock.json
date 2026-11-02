@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "generator": "0.1.0",
-  "catalogSha256": "4e2f09c493629108f307dcbbcec3b8f6a7f68323ed08206d787e4f7ffe0fb6c8",
+  "catalogSha256": "3e056a3640dd5f44b0669c0006fb6d97f088d13715e605c2f0a19ca45e859dde",
   "selection": {
     "schema": 1,
     "project": {
@@ -107,7 +107,7 @@
         },
         {
           "path": "acme-backend-srv/internal/platform/core/module.manifest.json",
-          "sha256": "7bcc397217475d917679e9118af8c5c29e0c100199bddcdaec5b951defba097e",
+          "sha256": "2fa0b0841607fec18b6a88b0fa2a08d8dc38b37728e735377d46456c0593f607",
           "sourcePath": "go-srv/internal/platform/core/module.manifest.json"
         },
         {
@@ -175,7 +175,7 @@
     },
     {
       "path": "acme-backend-srv/cmd/server/modules.go",
-      "sha256": "56a85dfd10466e6c5697e17ebf3c31c677891aa9d6adf0b72d221dd7d8ed3472"
+      "sha256": "f9b613f46a702dd64bc7580abb8cecb1209ea30d8ed640859e4af0a5251f5f47"
     },
     {
       "path": "acme-backend-web/src/app/platform/modules.ts",

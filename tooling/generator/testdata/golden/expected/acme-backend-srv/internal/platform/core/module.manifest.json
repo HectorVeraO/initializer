@@ -12,5 +12,6 @@
   "perComponent": [".deploy/local/.example.env"],
   "files": [".deploy/local/", ".gitattributes", ".gitignore", "go-srv/", "specs/package.json", "specs/tck-support/"],
   "exclude": ["go-srv/AGENTS.md", "go-srv/cookbooks/"],
+  "seeds": ["go-srv/cmd/server/product.go"],
   "names": [{"path": ".deploy/local/docker-compose.yml", "text": "name: %{project}"}]
 }

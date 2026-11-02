@@ -130,6 +130,7 @@ type entryRef struct {
 	doc     *moduleDoc
 	entry   manifest.FileEntry
 	exclude bool
+	seed    bool
 	index   int
 }
 
@@ -394,7 +395,9 @@ func entryMatches(entry manifest.FileEntry, p string) bool {
 	return p == entry.Path
 }
 
-// checkEntriesMatch reports a files or exclude entry that matches no tracked file.
+// checkEntriesMatch reports a files, exclude or seeds entry that matches no
+// tracked file, and a seed that a files or exclude entry of the same module
+// also lists.
 func (b *builder) checkEntriesMatch() {
 	for _, doc := range b.modules {
 		check := func(section string, entries []manifest.FileEntry) {
@@ -407,7 +410,37 @@ func (b *builder) checkEntriesMatch() {
 		}
 		check("files", doc.module.Files)
 		check("exclude", doc.module.Exclude)
+		for i, seed := range doc.module.Seeds {
+			pointer := fmt.Sprintf("/seeds/%d", i)
+			if !b.set[seed] {
+				b.add(manifest.CodeManifestInvalid, doc.path, pointer, "entry matches no tracked file")
+				continue
+			}
+			if listsPath(doc.module.Files, seed) || listsPath(doc.module.Exclude, seed) {
+				b.add(manifest.CodeManifestInvalid, doc.path, pointer, "path is also a files or exclude entry")
+			}
+		}
 	}
+}
+
+// listsPath reports whether an exact files or exclude entry names p.
+func listsPath(entries []manifest.FileEntry, p string) bool {
+	for _, entry := range entries {
+		if entry.Path == p {
+			return true
+		}
+	}
+	return false
+}
+
+// seedEntries returns the seeds of a module as entries the resolution reads
+// like a files entry.
+func seedEntries(seeds []string) []manifest.FileEntry {
+	entries := make([]manifest.FileEntry, len(seeds))
+	for i, seed := range seeds {
+		entries[i] = manifest.FileEntry{Path: seed}
+	}
+	return entries
 }
 
 func (b *builder) anyTracked(entry manifest.FileEntry) bool {
@@ -422,7 +455,7 @@ func (b *builder) anyTracked(entry manifest.FileEntry) bool {
 func (b *builder) resolve(p string) (winner *entryRef, conflict []*moduleDoc) {
 	best := -1
 	var candidates []entryRef
-	consider := func(doc *moduleDoc, entries []manifest.FileEntry, exclude bool) {
+	consider := func(doc *moduleDoc, entries []manifest.FileEntry, exclude, seed bool) {
 		for i, entry := range entries {
 			if !entryMatches(entry, p) {
 				continue
@@ -435,12 +468,13 @@ func (b *builder) resolve(p string) (winner *entryRef, conflict []*moduleDoc) {
 				best = length
 				candidates = candidates[:0]
 			}
-			candidates = append(candidates, entryRef{doc: doc, entry: entry, exclude: exclude, index: i})
+			candidates = append(candidates, entryRef{doc: doc, entry: entry, exclude: exclude, seed: seed, index: i})
 		}
 	}
 	for _, doc := range b.modules {
-		consider(doc, doc.module.Files, false)
-		consider(doc, doc.module.Exclude, true)
+		consider(doc, doc.module.Files, false, false)
+		consider(doc, doc.module.Exclude, true, false)
+		consider(doc, seedEntries(doc.module.Seeds), false, true)
 	}
 	if len(candidates) == 0 {
 		return nil, nil
@@ -518,6 +552,7 @@ func (b *builder) assignOwnership() error {
 				return err
 			}
 			if ok {
+				file.Seed = winner.seed
 				winner.doc.files = append(winner.doc.files, file)
 			}
 		}

@@ -36,6 +36,9 @@
     "go-srv/AGENTS.md",
     "go-srv/cookbooks/"
   ],
+  "seeds": [
+    "go-srv/cmd/server/product.go"
+  ],
   "names": [
     { "path": ".deploy/local/docker-compose.yml", "text": "name: %{composeProject}" },
     { "path": ".deploy/local/docker-compose.yml", "text": "POSTGRES_DB: %{serverDatabase}" },

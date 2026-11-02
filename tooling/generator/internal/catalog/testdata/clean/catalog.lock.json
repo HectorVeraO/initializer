@@ -1,5 +1,5 @@
 {
-  "schema": 2,
+  "schema": 3,
   "generator": "0.1.0",
   "goModule": "example.com/fixture/srv",
   "reference": {
@@ -138,6 +138,11 @@
               "sha256": "c9813d7b7f4a1d1662295ec5962aba530f8d8d5b06296797ab98d4db288f66dc"
             },
             {
+              "path": "go-srv/cmd/server/product.go",
+              "sha256": "57ceab82709c9f61749732c2185eab38152bfbfb38dcc9f500ac8c4f20a5a8f0",
+              "seed": true
+            },
+            {
               "path": "go-srv/go.mod",
               "sha256": "597fb3bb55c2b0f6092731ec09f748cdef795e166dfdbafa3718da1e47f8b5c3"
             },
@@ -147,7 +152,7 @@
             },
             {
               "path": "go-srv/internal/platform/core/module.manifest.json",
-              "sha256": "cd6719436cf64764aa94e67e7215cc43b4b5c5e4b6f75947fca746f29343915c"
+              "sha256": "e80b42d3db1ee02c10df9fad085e1e6670332a30b8cb1a0189e6ac3d8c192437"
             },
             {
               "path": "go-srv/internal/platform/core/testdata/sample.go",

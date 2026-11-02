@@ -1,5 +1,5 @@
 {
-  "schema": 2,
+  "schema": 3,
   "generator": "0.1.0",
   "goModule": "example.com/fixture/srv",
   "reference": {"project": "fixture-app", "envPrefix": "FIXTURE_APP", "component.go-srv": "go-srv", "component.ng-web": "ng-web"},

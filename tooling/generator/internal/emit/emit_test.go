@@ -226,6 +226,56 @@ func TestImportsModuleLineAndProjectNameRuleAreRewritten(t *testing.T) {
 	}
 }
 
+func TestProductFileIsDeliveredUnlocked(t *testing.T) {
+	repo := fixture.Load(t)
+	project := mustBuild(t, repo, selection(targetModule, "parameters"))
+
+	product := projectFile(t, project, "acme-backend-srv/cmd/server/product.go")
+	for _, want := range []string{
+		"func productModules() []core.Module",
+		"\"" + targetModule + "/internal/platform/core\"",
+		"project-owned",
+	} {
+		if !strings.Contains(product, want) {
+			t.Fatalf("product.go lacks %q:\n%s", want, product)
+		}
+	}
+	if strings.Contains(product, fixtureModule) {
+		t.Fatalf("product.go keeps the source module path:\n%s", product)
+	}
+
+	lock := decodeLock(t, project)
+	for _, module := range lock.Modules {
+		for _, file := range module.Files {
+			if strings.HasSuffix(file.Path, "/cmd/server/product.go") {
+				t.Fatalf("the lock lists the seed %s", file.Path)
+			}
+		}
+	}
+	for _, file := range lock.Generated {
+		if strings.HasSuffix(file.Path, "/cmd/server/product.go") {
+			t.Fatalf("the lock lists the seed %s as generated", file.Path)
+		}
+	}
+	if strings.Contains(projectFile(t, project, lockfile.Name), "product.go") {
+		t.Fatal("initializer.lock.json names the seed")
+	}
+}
+
+func TestModulesGoCallsCatalogModulesThroughProductModules(t *testing.T) {
+	repo := fixture.Load(t)
+	project := mustBuild(t, repo, selection(targetModule, "parameters"))
+	modules := projectFile(t, project, "acme-backend-srv/cmd/server/modules.go")
+	for _, want := range []string{
+		"func catalogModules() []core.Module",
+		"func installedModules() []core.Module {\n\treturn append(catalogModules(), productModules()...)\n}",
+	} {
+		if !strings.Contains(modules, want) {
+			t.Fatalf("modules.go lacks %q:\n%s", want, modules)
+		}
+	}
+}
+
 func TestLockRecordsDeliveredAndSourceHashes(t *testing.T) {
 	repo := fixture.Load(t)
 	project := mustBuild(t, repo, selection(targetModule, "feature-flags", "parameters"))
@@ -737,7 +787,7 @@ func TestComponentFoldersHoldTheStackFilesAndTheCompositionRoots(t *testing.T) {
 		manifest.Component{Stack: "ng-web", Name: "acme-web"}))
 	paths := projectPaths(project)
 	for _, want := range []string{
-		"acme-srv/go.mod", "acme-srv/cmd/server/modules.go", "acme-srv/internal/platform/parameters/parameters.go",
+		"acme-srv/go.mod", "acme-srv/cmd/server/modules.go", "acme-srv/cmd/server/product.go", "acme-srv/internal/platform/parameters/parameters.go",
 		"acme-web/src/app/platform/modules.ts", "acme-web/package.json", "specs/core/openapi.yaml",
 	} {
 		if !paths[want] {

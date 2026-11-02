@@ -236,7 +236,9 @@ func (b *builder) run() (Project, error) {
 				if err != nil {
 					return Project{}, err
 				}
-				if isDelivered {
+				// A seed is delivered and never recorded: the project owns it
+				// and edits it after generation.
+				if isDelivered && !file.Seed {
 					entry.Files = append(entry.Files, delivered)
 				}
 			}
