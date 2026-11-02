@@ -9,11 +9,17 @@ import (
 	"example.com/acme/backend/internal/platform/tenancy"
 )
 
-// installedModules returns the catalog modules of this project in catalog order.
-func installedModules() []core.Module {
+// catalogModules returns the catalog modules of this project in catalog order.
+func catalogModules() []core.Module {
 	return []core.Module{
 		identity.Module(),
 		parameters.Module(),
 		tenancy.Module(),
 	}
+}
+
+// installedModules returns the catalog modules followed by the modules the
+// project registers itself.
+func installedModules() []core.Module {
+	return append(catalogModules(), productModules()...)
 }

@@ -37,6 +37,10 @@ type Module struct {
 	TablePrefixes   []string
 	Files           []FileEntry
 	Exclude         []FileEntry
+	// Seeds are repo-relative file paths the generator delivers with the copy
+	// and name rules of a files entry but never records in
+	// initializer.lock.json: a project-owned file its project edits.
+	Seeds []string
 	// Names are the name rules of the module, in manifest order.
 	Names []NameRule
 	// Ports are the host ports the module declares, in manifest order.
@@ -59,7 +63,7 @@ type NameRule struct {
 
 var moduleKeys = []string{
 	"schema", "stack", "module", "version", "implied", "implementsSpec",
-	"requiresCore", "requiresModules", "tablePrefixes", "files", "exclude", "names",
+	"requiresCore", "requiresModules", "tablePrefixes", "files", "exclude", "seeds", "names",
 	"ports", "portFiles", "perComponent",
 }
 
@@ -81,6 +85,9 @@ func DecodeModule(path string, data []byte) (Module, []issue.Issue) {
 	d.moduleIdentity(members, &module)
 	d.moduleRequirements(members, &module)
 	d.moduleFiles(members, &module)
+	if raw, present := members["seeds"]; present {
+		module.Seeds = d.seeds(raw)
+	}
 	if raw, present := members["names"]; present {
 		module.Names = d.nameRules(raw)
 	}
@@ -467,6 +474,32 @@ func (d *decoder) ports(raw json.RawMessage) []ports.Port {
 		}
 	}
 	return declared
+}
+
+// seeds decodes seeds: repo-relative file paths, sorted bytewise, each listed
+// once. Whether the module owns them is a catalog check.
+func (d *decoder) seeds(raw json.RawMessage) []string {
+	values, valid, ok := d.strings(raw, "/seeds")
+	if !ok {
+		return nil
+	}
+	for i, value := range values {
+		if !valid[i] {
+			continue
+		}
+		if !validRepoPath(value) || value[len(value)-1] == '/' {
+			d.add(fmt.Sprintf("/seeds/%d", i), "must be a repo-relative file path with / separators and no empty, . or .. segment")
+			valid[i] = false
+		}
+	}
+	d.checkOrder("/seeds", values, valid)
+	seeds := []string{}
+	for i, value := range values {
+		if valid[i] {
+			seeds = append(seeds, value)
+		}
+	}
+	return seeds
 }
 
 // perComponent decodes perComponent: repo-relative paths, each listed once; a

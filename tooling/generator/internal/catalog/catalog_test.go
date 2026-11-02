@@ -37,7 +37,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 }
 
 func TestEncodeWritesEmptyListsNotNull(t *testing.T) {
-	encoded, err := Encode(Catalog{Schema: 2, Generator: "0.1.0"})
+	encoded, err := Encode(Catalog{Schema: SchemaVersion, Generator: "0.1.0"})
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
@@ -59,8 +59,8 @@ func TestDecodeRefusesBadCatalogs(t *testing.T) {
 		path    string
 		message string
 	}{
-		{"unknown key", strings.Replace(text, `"schema": 2,`, `"schema": 2, "extra": 2,`, 1), "catalog.lock.json#", `unknown field "extra"`},
-		{"schema 1", strings.Replace(text, `"schema": 2,`, `"schema": 1,`, 1), "catalog.lock.json#/schema", "must be the number 2"},
+		{"unknown key", strings.Replace(text, `"schema": 3,`, `"schema": 3, "extra": 2,`, 1), "catalog.lock.json#", `unknown field "extra"`},
+		{"schema 2", strings.Replace(text, `"schema": 3,`, `"schema": 2,`, 1), "catalog.lock.json#/schema", "must be the number 3"},
 		{"trailing data", text + "{}", "catalog.lock.json#", "unexpected data after the JSON value"},
 		{"empty", "", "catalog.lock.json#", "EOF"},
 		{"not an object", "[]", "catalog.lock.json#", "cannot unmarshal array"},

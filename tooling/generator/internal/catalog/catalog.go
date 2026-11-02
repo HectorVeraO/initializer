@@ -20,7 +20,7 @@ import (
 )
 
 // SchemaVersion is the only catalog schema this package reads and writes.
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // CodeCatalogInvalid is the issue code of a catalog file that Decode refuses.
 const CodeCatalogInvalid = "CATALOG_INVALID"
@@ -95,11 +95,13 @@ type Requirement struct {
 	Range  string `json:"range"`
 }
 
-// File is one copied file. Target is empty when the file keeps its path.
+// File is one copied file. Target is empty when the file keeps its path. Seed
+// marks a file the generator delivers but never records in the lock.
 type File struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
 	Target string `json:"target,omitempty"`
+	Seed   bool   `json:"seed,omitempty"`
 }
 
 // Encode returns the canonical bytes of c: two-space indent, LF line ends, one
@@ -212,7 +214,7 @@ func (v *validator) add(pointer, message string) {
 
 func (v *validator) catalog(c Catalog) {
 	if c.Schema != SchemaVersion {
-		v.add("/schema", "must be the number 2")
+		v.add("/schema", fmt.Sprintf("must be the number %d", SchemaVersion))
 	}
 	if c.Generator == "" {
 		v.add("/generator", "must not be empty")

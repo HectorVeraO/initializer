@@ -90,6 +90,63 @@ func TestOwnershipLongestPrefix(t *testing.T) {
 	}
 }
 
+func TestASeedIsOwnedAndMarked(t *testing.T) {
+	built, issues := buildRepo(t, cleanRepo(t))
+	assertCodes(t, issues)
+	core := findModule(t, built, "go-srv", "core")
+	found := false
+	for _, file := range core.Files {
+		if file.Path != "go-srv/cmd/server/product.go" {
+			continue
+		}
+		found = true
+		if !file.Seed || file.SHA256 == "" {
+			t.Fatalf("seed entry = %+v", file)
+		}
+	}
+	if !found {
+		t.Fatal("core does not list go-srv/cmd/server/product.go as a seed")
+	}
+	for _, file := range core.Files {
+		if file.Path == "go-srv/cmd/server/main.go" && file.Seed {
+			t.Fatal("a plain file carries the seed marker")
+		}
+	}
+}
+
+func TestASeedAlsoListedInFilesOrExcludeIsRefused(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(t *testing.T, repo fstest.MapFS)
+	}{
+		{"files", func(t *testing.T, r fstest.MapFS) {
+			edit(t, r, coreManifest, `"go-srv/", `, `"go-srv/", "go-srv/cmd/server/product.go", `)
+		}},
+		{"exclude", func(t *testing.T, r fstest.MapFS) {
+			edit(t, r, coreManifest, `"exclude": ["go-srv/AGENTS.md", "go-srv/cookbooks/"]`,
+				`"exclude": ["go-srv/AGENTS.md", "go-srv/cmd/server/product.go", "go-srv/cookbooks/"]`)
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := cleanRepo(t)
+			tc.mutate(t, repo)
+			_, issues := buildRepo(t, repo)
+			assertCodes(t, issues, "MANIFEST_INVALID")
+			for _, found := range issues {
+				if found.Path != coreManifest+"#/seeds/0" {
+					continue
+				}
+				if found.Message != "path is also a files or exclude entry" {
+					t.Fatalf("message = %q", found.Message)
+				}
+				return
+			}
+			t.Fatalf("no issue at %s#/seeds/0: %v", coreManifest, issues)
+		})
+	}
+}
+
 func TestTargetIsListedOnTheSourceEntry(t *testing.T) {
 	built, _ := buildRepo(t, cleanRepo(t))
 	flags := findModule(t, built, "go-srv", "feature-flags")
@@ -121,6 +178,12 @@ func TestIssueCodes(t *testing.T) {
 	}{
 		{"manifest entry matches nothing", func(t *testing.T, r fstest.MapFS) {
 			edit(t, r, paramsManifest, `["go-srv/internal/platform/parameters/"]`, `["go-srv/internal/platform/parameters/", "go-srv/zzz-missing.go"]`)
+		}, []string{"MANIFEST_INVALID"}},
+		{"seed entry matches nothing", func(t *testing.T, r fstest.MapFS) {
+			edit(t, r, coreManifest, `"seeds": ["go-srv/cmd/server/product.go"]`, `"seeds": ["go-srv/cmd/server/absent.go"]`)
+		}, []string{"MANIFEST_INVALID"}},
+		{"seed is also a files entry", func(t *testing.T, r fstest.MapFS) {
+			edit(t, r, coreManifest, `"go-srv/", `, `"go-srv/", "go-srv/cmd/server/product.go", `)
 		}, []string{"MANIFEST_INVALID"}},
 		{"manifest has an unknown key", func(t *testing.T, r fstest.MapFS) {
 			edit(t, r, paramsManifest, `"schema": 1,`, `"schema": 1, "entrypoint": "x",`)

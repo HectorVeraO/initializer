@@ -82,6 +82,49 @@ func TestDecodeModuleRefusesMalformedPorts(t *testing.T) {
 	}
 }
 
+func TestDecodeModuleReadsSeeds(t *testing.T) {
+	data := mutateFixture(t, "module.valid.json", func(m map[string]any) {
+		m["seeds"] = []any{"go-srv/cmd/server/product.go"}
+	})
+	module, issues := manifest.DecodeModule(modulePath, data)
+	if len(issues) != 0 {
+		t.Fatalf("issues: %v", issues)
+	}
+	if !reflect.DeepEqual(module.Seeds, []string{"go-srv/cmd/server/product.go"}) {
+		t.Errorf("seeds = %v", module.Seeds)
+	}
+	plain := mutateFixture(t, "module.valid.json", func(m map[string]any) {})
+	if module, _ := manifest.DecodeModule(modulePath, plain); len(module.Seeds) != 0 {
+		t.Errorf("a manifest without seeds reads %v", module.Seeds)
+	}
+}
+
+func TestDecodeModuleRefusesMalformedSeeds(t *testing.T) {
+	cases := []struct {
+		name   string
+		change func(map[string]any)
+		path   string
+	}{
+		{"seeds is not a list", func(m map[string]any) { m["seeds"] = "go-srv/cmd/server/product.go" }, "#/seeds"},
+		{"seed escapes the repo", func(m map[string]any) { m["seeds"] = []any{"../product.go"} }, "#/seeds/0"},
+		{"seed is a folder", func(m map[string]any) { m["seeds"] = []any{"go-srv/cmd/server/"} }, "#/seeds/0"},
+		{"seed repeats", func(m map[string]any) {
+			m["seeds"] = []any{"go-srv/cmd/server/product.go", "go-srv/cmd/server/product.go"}
+		}, "#/seeds/1"},
+		{"seeds are unsorted", func(m map[string]any) {
+			m["seeds"] = []any{"go-srv/cmd/server/product.go", "go-srv/cmd/server/app.go"}
+		}, "#/seeds/1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, issues := manifest.DecodeModule(modulePath, mutateFixture(t, "module.valid.json", tc.change))
+			if !hasIssue(issues, manifest.CodeManifestInvalid, modulePath+tc.path) {
+				t.Fatalf("want %s at %s, got %v", manifest.CodeManifestInvalid, tc.path, issues)
+			}
+		})
+	}
+}
+
 func portsFile(t *testing.T, schema int, band any) []byte {
 	t.Helper()
 	return infraFile(t, schema, map[string]any{"ports": map[string]any{"band": band}})

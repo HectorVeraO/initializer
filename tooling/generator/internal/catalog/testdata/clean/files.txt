@@ -9,6 +9,7 @@ flags.yaml
 go-srv/AGENTS.md
 go-srv/cmd/server/main.go
 go-srv/cmd/server/modules.go
+go-srv/cmd/server/product.go
 go-srv/cookbooks/notes.md
 go-srv/go.mod
 go-srv/internal/platform/core/core.go
