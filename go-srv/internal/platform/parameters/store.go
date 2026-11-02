@@ -37,6 +37,14 @@ type listedRow struct {
 	override json.RawMessage
 }
 
+// effectiveRow is the value one definition takes for one tenant.
+type effectiveRow struct {
+	valueType valueType
+	value     json.RawMessage
+	// source is sourceTenant when the tenant has an override, else sourceGlobal.
+	source string
+}
+
 // store runs the hand-written queries on the sys_* tables.
 type store struct {
 	pool *pgxpool.Pool
@@ -91,6 +99,32 @@ func (s *store) load(ctx context.Context, tx pgx.Tx, key string, mode lockMode) 
 		return definition{}, fmt.Errorf("load parameter: %w", err)
 	}
 	return d, nil
+}
+
+// effective resolves the value of key for tenantID (nil: no tenant level): the
+// tenant's override when there is one, else the definition's default. A nil
+// tenantID binds SQL NULL, which matches no override row.
+func (s *store) effective(ctx context.Context, tenantID *string, key string) (effectiveRow, error) {
+	const query = `SELECT p.value_type, COALESCE(o.value, p.default_value), o.value IS NOT NULL
+		FROM sys_parameters p
+		LEFT JOIN sys_parameter_overrides o
+			ON o.parameter_key = p.key AND o.tenant_id = $1::uuid
+		WHERE p.key = $2`
+	var typeName string
+	var value []byte
+	var hasOverride bool
+	err := s.pool.QueryRow(ctx, query, tenantID, key).Scan(&typeName, &value, &hasOverride)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return effectiveRow{}, errNotFound
+	}
+	if err != nil {
+		return effectiveRow{}, fmt.Errorf("read parameter: %w", err)
+	}
+	source := sourceGlobal
+	if hasOverride {
+		source = sourceTenant
+	}
+	return effectiveRow{valueType: valueType(typeName), value: json.RawMessage(value), source: source}, nil
 }
 
 // listOverrides returns every tenant override of key.

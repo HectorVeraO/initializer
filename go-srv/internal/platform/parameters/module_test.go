@@ -1,12 +1,17 @@
 package parameters_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/parameters"
 )
 
@@ -20,6 +25,28 @@ func TestModuleDeclaresItsIdentityAndRoutes(t *testing.T) {
 	}
 	if parameters.MigrationsVersionTable() != "cor_migrations_parameters" {
 		t.Fatalf("version table = %s", parameters.MigrationsVersionTable())
+	}
+}
+
+// TestBuildReportsAMissingDatabaseURLInsteadOfPanicking is the nil-pool
+// regression: core hands a module a nil pool when its own configuration is
+// invalid, and the module must answer the config problem instead of panicking.
+func TestBuildReportsAMissingDatabaseURLInsteadOfPanicking(t *testing.T) {
+	var buffer bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buffer, nil))
+	app, err := core.Build(context.Background(), core.Options{
+		Logger: logger,
+		Config: config.MapSource(map[string]string{}),
+	}, []core.Module{parameters.Module()})
+	if app != nil {
+		_ = app.Close(context.Background())
+		t.Fatal("Build returned an app with an invalid configuration")
+	}
+	if err == nil || !strings.Contains(err.Error(), "APP_DATABASE_URL") {
+		t.Fatalf("err = %v, want the APP_DATABASE_URL problem", err)
+	}
+	if !strings.Contains(buffer.String(), "config_invalid") {
+		t.Fatalf("no config_invalid record in:\n%s", buffer.String())
 	}
 }
 

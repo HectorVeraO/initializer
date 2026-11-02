@@ -16,6 +16,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/featureflag"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/health"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/parameter"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/telemetry"
 )
 
@@ -67,6 +68,7 @@ type assembly struct {
 	accountDir   accounts.Directory
 	provisioner  accounts.Provisioner
 	flags        featureflag.Evaluator
+	parameters   parameter.Reader
 
 	// provided names the ports already provided (by Options or by a module).
 	provided map[string]bool
@@ -138,6 +140,11 @@ func (b *Builder) ProvideAccountProvisioner(p accounts.Provisioner) error {
 // ProvideFlagEvaluator publishes the flag evaluator port; see ProvideSessionResolver.
 func (b *Builder) ProvideFlagEvaluator(e featureflag.Evaluator) error {
 	return b.provide("flag evaluator", e == nil, func() { b.a.flags = e })
+}
+
+// ProvideParameterReader publishes the parameter reader port; see ProvideSessionResolver.
+func (b *Builder) ProvideParameterReader(r parameter.Reader) error {
+	return b.provide("parameter reader", r == nil, func() { b.a.parameters = r })
 }
 
 func (b *Builder) provide(port string, isNil bool, set func()) error {
@@ -225,6 +232,9 @@ func (h *Host) AccountProvisioner() accounts.Provisioner { return h.a.provisione
 
 // FlagEvaluator is the provided port, else featureflag.Disabled{}.
 func (h *Host) FlagEvaluator() featureflag.Evaluator { return h.a.flags }
+
+// Parameters is the provided port, else parameter.NoReader{}.
+func (h *Host) Parameters() parameter.Reader { return h.a.parameters }
 
 func copyURL(u *url.URL) *url.URL {
 	clone := *u

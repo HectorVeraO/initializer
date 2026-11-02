@@ -29,6 +29,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/featureflag"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/health"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/migrate"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/parameter"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/telemetry"
 )
 
@@ -79,6 +80,7 @@ type Options struct {
 	TenantAccess       access.TenantAccess
 	AccountDirectory   accounts.Directory
 	AccountProvisioner accounts.Provisioner
+	Parameters         parameter.Reader
 }
 
 // App is an assembled server that is not listening yet.
@@ -290,6 +292,7 @@ func newAssembly(opts Options, logger *slog.Logger, reader *config.Reader, cc co
 		accountDir:   accounts.NoDirectory,
 		provisioner:  accounts.NoProvisioner,
 		flags:        featureflag.Disabled{},
+		parameters:   parameter.NoReader{},
 		provided:     map[string]bool{},
 	}
 	if opts.SessionResolver != nil {
@@ -319,6 +322,10 @@ func newAssembly(opts Options, logger *slog.Logger, reader *config.Reader, cc co
 	if opts.FlagEvaluator != nil {
 		a.flags = opts.FlagEvaluator
 		a.provided["flag evaluator"] = true
+	}
+	if opts.Parameters != nil {
+		a.parameters = opts.Parameters
+		a.provided["parameter reader"] = true
 	}
 	return a
 }

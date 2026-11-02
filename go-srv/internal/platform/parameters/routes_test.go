@@ -69,6 +69,13 @@ func accountPrincipal(t testing.TB, tenant string, role reqctx.Role, operator bo
 
 func newEnv(t testing.TB, logger *slog.Logger) *env {
 	t.Helper()
+	return newEnvWith(t, logger, coretest.Options{Database: true}, parameters.Module())
+}
+
+// newEnvWith is newEnv over the given modules, in order, with the given options
+// minus the session resolver and the logger, which it installs.
+func newEnvWith(t testing.TB, logger *slog.Logger, opts coretest.Options, modules ...core.Module) *env {
+	t.Helper()
 	e := &env{tenantA: randomUUID(t), tenantB: randomUUID(t)}
 	sessions := &actorSessions{principals: map[string]reqctx.Principal{
 		"operator":   accountPrincipal(t, "", "", true),
@@ -77,11 +84,9 @@ func newEnv(t testing.TB, logger *slog.Logger) *env {
 		"adminB":     accountPrincipal(t, e.tenantB, reqctx.RoleAdmin, false),
 		"tenantless": accountPrincipal(t, "", "", false),
 	}}
-	e.handler = coretest.New(t, []core.Module{parameters.Module()}, coretest.Options{
-		Database:        true,
-		SessionResolver: sessions,
-		Logger:          logger,
-	})
+	opts.SessionResolver = sessions
+	opts.Logger = logger
+	e.handler = coretest.New(t, modules, opts)
 	return e
 }
 
