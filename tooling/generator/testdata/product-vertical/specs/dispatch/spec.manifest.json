@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "spec": "dispatch",
+  "version": "0.1.0",
+  "tckTags": ["@dispatch"],
+  "tckEnv": {
+    "APP_BOOTSTRAP_ADMIN_EMAIL": "admin@example.com",
+    "APP_BOOTSTRAP_ADMIN_PASSWORD": "change-me-local-only"
+  },
+  "cooperatesWith": ["@identity"]
+}
