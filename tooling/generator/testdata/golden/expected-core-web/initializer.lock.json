@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "generator": "0.1.0",
-  "catalogSha256": "3e056a3640dd5f44b0669c0006fb6d97f088d13715e605c2f0a19ca45e859dde",
+  "catalogSha256": "6e6b8ebbe4c3baa0303f27ea2995e84a7b995bd0b63579c1e6ff9c2b1d6fde10",
   "selection": {
     "schema": 1,
     "project": {
@@ -157,7 +157,7 @@
         },
         {
           "path": "acme-backend-web/src/app/platform/core/module.manifest.json",
-          "sha256": "e8f43ddbb570a381e917bacd7728c571defe822492919a4ca8fd4a838b4a8c73",
+          "sha256": "c49532d522109c0dc0733f3553b10b944d316a01522fefdeb6175a3b99e59d6a",
           "sourcePath": "ng-web/src/app/platform/core/module.manifest.json"
         },
         {
@@ -179,7 +179,7 @@
     },
     {
       "path": "acme-backend-web/src/app/platform/modules.ts",
-      "sha256": "145cbb249b225054a09dcbe3216c022a499b584fd1813f25bec77290e47dc3e9"
+      "sha256": "97cb7da592b70ae141171557ad984bcef12fde4e44200d0caa08f6b6f5fa68e6"
     },
     {
       "path": "initializer.selection.json",

@@ -44,7 +44,7 @@ func TestModulesTSKeepsTheGivenOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(got), "[coreModule, zetaModule, alphaModule]") {
+	if !strings.Contains(string(got), "[coreModule, zetaModule, alphaModule, ...productModules]") {
 		t.Fatalf("order was not kept:\n%s", got)
 	}
 }

@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
@@ -61,8 +61,26 @@ for (const name of moduleFolders) {
   );
 }
 
+// A product vertical exists only in a project that has one, so the platform side is probed by name: the
+// regexes that reject it are built from the platform folders and hold in every project.
+rejected.push(
+  ['the core module imports a product vertical by alias', 'src/app/platform/core/probe/repro.ts', moduleImport('@/product/probe/module', 'probeModule'), 'Platform code never imports a product vertical'],
+  ['the core module imports a product vertical by relative path', 'src/app/platform/core/probe/repro.ts', moduleImport('../../../product/probe/module', 'probeModule'), 'Platform code never imports a product vertical'],
+  ['a module imports a product vertical by alias', `src/app/platform/${importerModule}/repro.ts`, moduleImport('@/product/probe/module', 'probeModule'), 'Platform code never imports a product vertical'],
+  ['a module imports a product vertical by relative path', `src/app/platform/${importerModule}/repro.ts`, moduleImport('../../product/probe/module', 'probeModule'), 'Platform code never imports a product vertical'],
+  ['the core module imports the project seed by alias', 'src/app/platform/core/probe/repro.ts', moduleImport('@/product.modules', 'productModules'), 'Platform code never imports a product vertical'],
+  ['the core module imports the project seed by relative path', 'src/app/platform/core/probe/repro.ts', moduleImport('../../../product.modules', 'productModules'), 'Platform code never imports a product vertical'],
+  ['a module imports the project seed by alias', `src/app/platform/${importerModule}/repro.ts`, moduleImport('@/product.modules', 'productModules'), 'Platform code never imports a product vertical'],
+  ['the composition root imports a vertical module directly', 'src/app/platform/modules.ts', moduleImport('../product/probe/module', 'probeModule'), 'The composition root imports only'],
+  ['the home page imports a core file deeply by alias', 'src/app/home/repro.ts', moduleImport('@/platform/core/access/access.port', 'ACCESS_PROVIDER'), 'Core-owned code imports a module only']
+);
+
 const allowed = [
   ['a module imports core through its barrel', `src/app/platform/${importerModule}/repro.ts`, moduleImport('@/platform/core', 'coreModule')],
+  ['the composition root imports the project seed', 'src/app/platform/modules.ts', moduleImport('../product.modules', 'productModules')],
+  ['the project seed imports the core barrel', 'src/app/product.modules.ts', moduleImport('./platform/core', 'coreModule')],
+  ['the project seed registers a vertical', 'src/app/product.modules.ts', moduleImport('@/product/probe/module', 'probeModule')],
+  ['a vertical spec imports the access fixture by relative path', 'src/app/product/probe/repro.spec.ts', moduleImport('../../../testing/fixtures/access-testing', 'accessContext')],
   ['the shell imports the composition root by alias', 'src/app/layout/repro.ts', moduleImport('@/platform/modules', 'installedModules')],
   ['the shell imports the core barrel by alias', 'src/app/layout/repro.ts', moduleImport('@/platform/core', 'coreModule')],
   ['the home page imports the composition root by alias', 'src/app/home/repro.ts', moduleImport('@/platform/modules', 'installedModules')],
@@ -97,6 +115,71 @@ for (const [name, file, code] of allowed) {
   });
 }
 
+// A product vertical is a folder under src/app/product/, read at load time like the platform folders. Its
+// block replaces the generic one wholesale, so a fresh process with a vertical of its own checks it.
+test('a product vertical reaches the platform barrels and its own folder only', () => {
+  const vertical = 'probe-vertical';
+  const unknown = 'zz-unknown-vertical';
+  const productDir = path.join(cwd, 'src/app/product');
+  const probeDir = path.join(productDir, vertical);
+  const createdProductDir = !existsSync(productDir);
+  const at = (name, folder = vertical) => `src/app/product/${folder}/${name}`;
+  const cases = [
+    ['its own folder by alias', at('repro.ts'), moduleImport(`@/product/${vertical}/helpers`, 'helpers'), true],
+    ['its own file relatively', at('repro.ts'), moduleImport('./helpers', 'helpers'), true],
+    ['the shared test fixtures by relative path', at('shell/repro.spec.ts'), moduleImport('../../../../testing/fixtures/access-testing', 'accessContext'), true],
+    ['the core barrel', at('repro.ts'), moduleImport('@/platform/core', 'coreModule'), true],
+    ['the composition root', at('repro.ts'), moduleImport('@/platform/modules', 'installedModules'), true],
+    ['a sibling vertical by alias', at('repro.ts'), moduleImport('@/product/zz-other/module', 'otherModule'), false],
+    ['a sibling vertical by relative path', at('repro.ts'), moduleImport('../zz-other/module', 'otherModule'), false],
+    ['a platform module folder', at('repro.ts'), moduleImport('@/platform/identity/module', 'identityModule'), false],
+    ['a deep import into the core barrel', at('repro.ts'), moduleImport('@/platform/core/access/access.port', 'ACCESS_PROVIDER'), false],
+    ['generic core code by alias', at('repro.ts'), moduleImport('@/core/api/api-error', 'apiError'), false],
+    ['the shell by alias', at('repro.ts'), moduleImport('@/layout/component/app.layout', 'AppLayout'), false],
+    ['the platform by escaping the folder', at('repro.ts'), moduleImport('../../platform/core', 'coreModule'), false],
+    ['a known vertical from a folder the config never read', at('repro.ts', unknown), moduleImport(`@/product/${vertical}/helpers`, 'helpers'), false]
+  ];
+  const script = `
+    import { ESLint } from 'eslint';
+    const eslint = new ESLint({ cwd: process.argv[1] });
+    const cases = JSON.parse(process.argv[2]);
+    const out = [];
+    for (const { file, code } of cases) {
+      const [result] = await eslint.lintText(code, { filePath: process.argv[1] + '/' + file });
+      out.push(result.messages.filter((message) => message.ruleId === 'no-restricted-imports').map((message) => message.message));
+    }
+    console.log(JSON.stringify(out));
+  `;
+
+  // The parent is created only when it is missing. The leaf is not recursive: an existing folder of that
+  // name fails the test here instead of being deleted below.
+  mkdirSync(productDir, { recursive: true });
+  mkdirSync(probeDir);
+  try {
+    const payload = JSON.stringify(cases.map(([, file, code]) => ({ file, code })));
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', script, cwd, payload], { cwd, encoding: 'utf8' });
+    const results = JSON.parse(output);
+
+    cases.forEach(([name, , , allowed], index) => {
+      const messages = results[index];
+
+      if (allowed) {
+        assert.deepEqual(messages, [], `allowed: ${name} was rejected with ${JSON.stringify(messages)}`);
+
+        return;
+      }
+      assert.ok(
+        messages.some((message) => message.includes('A product vertical imports the platform through')),
+        `rejected: ${name} was not rejected; got ${JSON.stringify(messages)}`
+      );
+    });
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true });
+    if (createdProductDir && readdirSync(productDir).length === 0) {
+      rmdirSync(productDir);
+    }
+  }
+});
 // A module folder created after the config was first loaded must be covered too: the config reads the tree
 // at load time, so a fresh process lints against a tree that holds a folder no list ever named.
 test('rejects: a module folder that exists only for this run', () => {
