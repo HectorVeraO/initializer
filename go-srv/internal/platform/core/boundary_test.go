@@ -125,10 +125,13 @@ func relImport(modulePath, imp string) (string, bool) {
 }
 
 const (
-	platformDir = "internal/platform"
-	internalDir = "internal"
-	coreDir     = "internal/platform/core"
-	serverDir   = "cmd/server"
+	// platformDirName is the one directory under internal/ that is not a product
+	// vertical.
+	platformDirName = "platform"
+	internalDir     = "internal"
+	platformDir     = internalDir + "/" + platformDirName
+	coreDir         = platformDir + "/core"
+	serverDir       = "cmd/server"
 	// modulesGoFile is the generated module list of the server; every other
 	// file of the package may import the module roots it names.
 	modulesGoFile = "modules.go"
@@ -155,7 +158,7 @@ func productOwner(rel string) (string, bool) {
 		return "", false
 	}
 	owner, _, _ := strings.Cut(below, "/")
-	if owner == "" || owner == "platform" {
+	if owner == "" || owner == platformDirName {
 		return "", false
 	}
 	return owner, true
@@ -434,15 +437,44 @@ func importGroupProblems(modulePath, path string, src []byte) []string {
 	return problems
 }
 
-// manifestFile is the module manifest each module directory carries.
+// manifestFile is the module manifest each platform module directory carries.
+// A product vertical carries none: it is never upgraded from the catalog, so
+// its table prefix comes from its migration filenames alone.
 const manifestFile = "module.manifest.json"
+
+// migrationsDir holds the migrations of a platform module and of a product
+// vertical. A vertical's file names declare its table prefix.
+const migrationsDir = "migrations"
 
 // tableTokenPattern matches a token shaped like a table name: a 2 to 4 letter
 // prefix, an underscore and a snake_case name.
 var tableTokenPattern = regexp.MustCompile(`\b([a-z]{2,4})_[a-z0-9_]+\b`)
 
+// tablePrefixPattern is the shape of a table prefix.
+var tablePrefixPattern = regexp.MustCompile(`^[a-z]{2,4}$`)
+
+// migrationTimestampPattern matches a migration file name without its .sql
+// suffix and captures everything after the 14-digit timestamp.
+var migrationTimestampPattern = regexp.MustCompile(`^\d{14}_(.+)$`)
+
 // corePrefix is core's migration ledger prefix; every module may name it.
 const corePrefix = "cor"
+
+// reservedTablePrefixes belong to areas outside this catalog. The list is a
+// twin of tooling/gates/internal/migrationlint/reserved-prefixes.json: this
+// test cannot import it (a separate Go module, and a generated project does not
+// ship tooling/), so Code Path Parity in the root AGENTS.md keeps them equal.
+var reservedTablePrefixes = []string{"aud", "pln", "mtr", "bil", "mkc", "jbr", "stg"}
+
+// isReservedPrefix reports whether prefix belongs to a reserved area.
+func isReservedPrefix(prefix string) bool {
+	for _, reserved := range reservedTablePrefixes {
+		if prefix == reserved {
+			return true
+		}
+	}
+	return false
+}
 
 // moduleRootOf returns the directory of the Go module the listing describes.
 func moduleRootOf(packages []listedPackage) string {
@@ -455,8 +487,9 @@ func moduleRootOf(packages []listedPackage) string {
 }
 
 // readTablePrefixes returns, for every non-core module directory under
-// internal/platform, the table prefixes its manifest claims. A directory
-// without a readable manifest claims none.
+// internal/platform, the table prefixes its manifest claims, keyed relative to
+// internal/ ("platform/<module>"). A directory without a readable manifest
+// claims none.
 func readTablePrefixes(root string) map[string][]string {
 	claims := map[string][]string{}
 	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(platformDir)))
@@ -475,48 +508,299 @@ func readTablePrefixes(root string) map[string][]string {
 			TablePrefixes []string `json:"tablePrefixes"`
 		}
 		if json.Unmarshal(data, &manifest) == nil {
-			claims[entry.Name()] = manifest.TablePrefixes
+			claims[platformDirName+"/"+entry.Name()] = manifest.TablePrefixes
 		}
 	}
 	return claims
 }
 
-// ruleNoForeignTables is rule 6: no Go file of a module (tests included,
-// testdata excluded) names a table whose prefix another module claims.
+// productDirs returns the names of the product verticals under internal/:
+// every directory there that is not the platform tree, sorted.
+func productDirs(root string) []string {
+	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(internalDir)))
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == platformDirName {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	sort.Strings(names)
+	return names
+}
+
+// tableClaims returns every table prefix claimed under internal/, keyed relative
+// to internal/ ("platform/<module>" or "<vertical>"), plus one problem for
+// every claim the rule refuses.
+func tableClaims(root string) (map[string][]string, []string) {
+	claims := readTablePrefixes(root)
+	products, problems := productPrefixes(root, claims)
+	for vertical, prefixes := range products {
+		claims[vertical] = prefixes
+	}
+	return claims, problems
+}
+
+// productPrefixes returns the table prefix each product vertical declares
+// through its migration filenames, keyed by the vertical, plus one problem per
+// refused claim: a malformed migration file name, migrations that yield more
+// than one prefix, a prefix that is not 2 to 4 lowercase letters, a reserved
+// prefix, core's prefix, a prefix a platform module already claims, a prefix
+// another vertical already claims, and a prefix the Go files of another
+// directory already use as an ordinary identifier. A vertical without migrations
+// claims nothing.
+func productPrefixes(root string, platformClaims map[string][]string) (map[string][]string, []string) {
+	ownerOfPrefix := map[string]string{}
+	for dir, prefixes := range platformClaims {
+		for _, prefix := range prefixes {
+			ownerOfPrefix[prefix] = dir
+		}
+	}
+	verticals := productDirs(root)
+	identifiers, problems := identifierOwners(root, platformClaims, verticals)
+	claims := map[string][]string{}
+	for _, vertical := range verticals {
+		relDir := internalDir + "/" + vertical + "/" + migrationsDir
+		files := migrationFiles(filepath.Join(root, filepath.FromSlash(relDir)))
+		if len(files) == 0 {
+			continue
+		}
+		prefixes, found := distinctMigrationPrefixes(relDir, files)
+		problems = append(problems, found...)
+		if len(prefixes) == 0 {
+			continue
+		}
+		if len(prefixes) > 1 {
+			problems = append(problems, fmt.Sprintf("rule 6: %s: claims %d table prefixes (%s)", relDir, len(prefixes), strings.Join(prefixes, ", ")))
+			continue
+		}
+		prefix := prefixes[0]
+		if !tablePrefixPattern.MatchString(prefix) {
+			problems = append(problems, fmt.Sprintf("rule 6: %s: prefix %q must be 2 to 4 lowercase letters", relDir, prefix))
+			continue
+		}
+		refusal := refusedPrefix(relDir, prefix, ownerOfPrefix, usedOutside(vertical, identifiers))
+		if refusal != "" {
+			problems = append(problems, refusal)
+			continue
+		}
+		claims[vertical] = prefixes
+		ownerOfPrefix[prefix] = vertical
+	}
+	return claims, problems
+}
+
+// identifierOwners returns, per claim key, every table prefix the Go files of
+// that directory already contain as a word-start token, testdata excluded. Rule
+// 6 matches tokens rather than SQL, so a vertical claiming one of them would
+// report identifiers such as app_session, max_conns or pay_status as its own
+// tables in directories it never touched.
+func identifierOwners(root string, platformClaims map[string][]string, verticals []string) (map[string]map[string]bool, []string) {
+	keys := make([]string, 0, len(platformClaims)+len(verticals))
+	for key := range platformClaims {
+		keys = append(keys, key)
+	}
+	keys = append(keys, verticals...)
+	sort.Strings(keys)
+	owners := map[string]map[string]bool{}
+	var problems []string
+	for _, key := range keys {
+		dir := filepath.Join(root, filepath.FromSlash(internalDir), filepath.FromSlash(key))
+		identifiers, err := dirIdentifiers(dir)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("rule 6: cannot scan %s: %v", filepath.ToSlash(internalDir+"/"+key), err))
+			continue
+		}
+		owners[key] = identifiers
+	}
+	return owners, problems
+}
+
+// dirIdentifiers returns every table prefix the Go files under dir contain as a
+// word-start token, testdata excluded.
+func dirIdentifiers(dir string) (map[string]bool, error) {
+	identifiers := map[string]bool{}
+	walkErr := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && entry.Name() == "testdata" {
+			return filepath.SkipDir
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			for _, match := range tableTokenPattern.FindAllStringSubmatch(line, -1) {
+				identifiers[match[1]] = true
+			}
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	return identifiers, nil
+}
+
+// usedOutside returns every prefix the directories other than self contain as an
+// identifier. The claimant's own directory is excluded: it holds its own table
+// names, which are the point of the claim.
+func usedOutside(self string, owners map[string]map[string]bool) map[string]bool {
+	used := map[string]bool{}
+	for key, identifiers := range owners {
+		if key == self {
+			continue
+		}
+		for prefix := range identifiers {
+			used[prefix] = true
+		}
+	}
+	return used
+}
+
+// migrationFiles returns the names of the .sql files directly in dir, sorted.
+// A missing directory yields none.
+func migrationFiles(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	sort.Strings(names)
+	return names
+}
+
+// distinctMigrationPrefixes returns the distinct table prefixes the migration
+// file names declare, sorted, plus one problem per file that declares none.
+func distinctMigrationPrefixes(relDir string, files []string) ([]string, []string) {
+	var problems []string
+	seen := map[string]bool{}
+	var prefixes []string
+	for _, file := range files {
+		prefix, hasPrefix := migrationPrefix(file)
+		if !hasPrefix {
+			problems = append(problems, fmt.Sprintf("rule 6: %s/%s: name must be <timestamp>_<prefix>_<name>.sql", relDir, file))
+			continue
+		}
+		if seen[prefix] {
+			continue
+		}
+		seen[prefix] = true
+		prefixes = append(prefixes, prefix)
+	}
+	sort.Strings(prefixes)
+	return prefixes, problems
+}
+
+// migrationPrefix derives the table prefix a migration file name declares: the
+// token after the leading 14-digit timestamp.
+func migrationPrefix(name string) (string, bool) {
+	base, hasSQLSuffix := strings.CutSuffix(name, ".sql")
+	if !hasSQLSuffix {
+		return "", false
+	}
+	match := migrationTimestampPattern.FindStringSubmatch(base)
+	if match == nil {
+		return "", false
+	}
+	prefix, _, _ := strings.Cut(match[1], "_")
+	return prefix, prefix != ""
+}
+
+// refusedPrefix returns the problem that makes prefix unusable as the single
+// claim of the vertical at relDir, or "" when the claim is allowed.
+func refusedPrefix(relDir, prefix string, ownerOfPrefix map[string]string, identifiers map[string]bool) string {
+	if isReservedPrefix(prefix) {
+		return fmt.Sprintf("rule 6: %s: prefix %q is reserved", relDir, prefix)
+	}
+	if prefix == corePrefix {
+		return fmt.Sprintf("rule 6: %s: prefix %q belongs to core", relDir, prefix)
+	}
+	owner, taken := ownerOfPrefix[prefix]
+	if taken {
+		return fmt.Sprintf("rule 6: %s: prefix %q is already claimed by %s", relDir, prefix, owner)
+	}
+	if identifiers[prefix] {
+		return fmt.Sprintf("rule 6: %s: prefix %q already appears as an identifier outside this vertical, choose another prefix", relDir, prefix)
+	}
+	return ""
+}
+
+// ruleNoForeignTables is rule 6: no Go file under internal/ (tests included,
+// testdata excluded) names a table whose prefix another module or product
+// vertical claims.
+//
+// A platform module claims the tablePrefixes of its module.manifest.json; a
+// product vertical claims the one prefix its migration file names yield, and
+// carries no manifest because it is never upgraded from the catalog. Every
+// product vertical is scanned whether or not it claims a prefix, so a vertical
+// that declares no migrations still cannot name a table the platform owns. A
+// prefix another directory already uses as an ordinary identifier is refused:
+// the token matcher cannot tell app_session, max_conns or pay_status from a
+// table name.
 func ruleNoForeignTables(packages []listedPackage) []string {
 	root := moduleRootOf(packages)
-	claims := readTablePrefixes(root)
+	claims, problems := tableClaims(root)
 	ownerOfPrefix := map[string]string{}
 	for dir, prefixes := range claims {
 		for _, prefix := range prefixes {
 			ownerOfPrefix[prefix] = dir
 		}
 	}
-	var problems []string
+	dirs := map[string]bool{}
 	for dir := range claims {
-		moduleDir := filepath.Join(root, filepath.FromSlash(platformDir), dir)
-		walkErr := filepath.WalkDir(moduleDir, func(path string, entry os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() && entry.Name() == "testdata" {
-				return filepath.SkipDir
-			}
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
-				return nil
-			}
-			problems = append(problems, foreignTablesIn(root, path, dir, ownerOfPrefix)...)
-			return nil
-		})
-		if walkErr != nil {
-			problems = append(problems, fmt.Sprintf("rule 6: cannot scan %s: %v", moduleDir, walkErr))
+		dirs[dir] = true
+	}
+	for _, vertical := range productDirs(root) {
+		dirs[vertical] = true
+	}
+	for _, dir := range sortedKeys(dirs) {
+		problems = append(problems, foreignTablesInDir(root, dir, ownerOfPrefix)...)
+	}
+	sort.Strings(problems)
+	return problems
+}
+
+// foreignTablesInDir returns every problem in the Go files of the directory at key,
+// relative to internal/.
+func foreignTablesInDir(root, key string, ownerOfPrefix map[string]string) []string {
+	dir := filepath.Join(root, filepath.FromSlash(internalDir), filepath.FromSlash(key))
+	var problems []string
+	walkErr := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if entry.IsDir() && entry.Name() == "testdata" {
+			return filepath.SkipDir
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			return nil
+		}
+		problems = append(problems, foreignTablesIn(root, path, key, ownerOfPrefix)...)
+		return nil
+	})
+	if walkErr != nil {
+		problems = append(problems, fmt.Sprintf("rule 6: cannot scan %s: %v", dir, walkErr))
 	}
 	return problems
 }
 
 // foreignTablesIn reports every token of path whose prefix is claimed by a
-// module other than self.
+// module or vertical other than self, the claim key of the directory holding it.
 func foreignTablesIn(root, path, self string, ownerOfPrefix map[string]string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -788,7 +1072,7 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 				"internal/platform/tenancy/store.go":              "package tenancy\n\nvar query = \"SELECT id FROM iam_accounts\"\n",
 				"internal/platform/tenancy/module.manifest.json":  "{\"tablePrefixes\": [\"ten\"]}\n",
 			},
-			want: "rule 6: internal/platform/tenancy/store.go:3 names iam_accounts, owned by identity",
+			want: "rule 6: internal/platform/tenancy/store.go:3 names iam_accounts, owned by platform/identity",
 		},
 		{
 			name: "rule 6 test files are scanned too",
@@ -800,7 +1084,7 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 				"internal/platform/apikeys/keys_test.go":         "package apikeys\n\nvar fixture = \"INSERT INTO ten_tenants (id) VALUES (1)\"\n",
 				"internal/platform/apikeys/module.manifest.json": "{\"tablePrefixes\": [\"apk\"]}\n",
 			},
-			want: "rule 6: internal/platform/apikeys/keys_test.go:3 names ten_tenants, owned by tenancy",
+			want: "rule 6: internal/platform/apikeys/keys_test.go:3 names ten_tenants, owned by platform/tenancy",
 		},
 		{
 			name: "rule 6 allows own tables, core ledgers, unclaimed prefixes and testdata",
@@ -811,6 +1095,172 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 				"internal/platform/tenancy/store.go":              "package tenancy\n\nvar a = \"ten_tenants\"\nvar b = \"cor_migrations_tenancy\"\nvar c = \"ak_live_x\"\n",
 				"internal/platform/tenancy/module.manifest.json":  "{\"tablePrefixes\": [\"ten\"]}\n",
 				"internal/platform/tenancy/testdata/x/x.go":       "package x\n\nvar d = \"iam_accounts\"\n",
+			},
+			want: "",
+		},
+		{
+			name: "rule 6 a vertical claims its own prefix and names a platform table",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/platform/tenancy/tenancy.go":                         "package tenancy\n",
+				"internal/platform/tenancy/module.manifest.json":               "{\"tablePrefixes\": [\"ten\"]}\n",
+				"internal/pay/migrations/20260101000000_pay_create_orders.sql": "",
+				"internal/pay/store.go":                                        "package pay\n\nvar query = \"SELECT id FROM ten_tenants\"\n",
+			},
+			want: "rule 6: internal/pay/store.go:3 names ten_tenants, owned by platform/tenancy",
+		},
+		{
+			name: "rule 6 a vertical with no migrations is scanned too",
+			files: map[string]string{
+				"internal/platform/core/core.go":                 "package core\n",
+				"internal/platform/tenancy/tenancy.go":           "package tenancy\n",
+				"internal/platform/tenancy/module.manifest.json": "{\"tablePrefixes\": [\"ten\"]}\n",
+				"internal/pay/store.go":                          "package pay\n\nvar query = \"SELECT id FROM ten_tenants\"\n",
+			},
+			want: "rule 6: internal/pay/store.go:3 names ten_tenants, owned by platform/tenancy",
+		},
+		{
+			name: "rule 6 two verticals claim one prefix",
+			files: map[string]string{
+				"internal/platform/core/core.go":                                     "package core\n",
+				"internal/billing/migrations/20260101000000_shp_create_invoices.sql": "",
+				"internal/dispatch/migrations/20260101000000_shp_create_routes.sql":  "",
+			},
+			want: "rule 6: internal/dispatch/migrations: prefix \"shp\" is already claimed by billing",
+		},
+		{
+			name: "rule 6 a vertical claims two prefixes",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/pay/migrations/20260101000000_pay_create_orders.sql": "",
+				"internal/pay/migrations/20260101000100_ord_create_items.sql":  "",
+			},
+			want: "rule 6: internal/pay/migrations: claims 2 table prefixes (ord, pay)",
+		},
+		{
+			name: "rule 6 a vertical claims a reserved prefix",
+			files: map[string]string{
+				"internal/platform/core/core.go":                              "package core\n",
+				"internal/audit/migrations/20260101000000_aud_create_log.sql": "",
+			},
+			want: "rule 6: internal/audit/migrations: prefix \"aud\" is reserved",
+		},
+		{
+			name: "rule 6 a vertical claims core's prefix",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/pay/migrations/20260101000000_cor_create_orders.sql": "",
+			},
+			want: "rule 6: internal/pay/migrations: prefix \"cor\" belongs to core",
+		},
+		{
+			name: "rule 6 a vertical claims a platform prefix",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/platform/tenancy/tenancy.go":                         "package tenancy\n",
+				"internal/platform/tenancy/module.manifest.json":               "{\"tablePrefixes\": [\"ten\"]}\n",
+				"internal/pay/migrations/20260101000000_ten_create_orders.sql": "",
+			},
+			want: "rule 6: internal/pay/migrations: prefix \"ten\" is already claimed by platform/tenancy",
+		},
+		{
+			name: "rule 6 testdata tokens do not refuse a prefix",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/platform/tenancy/tenancy.go":                         "package tenancy\n",
+				"internal/platform/tenancy/module.manifest.json":               "{\"tablePrefixes\": [\"ten\"]}\n",
+				"internal/platform/tenancy/testdata/fixtures/x.go":             "package fixtures\n\nvar s = \"pay_status\"\n",
+				"internal/pay/migrations/20260101000000_pay_create_orders.sql": "",
+				"internal/pay/store.go":                                        "package pay\n\nvar q = \"SELECT id FROM pay_orders\"\n",
+			},
+			want: "",
+		},
+		{
+			name: "rule 6 a vertical claims a prefix of the wrong shape",
+			files: map[string]string{
+				"internal/platform/core/core.go":                                    "package core\n",
+				"internal/pay/migrations/20260101000000_payments_create_orders.sql": "",
+			},
+			want: "rule 6: internal/pay/migrations: prefix \"payments\" must be 2 to 4 lowercase letters",
+		},
+		{
+			name: "rule 6 a vertical migration without a prefix",
+			files: map[string]string{
+				"internal/platform/core/core.go":             "package core\n",
+				"internal/pay/migrations/20260101000000.sql": "",
+			},
+			want: "rule 6: internal/pay/migrations/20260101000000.sql: name must be <timestamp>_<prefix>_<name>.sql",
+		},
+		{
+			name: "rule 6 a stray file next to a valid migration",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/pay/migrations/20260101000000_pay_create_orders.sql": "",
+				"internal/pay/migrations/seed_data.sql":                        "",
+			},
+			want: "rule 6: internal/pay/migrations/seed_data.sql: name must be <timestamp>_<prefix>_<name>.sql",
+		},
+		{
+			name: "rule 6 several migrations of one prefix",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/pay/migrations/20260101000000_pay_create_orders.sql": "",
+				"internal/pay/migrations/20260101000100_pay_add_items.sql":     "",
+			},
+			want: "",
+		},
+		{
+			name: "rule 6 a platform module naming a vertical's table refuses the prefix",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/platform/tenancy/tenancy.go":                         "package tenancy\n",
+				"internal/platform/tenancy/module.manifest.json":               "{\"tablePrefixes\": [\"ten\"]}\n",
+				"internal/platform/tenancy/store.go":                           "package tenancy\n\nvar q = \"SELECT id FROM pay_orders\"\n",
+				"internal/pay/migrations/20260101000000_pay_create_orders.sql": "",
+			},
+			want: "rule 6: internal/pay/migrations: prefix \"pay\" already appears as an identifier outside this vertical, choose another prefix",
+		},
+		{
+			name: "rule 6 a sibling vertical naming a vertical's table refuses the prefix",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/couriers/module.go":                                  "package couriers\n\nvar status = \"pay_status\"\n",
+				"internal/pay/migrations/20260101000000_pay_create_orders.sql": "",
+			},
+			want: "rule 6: internal/pay/migrations: prefix \"pay\" already appears as an identifier outside this vertical, choose another prefix",
+		},
+		{
+			name: "rule 6 refuses a prefix the platform tree uses as an identifier",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/platform/identity/identity.go":                       "package identity\n",
+				"internal/platform/identity/module.manifest.json":              "{\"tablePrefixes\": [\"iam\"]}\n",
+				"internal/platform/identity/session_test.go":                   "package identity\n\nvar k = \"app_session\"\n",
+				"internal/app/migrations/20260101000000_app_create_orders.sql": "",
+			},
+			want: "rule 6: internal/app/migrations: prefix \"app\" already appears as an identifier outside this vertical, choose another prefix",
+		},
+		{
+			name: "rule 6 accepts a prefix next to an unrelated identifier",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/platform/identity/identity.go":                       "package identity\n",
+				"internal/platform/identity/module.manifest.json":              "{\"tablePrefixes\": [\"iam\"]}\n",
+				"internal/platform/identity/session_test.go":                   "package identity\n\nvar k = \"app_session\"\n",
+				"internal/pay/migrations/20260101000000_pay_create_orders.sql": "",
+				"internal/pay/store.go":                                        "package pay\n\nvar q = \"SELECT id FROM pay_orders\"\n",
+			},
+			want: "",
+		},
+		{
+			name: "rule 6 a short vertical prefix does not match longer words",
+			files: map[string]string{
+				"internal/platform/core/core.go":                               "package core\n",
+				"internal/platform/parameters/parameters.go":                   "package parameters\n",
+				"internal/platform/parameters/module.manifest.json":            "{\"tablePrefixes\": [\"sys\"]}\n",
+				"internal/platform/parameters/store.go":                        "package parameters\n\nvar a = \"SELECT payload_total FROM payment_events\"\n",
+				"internal/pay/migrations/20260101000000_pay_create_orders.sql": "",
+				"internal/pay/store.go":                                        "package pay\n\nvar a = \"pay_orders\"\nvar b = \"cor_schema_migrations\"\n",
 			},
 			want: "",
 		},
