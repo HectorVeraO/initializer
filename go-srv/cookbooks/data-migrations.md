@@ -11,7 +11,7 @@ Every table matches `^[a-z]{2,4}_[a-z0-9_]+$`: a 2 to 4 letter module prefix, an
 
 ## Prefix registry
 
-The registry the lint reads is each module's `go-srv/internal/platform/<module>/module.manifest.json` `tablePrefixes` (2 to 4 lowercase letters, no underscore). The table below is the human index: `cor_`, `ten_`, `iam_` and `apk_` are enforced once their module ships a manifest that claims them; until then the lint does not stop another manifest from claiming them, so check this table in review.
+The registry the lint reads is each platform module's `go-srv/internal/platform/<module>/module.manifest.json` `tablePrefixes` (2 to 4 lowercase letters, no underscore). A product vertical claims its prefix through its migration file names instead: in a generated project, every file in `<component>/internal/<vertical>/migrations/` is `<YYYYMMDDhhmmss>_<prefix>_<name>.sql` and yields the same prefix, and the vertical carries no `module.manifest.json` because it is never upgraded from the catalog. This repository holds no product verticals: `gates migrations` lints only `go-srv/internal/platform/<module>/migrations/`, so a vertical's SQL never lives under `go-srv/` here. The table below is the human index: `cor_`, `ten_`, `iam_` and `apk_` are enforced once their module ships a manifest that claims them; until then the lint does not stop another manifest from claiming them, so check this table in review.
 
 | Prefix | Module | Tables |
 |---|---|---|
@@ -25,12 +25,13 @@ The registry the lint reads is each module's `go-srv/internal/platform/<module>/
 Reserved for planned catalog modules; `gates migrations` rejects a manifest that claims one (list: `tooling/gates/internal/migrationlint/reserved-prefixes.json`): `aud_` (audit log), `pln_` (plans and entitlements), `mtr_` (metering), `bil_` (billing), `mkc_` (maker-checker), `jbr_` (support ticket bridge), `stg_` (file storage).
 
 - A new module claims a new prefix in its `module.manifest.json` and adds a row here in the same PR as its first migration. No two manifests claim the same prefix.
+- A product vertical in a generated project declares its prefix by naming every migration under `<component>/internal/<vertical>/migrations/` `<timestamp>_<prefix>_<name>.sql`; one prefix per vertical. Boundary test rule 6 refuses a vertical prefix that is a platform prefix, `cor`, a reserved prefix, a prefix another module or vertical already claims, or a prefix another directory already contains as an ordinary identifier (`app_session`, `max_conns`, `pay_status`), because the rule matches tokens and cannot tell an identifier from a table name.
 - A generated project registers its own prefixes in its own copy of this table; it never reuses a core or reserved prefix.
 
 ## Migration files
 
 - Run `go -C tooling/gates run ./cmd/gates migrations --root ../.. [--base-rev <rev>]` (CI job `gates` runs it with the PR base). Output ends with `<n> migration files checked`. It checks every `.sql` file under `go-srv/` except those inside a `testdata/` directory (test fixtures).
-- Files live in `go-srv/internal/platform/<module>/migrations/`, one file per change, named `^(\d{14})_([a-z]{2,4})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`: `<YYYYMMDDhhmmss>_<prefix>_<name>.sql` (for example `20260101120000_sys_create_parameters.sql`). The prefix is in the owning module's `tablePrefixes`; timestamps are unique across the repo.
+- Files live in `go-srv/internal/platform/<module>/migrations/`, one file per change, named `^(\d{14})_([a-z]{2,4})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`: `<YYYYMMDDhhmmss>_<prefix>_<name>.sql` (for example `20260101120000_sys_create_parameters.sql`). The prefix is in the owning platform module's `tablePrefixes`; in a generated project a vertical's files live in `<component>/internal/<vertical>/migrations/` and share the single prefix their names declare. Timestamps are unique across the repo.
 - Every file has the line `-- +goose Up`. Wrap PL/pgSQL bodies in `-- +goose StatementBegin` / `-- +goose StatementEnd`. No `-- +goose Down` (Expand-first), no `-- +goose NO TRANSACTION`.
 - Tables are unquoted, in schema `public` (qualifier optional), and carry the file's module prefix, also in `REFERENCES`, `ALTER TABLE`, `CREATE INDEX ... ON` and `DROP TABLE`; no cross-module foreign keys.
 - A Contract step (`DROP TABLE`, `DROP COLUMN`, `RENAME COLUMN`, `RENAME TO`, `ALTER COLUMN ... TYPE`, `ALTER COLUMN ... SET NOT NULL`) carries the line `-- initializer:contract-step <reason>` directly above the statement.
@@ -59,7 +60,7 @@ Rules:
 
 ## Checklist
 
-- [ ] Table names match the regex and use the module's registered prefix.
+- [ ] Table names match the regex and use the module's or vertical's declared prefix.
 - [ ] The migration is additive (Expand) unless it is a planned Contract step for code already removed.
 - [ ] File name follows `<timestamp>_<prefix>_<name>.sql`.
 - [ ] An integration test exercises the new schema against a real PostgreSQL (`cookbooks/testing-tck.md`).
