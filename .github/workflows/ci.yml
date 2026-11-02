@@ -928,9 +928,172 @@ jobs:
             docker compose -f "${RUNNER_TEMP}/gen-a/.deploy/local/docker-compose.yml" --profile app down -v
           fi
 
+  # The product module seam, proved by a real vertical on every pull request: one
+  # project, one backend, one database. `go test` runs the generated project's
+  # boundary rules (1, 2, 3 and 6) over the vertical now in its tree, and the
+  # started server proves the registration in product.go serves the route.
+  generated-project-product-module:
+    name: generated-project-product-module
+    needs: [generator]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: dispatch
+          POSTGRES_USER: dispatch
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["10132:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dispatch -d dispatch"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go-srv/go.mod
+          cache-dependency-path: go-srv/go.sum
+      - name: Build the CLI and the catalog
+        run: |
+          set -euo pipefail
+          go -C tooling/generator build -o "${RUNNER_TEMP}/initializer" ./cmd/initializer
+          git ls-files -z > "${RUNNER_TEMP}/files.bin"
+          "${RUNNER_TEMP}/initializer" catalog build \
+            --root "${GITHUB_WORKSPACE}" \
+            --files "${RUNNER_TEMP}/files.bin" \
+            --out "${RUNNER_TEMP}/catalog.lock.json"
+      - name: Generate the project
+        run: |
+          set -euo pipefail
+          "${RUNNER_TEMP}/initializer" generate \
+            --root "${GITHUB_WORKSPACE}" \
+            --catalog "${RUNNER_TEMP}/catalog.lock.json" \
+            --name dispatch-queue \
+            --go-module example.com/fixture/srv \
+            --stacks go-srv \
+            --db-name dispatch \
+            --db-user dispatch \
+            "${RUNNER_TEMP}/gen"
+      - name: Read the component from the lock
+        id: layout
+        run: |
+          set -euo pipefail
+          lock="${RUNNER_TEMP}/gen/initializer.lock.json"
+          count="$(jq '[.components[] | select(.stack == "go-srv")] | length' "${lock}")"
+          if [ "${count}" -ne 1 ]; then
+            echo "the lock names ${count} go-srv components" >&2
+            exit 1
+          fi
+          echo "srv=$(jq -r '.components[] | select(.stack == "go-srv") | .name' "${lock}")" >> "${GITHUB_OUTPUT}"
+      - name: Copy the fixture vertical in and register it
+        env:
+          SRV: ${{ steps.layout.outputs.srv }}
+        run: |
+          set -euo pipefail
+          project="${RUNNER_TEMP}/gen"
+          vertical="${project}/${SRV}/internal/dispatch"
+          # The fixture is a repository artifact: a generated project must not carry it before the copy.
+          if [ -e "${vertical}" ] || [ -e "${project}/specs/dispatch" ]; then
+            echo "the fixture vertical was delivered by generate" >&2
+            exit 1
+          fi
+          cp -R "${GITHUB_WORKSPACE}/tooling/generator/testdata/product-vertical/internal/dispatch" "${vertical}"
+          # One edit in the project-owned registration file; modules.go and main.go stay as delivered.
+          python3 - "${project}/${SRV}/cmd/server/product.go" <<'PY'
+          import sys
+
+          path = sys.argv[1]
+          module = "example.com/fixture/srv"
+          with open(path, encoding="ascii", newline="") as handle:
+              text = handle.read()
+          core_import = f'import "{module}/internal/platform/core"'
+          grouped_import = (
+              "import (\n"
+              f'\t"{module}/internal/dispatch"\n'
+              f'\t"{module}/internal/platform/core"\n'
+              ")"
+          )
+          if core_import not in text:
+              sys.exit(f"{path}: the delivered product.go does not import the core root in the expected form")
+          if "return nil" not in text:
+              sys.exit(f"{path}: the delivered product.go has no nil module list")
+          text = text.replace(core_import, grouped_import, 1)
+          text = text.replace("return nil", "return []core.Module{dispatch.Module()}", 1)
+          with open(path, "w", encoding="ascii", newline="") as handle:
+              handle.write(text)
+          PY
+      - name: The project still verifies
+        run: |
+          set -euo pipefail
+          "${RUNNER_TEMP}/initializer" verify "${RUNNER_TEMP}/gen"
+      - name: Format, vet, build and test the vertical
+        env:
+          SRV: ${{ steps.layout.outputs.srv }}
+          APP_TEST_DATABASE_URL: postgres://dispatch@localhost:10132/dispatch?sslmode=disable
+        run: |
+          set -euo pipefail
+          srv="${RUNNER_TEMP}/gen/${SRV}"
+          unformatted="$(gofmt -l "${srv}")"
+          if [ -n "${unformatted}" ]; then
+            echo "${unformatted}" >&2
+            exit 1
+          fi
+          go -C "${srv}" vet ./...
+          go -C "${srv}" build ./...
+          go -C "${srv}" test ./...
+      - name: Serve the vertical and request its route
+        env:
+          SRV: ${{ steps.layout.outputs.srv }}
+        run: |
+          set -euo pipefail
+          srv="${RUNNER_TEMP}/gen/${SRV}"
+          go -C "${srv}" build -o "${RUNNER_TEMP}/server" ./cmd/server
+          APP_DATABASE_URL=postgres://dispatch@localhost:10132/dispatch?sslmode=disable \
+          GO_SRV_ADDR=127.0.0.1:10100 \
+            "${RUNNER_TEMP}/server" > "${RUNNER_TEMP}/server.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/server.pid"
+          ready=false
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:10100/health/ready > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "${ready}" != true ]; then
+            cat "${RUNNER_TEMP}/server.log" >&2
+            echo "the generated server did not become ready" >&2
+            exit 1
+          fi
+          # The route needs a session, which needs identity and Kratos: the answer proves the route is mounted
+          # when it is 401 SESSION_INVALID and not the 404 ROUTE_NOT_FOUND fallback. `go test` covers the 200 path.
+          status="$(curl -sS -o "${RUNNER_TEMP}/dispatch.json" -w '%{http_code}' http://127.0.0.1:10100/api/v1/dispatch)"
+          if [ "${status}" != "401" ] || ! jq -e '.error.code == "SESSION_INVALID" and .error.issues == []' "${RUNNER_TEMP}/dispatch.json" > /dev/null; then
+            cat "${RUNNER_TEMP}/dispatch.json" >&2
+            echo "the vertical route answered ${status}: product.go did not register the vertical" >&2
+            exit 1
+          fi
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: generated-product-module
+          path: ${{ runner.temp }}/server.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Stop the server
+        if: always()
+        run: |
+          if [ -f "${RUNNER_TEMP}/server.pid" ]; then
+            kill "$(cat "${RUNNER_TEMP}/server.pid")" || true
+          fi
+
   generated-projects:
     name: generated-projects
-    needs: [selections, generated-project, generated-project-host-dev]
+    needs: [selections, generated-project, generated-project-host-dev, generated-project-product-module]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -939,6 +1102,7 @@ jobs:
           test "${{ needs.selections.result }}" = success
           test "${{ needs.generated-project.result }}" = success
           test "${{ needs.generated-project-host-dev.result }}" = success
+          test "${{ needs.generated-project-product-module.result }}" = success
 
   tck:
     name: tck

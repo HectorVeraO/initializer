@@ -1,0 +1,350 @@
+openapi: 3.1.0
+info:
+  title: Dispatch
+  version: 0.1.0
+  description: >-
+    The job queue of the application. Every /api/v1 body is the envelope of the
+    core contract; the codes this spec adds are DISPATCH_REFERENCE_TAKEN and the
+    core issue codes of a reference. Request schemas describe their constraints
+    in prose: a violation answers 422 VALIDATION_FAILED with every problem in
+    error.issues.
+servers:
+  - url: /
+security: []
+tags:
+  - name: dispatch
+paths:
+  /api/v1/dispatch:
+    get:
+      operationId: listDispatchJobs
+      summary: List jobs
+      description: >-
+        One page of the queue, sorted by reference. The queue is project-wide:
+        every session of every tenant reads the same list.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: A page of jobs.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DispatchJobPage'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: CREDENTIAL_CONFLICT.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '422':
+          description: VALIDATION_FAILED (issues FIELD_TYPE_INVALID, FIELD_OUT_OF_RANGE, FIELD_NOT_ALLOWED).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+    post:
+      operationId: createDispatchJob
+      summary: Queue a job
+      description: >-
+        Queues one job in status queued. Any session may queue; the job records
+        the caller's account in createdBy.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchJobCreate'
+      responses:
+        '201':
+          description: The queued job.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DispatchJob'
+        '401':
+          description: SESSION_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '403':
+          description: CSRF_TOKEN_INVALID.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '409':
+          description: DISPATCH_REFERENCE_TAKEN, CREDENTIAL_CONFLICT, ACTIVE_TENANT_CHANGED.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '413':
+          description: PAYLOAD_TOO_LARGE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '422':
+          description: VALIDATION_FAILED (issues FIELD_REQUIRED, FIELD_TOO_LONG, FIELD_INVALID_FORMAT).
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+        '500':
+          description: INTERNAL_ERROR.
+          headers:
+            X-Trace-Id:
+              $ref: '#/components/headers/XTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelopeError'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: app_session
+      description: Name is __Host-app_session over https. Not pinned by the TCK; treat it as opaque.
+  parameters:
+    XsrfToken:
+      name: X-XSRF-TOKEN
+      in: header
+      required: false
+      description: Required on cookie-authenticated mutations; value of the XSRF-TOKEN cookie. Missing or wrong -> 403 CSRF_TOKEN_INVALID.
+      schema: { type: string }
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 1-based page number. Not an integer -> FIELD_TYPE_INVALID; below 1 -> FIELD_OUT_OF_RANGE.
+      schema: { type: integer, minimum: 1, default: 1 }
+    Size:
+      name: size
+      in: query
+      required: false
+      description: Page size, 1 to 100. Not an integer -> FIELD_TYPE_INVALID; outside the range -> FIELD_OUT_OF_RANGE.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Sort:
+      name: sort
+      in: query
+      required: false
+      description: '"reference" or "-reference". Any other field -> FIELD_NOT_ALLOWED.'
+      schema:
+        type: string
+        default: reference
+  headers:
+    XTraceId:
+      description: The trace id of the request; equals meta.traceId of the body.
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{32}$'
+  schemas:
+    ApiMeta:
+      type: object
+      required: [traceId, timestamp]
+      additionalProperties: false
+      properties:
+        traceId:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+          description: 32 lowercase hex characters, never all zeros.
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC 3339 UTC in whole seconds, ending in Z.
+    ApiIssue:
+      type: object
+      required: [field, code, message]
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+          description: JSON path into the request body or a query parameter name; empty means the whole body.
+        code:
+          $ref: '#/components/schemas/ApiIssueCode'
+        message:
+          type: string
+    ApiError:
+      type: object
+      required: [code, message, issues]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/ApiErrorCode'
+        message:
+          type: string
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiIssue'
+    ApiEnvelopeError:
+      type: object
+      required: [data, meta, error]
+      additionalProperties: false
+      properties:
+        data:
+          type: 'null'
+        meta:
+          $ref: '#/components/schemas/ApiMeta'
+        error:
+          $ref: '#/components/schemas/ApiError'
+    SuccessEnvelope:
+      type: object
+      required: [data, meta, error]
+      properties:
+        data: {}
+        meta:
+          $ref: '#/components/schemas/ApiMeta'
+        error:
+          type: 'null'
+    ApiErrorCode:
+      type: string
+      description: Top-level error.code. The set grows (x-extensible-enum), so a client treats an unknown code as a generic error; renaming or removing a code is a breaking change.
+      x-extensible-enum:
+        - SESSION_INVALID
+        - CREDENTIAL_CONFLICT
+        - CSRF_TOKEN_INVALID
+        - ACTIVE_TENANT_CHANGED
+        - RESOURCE_NOT_FOUND
+        - ROUTE_NOT_FOUND
+        - DISPATCH_REFERENCE_TAKEN
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
+        - VALIDATION_FAILED
+        - INTERNAL_ERROR
+    ApiIssueCode:
+      type: string
+      description: error.issues[].code, always under a 422 VALIDATION_FAILED. The set grows (x-extensible-enum), so a client treats an unknown code as a generic problem.
+      x-extensible-enum:
+        - FIELD_REQUIRED
+        - FIELD_TYPE_INVALID
+        - FIELD_INVALID_FORMAT
+        - FIELD_TOO_LONG
+        - FIELD_OUT_OF_RANGE
+        - FIELD_NOT_ALLOWED
+        - BODY_MALFORMED
+    DispatchJobCreate:
+      type: object
+      required: [reference]
+      additionalProperties: false
+      properties:
+        reference:
+          type: string
+          description: >-
+            1 to 64 characters, letters, digits, dot, dash or underscore,
+            starting with a letter or a digit. A reference already queued
+            answers 409 DISPATCH_REFERENCE_TAKEN.
+    DispatchJob:
+      type: object
+      required: [id, reference, status, createdBy, createdAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, done]
+        createdBy:
+          type: [string, 'null']
+          format: uuid
+          description: The account that queued the job.
+        createdAt:
+          type: string
+          format: date-time
+    DispatchJobPage:
+      type: object
+      required: [items, page, size, totalItems]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DispatchJob'
+        page:
+          type: integer
+          minimum: 1
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        totalItems:
+          type: integer
+          minimum: 0
