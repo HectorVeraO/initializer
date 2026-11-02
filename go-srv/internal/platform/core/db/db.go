@@ -23,11 +23,12 @@ const (
 )
 
 // Open parses url (pgxpool.ParseConfig), sets MaxConns and creates the pool.
-// It does not connect (pgxpool.NewWithConfig is lazy); the error is a parse
-// error whose text never contains the URL.
+// maxConns must be at least 2: migrations hold one connection for the advisory
+// lock and one to run them. It does not connect (pgxpool.NewWithConfig is
+// lazy); the error is a parse error whose text never contains the URL.
 func Open(ctx context.Context, url config.Secret, maxConns int) (*pgxpool.Pool, error) {
-	if maxConns < 1 || maxConns > math.MaxInt32 {
-		return nil, fmt.Errorf("db: maxConns must be between 1 and %d", math.MaxInt32)
+	if maxConns < 2 || maxConns > math.MaxInt32 {
+		return nil, fmt.Errorf("db: maxConns must be between 2 and %d", math.MaxInt32)
 	}
 	cfg, err := pgxpool.ParseConfig(url.Reveal())
 	if err != nil {
