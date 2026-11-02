@@ -6,6 +6,7 @@ import { apiKeysModule } from './api-keys/module';
 import { featureFlagsModule } from './feature-flags/module';
 import { parametersModule } from './parameters/module';
 import { tenancyModule } from './tenancy/module';
+import { productModules } from '../product.modules';
 
-/** The console modules of this project, in catalog order. */
-export const installedModules: readonly WebModule[] = [coreModule, identityModule, apiKeysModule, featureFlagsModule, parametersModule, tenancyModule];
+/** The console modules of this project: the catalog modules in catalog order, then the project's own. */
+export const installedModules: readonly WebModule[] = [coreModule, identityModule, apiKeysModule, featureFlagsModule, parametersModule, tenancyModule, ...productModules];

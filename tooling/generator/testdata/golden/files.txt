@@ -46,6 +46,7 @@ ng-web/src/app/platform/modules.ts
 ng-web/src/app/platform/parameters/i18n/en.json
 ng-web/src/app/platform/parameters/module.manifest.json
 ng-web/src/app/platform/parameters/module.ts
+ng-web/src/app/product.modules.ts
 specs/api-keys/openapi.yaml
 specs/api-keys/spec.manifest.json
 specs/core/openapi.yaml

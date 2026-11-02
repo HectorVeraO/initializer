@@ -3,6 +3,7 @@ import type { WebModule } from './core';
 import { coreModule } from './core/module';
 import { identityModule } from './identity/module';
 import { parametersModule } from './parameters/module';
+import { productModules } from '../product.modules';
 
-/** The console modules of this project, in catalog order. */
-export const installedModules: readonly WebModule[] = [coreModule, identityModule, parametersModule];
+/** The console modules of this project: the catalog modules in catalog order, then the project's own. */
+export const installedModules: readonly WebModule[] = [coreModule, identityModule, parametersModule, ...productModules];

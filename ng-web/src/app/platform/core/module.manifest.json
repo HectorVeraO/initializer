@@ -10,6 +10,7 @@
   "portFiles": ["ng-web/angular.json", "ng-web/package.json", "ng-web/proxy.conf.json"],
   "files": ["ng-web/"],
   "exclude": ["ng-web/.vscode/", "ng-web/AGENTS.md", "ng-web/cookbooks/"],
+  "seeds": ["ng-web/src/app/product.modules.ts"],
   "names": [
     { "path": "ng-web/src/app/core/config/brand.ts", "text": "BRAND = '%{displayName}'" },
     { "path": "ng-web/src/index.html", "text": "<title>%{displayName}</title>" },

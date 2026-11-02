@@ -20,6 +20,8 @@ The file map lives in `AGENTS.md` -> "File map for a new feature"; this fragment
 
 `src/app/platform/` holds `core` (the shell contract and the ports) and one folder per catalog module: `identity`, `tenancy`, `api-keys`, `parameters`, `feature-flags`. Each exports a `WebModule` (`<module>/module.ts`); `src/app/platform/modules.ts` lists the installed ones and is the only generated file.
 
+Product verticals live at `src/app/product/<vertical>/`. A vertical imports `@/platform/core` and `@/platform/modules` only, never a platform module folder and never a sibling vertical; it reaches its own files with `./` or `@/product/<vertical>/` (ESLint, `eslint.config.js`). `src/app/product.modules.ts` is the single project-owned registration point: it lists the verticals, and the generated `src/app/platform/modules.ts` spreads them after the catalog modules.
+
 - **`WebModule` fields**: `id`; `shellRoutes` (children of the shell group, each lazy route carries its own `requireAccess` guard); `publicRoutes` (outside the shell layout); `nav` (`NavEntry` with `requires: AccessRequirement`); `i18n` (the module's Transloco scope); optional `topbar` (`TopbarItem { id, slot: 'context' | 'account', component }`); `interceptors` (run before core's trace and API-error interceptors, in module order); `ports` (`access`, `flags`, `tenants`, `tenantSelection`).
 - **Ports**: a bound class is `@Injectable({ providedIn: 'root' })` and is bound with `useExisting`. At most one installed module binds a port, else `PLATFORM_DUPLICATE_PORT:<port>:<id>,<id>`.
 
