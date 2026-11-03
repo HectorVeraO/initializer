@@ -1,4 +1,4 @@
-package coretest
+package testcore
 
 import (
 	"encoding/binary"
@@ -25,24 +25,24 @@ func newRejectingPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("coretest: listen: %v", err)
+		t.Fatalf("testcore: listen: %v", err)
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 	go acceptLoop(listener)
 
 	tcpAddr, isTCP := listener.Addr().(*net.TCPAddr)
 	if !isTCP {
-		t.Fatalf("coretest: listener is not TCP")
+		t.Fatalf("testcore: listener is not TCP")
 	}
-	url := "postgres://coretest@127.0.0.1:" + strconv.Itoa(tcpAddr.Port) + "/coretest?sslmode=disable"
+	url := "postgres://testcore@127.0.0.1:" + strconv.Itoa(tcpAddr.Port) + "/testcore?sslmode=disable"
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
-		t.Fatalf("coretest: parse pool url: %v", err)
+		t.Fatalf("testcore: parse pool url: %v", err)
 	}
 	cfg.MaxConns = testPoolConns
 	pool, err := pgxpool.NewWithConfig(t.Context(), cfg)
 	if err != nil {
-		t.Fatalf("coretest: open pool: %v", err)
+		t.Fatalf("testcore: open pool: %v", err)
 	}
 	t.Cleanup(pool.Close)
 	return pool
@@ -170,7 +170,7 @@ func writeError(conn net.Conn) {
 		{'S', "ERROR"},
 		{'V', "ERROR"},
 		{'C', "0A000"},
-		{'M', "coretest: Options.Database is false; set it to true to use the pool"},
+		{'M', "testcore: Options.Database is false; set it to true to use the pool"},
 	}
 	for _, field := range fields {
 		body = append(body, field.code)

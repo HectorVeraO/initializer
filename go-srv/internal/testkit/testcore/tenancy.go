@@ -1,4 +1,4 @@
-package coretest
+package testcore
 
 import (
 	"context"
@@ -68,7 +68,7 @@ func (b *TenantBook) AddMember(m Member) {
 	defer b.mu.Unlock()
 	_, known := b.tenants[m.Tenant]
 	if !known {
-		panic(fmt.Sprintf("coretest: AddMember: tenant %q is not in the book", m.Tenant))
+		panic(fmt.Sprintf("testcore: AddMember: tenant %q is not in the book", m.Tenant))
 	}
 	b.members = append(b.members, m)
 }
@@ -80,7 +80,7 @@ func (b *TenantBook) SetTenantStatus(id reqctx.TenantID, status access.TenantSta
 	defer b.mu.Unlock()
 	tenant, known := b.tenants[id]
 	if !known {
-		panic(fmt.Sprintf("coretest: SetTenantStatus: tenant %q is not in the book", id))
+		panic(fmt.Sprintf("testcore: SetTenantStatus: tenant %q is not in the book", id))
 	}
 	tenant.Status = status
 	b.tenants[id] = tenant
@@ -178,7 +178,7 @@ func (b *TenantBook) Remember(_ context.Context, account reqctx.AccountID, tenan
 	accountID, accountOK := reqctx.ParseTenantID(string(account))
 	tenantID, tenantOK := reqctx.ParseTenantID(string(tenant))
 	if !accountOK || !tenantOK {
-		return errors.New("coretest: remember: ids must be UUIDs")
+		return errors.New("testcore: remember: ids must be UUIDs")
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -330,7 +330,7 @@ func newUUID() string {
 	var raw [16]byte
 	_, err := rand.Read(raw[:])
 	if err != nil {
-		panic(fmt.Sprintf("coretest: read random bytes: %v", err))
+		panic(fmt.Sprintf("testcore: read random bytes: %v", err))
 	}
 	raw[6] = raw[6]&0x0f | 0x40
 	raw[8] = raw[8]&0x3f | 0x80

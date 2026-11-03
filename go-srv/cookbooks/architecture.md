@@ -2,7 +2,7 @@
 
 Read before adding or changing a module, route, handler or error response. Canonical examples:
 `go-srv/internal/platform/core/health` (mounting, handler, black-box test) and
-`go-srv/internal/testkit/coretest` (a module under test). A product vertical, the code this project
+`go-srv/internal/testkit/testcore` (a module under test). A product vertical, the code this project
 writes itself, is `go-srv/internal/<vertical>/`: `cookbooks/new-domain-module.md`.
 
 ## Layout
@@ -13,7 +13,7 @@ writes itself, is `go-srv/internal/<vertical>/`: `cookbooks/new-domain-module.md
 | `cmd/server/product.go` | Project-owned: `productModules()` lists the verticals; `modules.go` appends them. |
 | `internal/<vertical>/` | A product vertical: its module, migrations, handlers, service, store and codes. |
 | `internal/platform/core/` | The always-installed foundation: module seam (`Module`, `Builder`, `Host`, `Build`, `Run`), request chain, `api`, `access`, `reqctx`, `featureflag`, `parameter`, `config`, `telemetry`, `db`, `migrate`, `health`, `clock`. |
-| `internal/testkit/` | Test support, outside the platform tree: `coretest` (the module test host) and `testpg` (the throwaway database helper). Only `_test.go` files import it. |
+| `internal/testkit/` | Test support, outside the platform tree: `testcore` (the module test host) and `testpg` (the throwaway database helper). Only `_test.go` files import it. |
 | `internal/platform/<module>/` | One package tree per catalog module (`identity`, `tenancy`, `apikeys`, `parameters`, `featureflags`). |
 | `specs/<module>/openapi.yaml` | The module's HTTP contract, in the project's `specs/` folder. The Go code implements it; it never defines it. |
 

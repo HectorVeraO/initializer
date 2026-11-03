@@ -22,7 +22,7 @@ import (
 	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/migrate"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 const adminURLEnv = "APP_TEST_DATABASE_URL"
@@ -275,17 +275,17 @@ func databaseName(quoted string) string {
 }
 
 // tenantsFake is the TenantAccess and TenantDirectory a test hands to
-// core.Build: a coretest.TenantBook rebuilt whenever the test changes tenants,
+// core.Build: a testcore.TenantBook rebuilt whenever the test changes tenants,
 // memberships or statuses after the host exists. It follows the port
 // contracts through the book; identity tests never import the tenancy module.
 type tenantsFake struct {
 	mu         sync.Mutex
 	tenants    []coreaccess.TenantRef
-	members    []coretest.Member
+	members    []testcore.Member
 	remembered map[reqctx.AccountID]reqctx.TenantID
 	// rememberErr, when set, is what every Remember call returns.
 	rememberErr error
-	book        *coretest.TenantBook
+	book        *testcore.TenantBook
 }
 
 var (
@@ -300,7 +300,7 @@ func newTenantsFake() *tenantsFake {
 }
 
 func (f *tenantsFake) rebuildLocked() {
-	book := coretest.NewTenantBook(f.tenants...)
+	book := testcore.NewTenantBook(f.tenants...)
 	for _, member := range f.members {
 		book.AddMember(member)
 	}
@@ -336,14 +336,14 @@ func (f *tenantsFake) setTenantStatus(id, status string) {
 func (f *tenantsFake) addMember(id, tenant, account, role, status string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.members = append(f.members, coretest.Member{
+	f.members = append(f.members, testcore.Member{
 		ID: id, Account: reqctx.AccountID(account), Tenant: reqctx.TenantID(tenant),
 		Role: reqctx.Role(role), Status: status,
 	})
 	f.rebuildLocked()
 }
 
-func (f *tenantsFake) updateMember(tenant, account string, change func(m *coretest.Member)) {
+func (f *tenantsFake) updateMember(tenant, account string, change func(m *testcore.Member)) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for i := range f.members {
@@ -356,11 +356,11 @@ func (f *tenantsFake) updateMember(tenant, account string, change func(m *corete
 }
 
 func (f *tenantsFake) setMemberStatus(tenant, account, status string) {
-	f.updateMember(tenant, account, func(m *coretest.Member) { m.Status = status })
+	f.updateMember(tenant, account, func(m *testcore.Member) { m.Status = status })
 }
 
 func (f *tenantsFake) setMemberRole(tenant, account, role string) {
-	f.updateMember(tenant, account, func(m *coretest.Member) { m.Role = reqctx.Role(role) })
+	f.updateMember(tenant, account, func(m *testcore.Member) { m.Role = reqctx.Role(role) })
 }
 
 func (f *tenantsFake) removeMember(tenant, account string) {
@@ -392,7 +392,7 @@ func (f *tenantsFake) failRemember(err error) {
 	f.rememberErr = err
 }
 
-func (f *tenantsFake) current() *coretest.TenantBook {
+func (f *tenantsFake) current() *testcore.TenantBook {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.book

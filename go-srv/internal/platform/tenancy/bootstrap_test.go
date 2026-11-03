@@ -15,7 +15,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 const (
@@ -28,7 +28,7 @@ const (
 type bootstrapEnv struct {
 	t     *testing.T
 	pool  *pgxpool.Pool
-	book  *coretest.AccountBook
+	book  *testcore.AccountBook
 	logs  *logSink
 	admin accounts.Ref
 }
@@ -46,7 +46,7 @@ func newBootstrapEnv(t *testing.T) *bootstrapEnv {
 	return &bootstrapEnv{
 		t:     t,
 		pool:  newTestPool(t),
-		book:  coretest.NewAccountBook(nil, admin),
+		book:  testcore.NewAccountBook(nil, admin),
 		logs:  &logSink{},
 		admin: admin,
 	}
@@ -181,7 +181,7 @@ func TestBootstrapTakesTheOldestAccountOfTheEmail(t *testing.T) {
 	env := newBootstrapEnv(t)
 	newer := env.admin
 	newer.ID = reqctx.AccountID(randomUUID(t))
-	env.book = coretest.NewAccountBook(nil, env.admin, newer)
+	env.book = testcore.NewAccountBook(nil, env.admin, newer)
 
 	env.mustBuild(nil)
 

@@ -1,4 +1,4 @@
-package coretest_test
+package testcore_test
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/featureflag"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 const (
@@ -99,9 +99,9 @@ func ping(h *core.Host, pattern string) {
 }
 
 func TestNewServesModuleRoutesAndTheCoreFallback(t *testing.T) {
-	handler := coretest.New(t, []core.Module{mounting("alpha", func(h *core.Host) {
+	handler := testcore.New(t, []core.Module{mounting("alpha", func(h *core.Host) {
 		ping(h, "GET /api/v1/ping")
-	})}, coretest.Options{})
+	})}, testcore.Options{})
 
 	rec := send(handler, http.MethodGet, "/api/v1/ping", nil)
 	if rec.Code != http.StatusOK || rec.Body.String() != "pong" {
@@ -120,7 +120,7 @@ func TestNewServesModuleRoutesAndTheCoreFallback(t *testing.T) {
 }
 
 func TestNewAnswersHealthAsServing(t *testing.T) {
-	handler := coretest.New(t, nil, coretest.Options{})
+	handler := testcore.New(t, nil, testcore.Options{})
 	rec := send(handler, http.MethodGet, "/health/ready", nil)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("ready = %d, want 204", rec.Code)
@@ -138,7 +138,7 @@ func TestNewMergesConfigOverDefaultsAndUsesTheFixedClock(t *testing.T) {
 			return nil
 		},
 	}
-	coretest.New(t, []core.Module{module}, coretest.Options{})
+	testcore.New(t, []core.Module{module}, testcore.Options{})
 	if baseURL != "http://localhost:10120" {
 		t.Fatalf("default base URL = %q", baseURL)
 	}
@@ -147,7 +147,7 @@ func TestNewMergesConfigOverDefaultsAndUsesTheFixedClock(t *testing.T) {
 	}
 
 	custom := time.Date(2027, 5, 6, 7, 8, 9, 0, time.UTC)
-	coretest.New(t, []core.Module{module}, coretest.Options{
+	testcore.New(t, []core.Module{module}, testcore.Options{
 		Config: map[string]string{"APP_PUBLIC_BASE_URL": "https://app.example.com"},
 		Clock:  clock.Fixed(custom),
 	})
@@ -197,11 +197,11 @@ func TestNewHandsTheFakesToModules(t *testing.T) {
 		tenants = h.TenantDirectory()
 		sessions = h.SessionResolver()
 	})
-	tenantBook := coretest.NewTenantBook()
-	accountBook := coretest.NewAccountBook(nil)
-	coretest.New(t, []core.Module{module}, coretest.Options{
+	tenantBook := testcore.NewTenantBook()
+	accountBook := testcore.NewAccountBook(nil)
+	testcore.New(t, []core.Module{module}, testcore.Options{
 		FlagEvaluator:   allFlags{},
-		SessionResolver: coretest.Session(reqctx.Principal{Kind: reqctx.ActorAccount, ActorID: testActor}),
+		SessionResolver: testcore.Session(reqctx.Principal{Kind: reqctx.ActorAccount, ActorID: testActor}),
 		APIKeyResolver:  keyFake{},
 		TenantDirectory: tenantFake{},
 
@@ -245,7 +245,7 @@ func TestSessionFakeResolvesTheCookieAndChecksTheCSRFHeader(t *testing.T) {
 		h.Handle("GET /api/v1/me", access.Policy{Kind: access.KindSession}, route)
 		h.Handle("POST /api/v1/me", access.Policy{Kind: access.KindSession}, route)
 	})
-	handler := coretest.New(t, []core.Module{module}, coretest.Options{SessionResolver: coretest.Session(principal)})
+	handler := testcore.New(t, []core.Module{module}, testcore.Options{SessionResolver: testcore.Session(principal)})
 	withCookie := func(r *http.Request) { r.AddCookie(&http.Cookie{Name: "test_session", Value: "x"}) }
 
 	cases := []struct {
@@ -297,7 +297,7 @@ func TestLoggerReceivesModuleRecordsWithTraceFields(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		}))
 	})
-	handler := coretest.New(t, []core.Module{module}, coretest.Options{Logger: logger})
+	handler := testcore.New(t, []core.Module{module}, testcore.Options{Logger: logger})
 
 	rec := send(handler, http.MethodGet, "/api/v1/log", nil)
 	traceID := rec.Header().Get("X-Trace-Id")
@@ -324,7 +324,7 @@ func TestNilLoggerDiscardsRecords(t *testing.T) {
 		h.Logger().Info("alpha_started")
 	})
 	output := captureStdStreams(t, func() {
-		coretest.New(t, []core.Module{module}, coretest.Options{})
+		testcore.New(t, []core.Module{module}, testcore.Options{})
 	})
 	if output != "" {
 		t.Fatalf("a nil Options.Logger must discard records, got output: %q", output)
@@ -357,7 +357,7 @@ func captureStdStreams(t *testing.T, fn func()) string {
 
 func TestWithoutADatabaseAModuleTouchingThePoolFails(t *testing.T) {
 	var pool *pgxpool.Pool
-	coretest.New(t, []core.Module{mounting("alpha", func(h *core.Host) { pool = h.Pool() })}, coretest.Options{})
+	testcore.New(t, []core.Module{mounting("alpha", func(h *core.Host) { pool = h.Pool() })}, testcore.Options{})
 	if pool == nil {
 		t.Fatalf("the module must receive a pool value")
 	}
@@ -390,7 +390,7 @@ func TestDatabaseTrueGivesAnOwnedMigratedDatabase(t *testing.T) {
 		Migrations: migrations,
 		Mount:      func(_ context.Context, h *core.Host) error { pool = h.Pool(); return nil },
 	}
-	coretest.New(t, []core.Module{module}, coretest.Options{Database: true})
+	testcore.New(t, []core.Module{module}, testcore.Options{Database: true})
 
 	ctx := context.Background()
 	var ownName string
@@ -419,7 +419,7 @@ func TestDatabaseTrueDropsItsDatabaseOnCleanup(t *testing.T) {
 			Migrations: migrations,
 			Mount:      func(_ context.Context, h *core.Host) error { pool = h.Pool(); return nil },
 		}
-		coretest.New(t, []core.Module{module}, coretest.Options{Database: true})
+		testcore.New(t, []core.Module{module}, testcore.Options{Database: true})
 
 		ctx := context.Background()
 		err := pool.QueryRow(ctx, "SELECT current_database()").Scan(&ownName)
@@ -465,7 +465,7 @@ func TestTwoDatabaseHostsDoNotShareData(t *testing.T) {
 			Migrations: migrations,
 			Mount:      func(_ context.Context, h *core.Host) error { pool = h.Pool(); return nil },
 		}
-		coretest.New(t, []core.Module{module}, coretest.Options{Database: true})
+		testcore.New(t, []core.Module{module}, testcore.Options{Database: true})
 		_, err := pool.Exec(context.Background(), "INSERT INTO sys_examples (id) VALUES (1)")
 		if err != nil {
 			t.Fatalf("insert: %v", err)
@@ -484,7 +484,7 @@ func TestTwoDatabaseHostsDoNotShareData(t *testing.T) {
 
 func TestRejectedExtendedQueryLeavesThePoolConnectionUsable(t *testing.T) {
 	var pool *pgxpool.Pool
-	coretest.New(t, []core.Module{mounting("alpha", func(h *core.Host) { pool = h.Pool() })}, coretest.Options{})
+	testcore.New(t, []core.Module{mounting("alpha", func(h *core.Host) { pool = h.Pool() })}, testcore.Options{})
 	ctx := context.Background()
 	_, err := pool.Exec(ctx, "SELECT $1::int", 1)
 	if err == nil {

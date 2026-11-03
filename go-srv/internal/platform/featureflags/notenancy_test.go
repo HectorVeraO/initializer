@@ -11,7 +11,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/featureflag"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/featureflags"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 // aloneEnv is feature-flags with an operator session and no TenantDirectory
@@ -29,7 +29,7 @@ func aloneEnv(t testing.TB) *routeEnv {
 		e.probe.Pool = h.Pool()
 		return nil
 	}}
-	e.handler = coretest.New(t, []core.Module{featureflags.Module(), capture}, coretest.Options{
+	e.handler = testcore.New(t, []core.Module{featureflags.Module(), capture}, testcore.Options{
 		Database:        true,
 		Config:          map[string]string{"APP_FLAGS_FILE": writeManifest(t, twoFlagManifest)},
 		SessionResolver: sessions,

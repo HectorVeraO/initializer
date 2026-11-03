@@ -72,8 +72,8 @@ identifier: a platform module that uses `pay_status` as a column or a variable r
   `cor_migrations_feature_flags`). There is no `-- +goose Down`; a failing file fails startup.
 - A migration that has reached a shared environment is immutable: fix a mistake with a new file.
 - A migration touches only its own tables.
-- Test a new schema against a real PostgreSQL through `coretest.New(t, modules,
-  coretest.Options{Database: true})` (`cookbooks/testing-tck.md`).
+- Test a new schema against a real PostgreSQL through `testcore.New(t, modules,
+  testcore.Options{Database: true})` (`cookbooks/testing-tck.md`).
 
 ## Expand, Dual-Write, Contract
 

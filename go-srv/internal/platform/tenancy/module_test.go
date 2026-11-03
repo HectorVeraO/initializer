@@ -16,7 +16,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 // exampleEnvPath locates the example env: .deploy/local/.example.env of the
@@ -91,7 +91,7 @@ func TestProvideRegistersTheTenantReadScopeAtTenantLevel(t *testing.T) {
 			return nil
 		},
 	}
-	coretest.New(t, []core.Module{Module(), probe}, coretest.Options{Database: true})
+	testcore.New(t, []core.Module{Module(), probe}, testcore.Options{Database: true})
 
 	if !registry.Known("tenant:read") {
 		t.Fatal("scope tenant:read is not registered")
@@ -111,7 +111,7 @@ func TestModuleProvidesTheTenantPorts(t *testing.T) {
 			return nil
 		},
 	}
-	coretest.New(t, []core.Module{Module(), probe}, coretest.Options{Database: true})
+	testcore.New(t, []core.Module{Module(), probe}, testcore.Options{Database: true})
 	ctx := context.Background()
 	var tenantID, accountID string
 	err := host.Pool().QueryRow(ctx,
@@ -138,7 +138,7 @@ VALUES ($1::uuid, gen_random_uuid(), 'member', now(), now()) RETURNING account_i
 }
 
 func TestTenantRouteIsMountedAndNeedsACredential(t *testing.T) {
-	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{Database: true})
+	handler := testcore.New(t, []core.Module{Module()}, testcore.Options{Database: true})
 	for _, route := range []struct{ method, path string }{
 		{http.MethodGet, "/api/v1/tenant"},
 		{http.MethodGet, "/api/v1/tenants"},
@@ -156,7 +156,7 @@ func TestTenantRouteIsMountedAndNeedsACredential(t *testing.T) {
 }
 
 func TestAcceptNewIsPublic(t *testing.T) {
-	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{Database: true})
+	handler := testcore.New(t, []core.Module{Module()}, testcore.Options{Database: true})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/invitations/accept-new", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")

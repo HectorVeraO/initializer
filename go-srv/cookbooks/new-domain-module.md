@@ -32,7 +32,7 @@ func productModules() []core.Module {
 | `handlers.go` | `Mount`, the routes and the request decoding |
 | `service.go` | validation and the rules; returns `*api.Error` for a caller mistake |
 | `store.go` | the SQL on the vertical's tables |
-| `module_test.go` | `package <vertical>_test`, through `coretest` (`cookbooks/testing-tck.md`) |
+| `module_test.go` | `package <vertical>_test`, through `testcore` (`cookbooks/testing-tck.md`) |
 
 ## Lifecycle
 

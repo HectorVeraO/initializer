@@ -131,7 +131,7 @@ const (
 	internalDir     = "internal"
 	platformDir     = internalDir + "/" + platformDirName
 	coreDir         = platformDir + "/core"
-	// testkitDirName holds test support only: the module test host coretest and
+	// testkitDirName holds test support only: the module test host testcore and
 	// the database helper testpg. It is neither a module nor a product vertical.
 	testkitDirName = "testkit"
 	testkitDir     = internalDir + "/" + testkitDirName
@@ -839,7 +839,7 @@ func foreignTablesIn(root, path, self string, ownerOfPrefix map[string]string) [
 
 // ruleProductionImportsNoTestkit is rule 7: a file of the package imports
 // nothing under internal/testkit. That tree holds test support only (the module
-// test host coretest and the database helper testpg), so a _test.go file may
+// test host testcore and the database helper testpg), so a _test.go file may
 // import it and the package's other files may not: production code never
 // reaches a test helper. A package inside the tree is test support itself and
 // may import its siblings.
@@ -1078,8 +1078,8 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 			name: "rule 7 a production file imports the test kit",
 			files: map[string]string{
 				"internal/platform/core/core.go":        "package core\n",
-				"internal/testkit/coretest/coretest.go": "package coretest\n",
-				"cmd/worker/main.go":                    "package main\n\nimport _ \"example.com/boundary/internal/testkit/coretest\"\n\nfunc main() {}\n",
+				"internal/testkit/testcore/testcore.go": "package testcore\n",
+				"cmd/worker/main.go":                    "package main\n\nimport _ \"example.com/boundary/internal/testkit/testcore\"\n\nfunc main() {}\n",
 			},
 			want: "rule 7",
 		},
@@ -1087,8 +1087,8 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 			name: "rule 7 a test file imports the test kit",
 			files: map[string]string{
 				"internal/platform/a/a.go":              "package a\n",
-				"internal/platform/a/a_test.go":         "package a\n\nimport _ \"example.com/boundary/internal/testkit/coretest\"\n",
-				"internal/testkit/coretest/coretest.go": "package coretest\n",
+				"internal/platform/a/a_test.go":         "package a\n\nimport _ \"example.com/boundary/internal/testkit/testcore\"\n",
+				"internal/testkit/testcore/testcore.go": "package testcore\n",
 			},
 			want: "",
 		},
@@ -1096,10 +1096,10 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 			name: "rule 1 and rule 2 allow a test file that imports the test kit",
 			files: map[string]string{
 				"internal/platform/core/core.go":        "package core\n",
-				"internal/platform/core/core_test.go":   "package core_test\n\nimport _ \"example.com/boundary/internal/testkit/coretest\"\n",
+				"internal/platform/core/core_test.go":   "package core_test\n\nimport _ \"example.com/boundary/internal/testkit/testcore\"\n",
 				"internal/platform/a/a.go":              "package a\n",
-				"internal/platform/a/helpers_test.go":   "package a_test\n\nimport _ \"example.com/boundary/internal/testkit/coretest\"\n",
-				"internal/testkit/coretest/coretest.go": "package coretest\n",
+				"internal/platform/a/helpers_test.go":   "package a_test\n\nimport _ \"example.com/boundary/internal/testkit/testcore\"\n",
+				"internal/testkit/testcore/testcore.go": "package testcore\n",
 			},
 			want: "",
 		},
@@ -1108,7 +1108,7 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 			files: map[string]string{
 				"internal/platform/core/core.go":        "package core\n",
 				"internal/testkit/testpg/testpg.go":     "package testpg\n",
-				"internal/testkit/coretest/coretest.go": "package coretest\n\nimport _ \"example.com/boundary/internal/testkit/testpg\"\n",
+				"internal/testkit/testcore/testcore.go": "package testcore\n\nimport _ \"example.com/boundary/internal/testkit/testpg\"\n",
 			},
 			want: "",
 		},
@@ -1117,7 +1117,7 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 			files: map[string]string{
 				"internal/platform/core/core.go":         "package core\n",
 				"internal/platform/identity/identity.go": "package identity\n",
-				"internal/testkit/coretest/coretest.go":  "package coretest\n\nimport _ \"example.com/boundary/internal/platform/identity\"\n",
+				"internal/testkit/testcore/testcore.go":  "package testcore\n\nimport _ \"example.com/boundary/internal/platform/identity\"\n",
 			},
 			want: "",
 		},

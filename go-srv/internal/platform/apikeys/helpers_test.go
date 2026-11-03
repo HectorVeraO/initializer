@@ -29,7 +29,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/migrate"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 const (
@@ -667,26 +667,26 @@ func createKeyJSON(name string, scopes []string, expiresAt any) string {
 }
 
 // tenantDir is the TenantDirectory a test hands to core.Build: a
-// coretest.TenantBook rebuilt whenever the test adds a tenant or changes a
+// testcore.TenantBook rebuilt whenever the test adds a tenant or changes a
 // status after the host exists, with an injectable failure.
 type tenantDir struct {
 	mu      sync.Mutex
 	tenants []coreaccess.TenantRef
-	book    *coretest.TenantBook
+	book    *testcore.TenantBook
 	err     error
 }
 
 var _ coreaccess.TenantDirectory = (*tenantDir)(nil)
 
 func newTenantDir() *tenantDir {
-	return &tenantDir{book: coretest.NewTenantBook()}
+	return &tenantDir{book: testcore.NewTenantBook()}
 }
 
 func (d *tenantDir) AddTenant(ref coreaccess.TenantRef) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.tenants = append(d.tenants, ref)
-	d.book = coretest.NewTenantBook(d.tenants...)
+	d.book = testcore.NewTenantBook(d.tenants...)
 }
 
 func (d *tenantDir) SetTenantStatus(id reqctx.TenantID, status coreaccess.TenantStatus) {
@@ -697,7 +697,7 @@ func (d *tenantDir) SetTenantStatus(id reqctx.TenantID, status coreaccess.Tenant
 			d.tenants[i].Status = status
 		}
 	}
-	d.book = coretest.NewTenantBook(d.tenants...)
+	d.book = testcore.NewTenantBook(d.tenants...)
 }
 
 // fail makes every later lookup return err.
@@ -707,7 +707,7 @@ func (d *tenantDir) fail(err error) {
 	d.err = err
 }
 
-func (d *tenantDir) current() (*coretest.TenantBook, error) {
+func (d *tenantDir) current() (*testcore.TenantBook, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.book, d.err

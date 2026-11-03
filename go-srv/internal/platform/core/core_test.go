@@ -30,7 +30,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/health"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/parameter"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testpg"
 )
 
@@ -460,8 +460,8 @@ func TestHostDefaultsWhenNoModuleProvidesPorts(t *testing.T) {
 }
 
 func TestProvidedAccessPortsReachTheHostInMount(t *testing.T) {
-	tenantBook := coretest.NewTenantBook()
-	accountBook := coretest.NewAccountBook(nil)
+	tenantBook := testcore.NewTenantBook()
+	accountBook := testcore.NewAccountBook(nil)
 	var gotTenantAccess access.TenantAccess
 	var gotDirectory accounts.Directory
 	var gotProvisioner accounts.Provisioner
@@ -607,8 +607,8 @@ func TestPortsAreProvidedOnce(t *testing.T) {
 }
 
 func TestAccessPortsAreProvidedOnce(t *testing.T) {
-	tenantBook := coretest.NewTenantBook()
-	accountBook := coretest.NewAccountBook(nil)
+	tenantBook := testcore.NewTenantBook()
+	accountBook := testcore.NewAccountBook(nil)
 	ports := []struct {
 		name       string
 		provide    func(b *core.Builder) error
