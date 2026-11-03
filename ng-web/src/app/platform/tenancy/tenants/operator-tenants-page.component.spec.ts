@@ -1,8 +1,6 @@
 import { HttpTestingController } from '@angular/common/http/testing';
-import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MessageService } from '@openng/optimus-ui/api';
-import { provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
+import { ConfirmationService, MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import es from '../../../../assets/i18n/es.json';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
@@ -26,14 +24,20 @@ describe('OperatorTenantsPage', () => {
 
   let messages: { add: ReturnType<typeof vi.fn> };
 
-  /** What the flag source answers for `ui_restyle`; every other key stays off. */
-  const restyled = signal(false);
+  /** The shared confirmation dialog at its boundary: accepting is one click, so the double runs the accept callback. */
+  let confirmation: { confirm: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    restyled.set(false);
     stubMatchMedia();
     messages = { add: vi.fn() };
-    configureFeatureTest([{ path: 'forbidden', component: BlankComponent }], [...provideFakeAccess(null, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }]);
+    confirmation = { confirm: vi.fn((options: { accept?: () => void }) => options.accept?.()) };
+    configureFeatureTest(
+      [{ path: 'forbidden', component: BlankComponent }],
+      [
+        { provide: MessageService, useValue: messages },
+        { provide: ConfirmationService, useValue: confirmation }
+      ]
+    );
     http = TestBed.inject(HttpTestingController);
   });
 
@@ -66,7 +70,15 @@ describe('OperatorTenantsPage', () => {
     return row as HTMLElement;
   }
 
+  /** Opens the create dialog: the form lives there, never inline in the page. */
+  async function openCreate(fixture: ComponentFixture<OperatorTenantsPage>): Promise<void> {
+    (byTestId(root(fixture), 'tenant-new') as HTMLButtonElement).click();
+    await settle(fixture);
+  }
+
   async function create(fixture: ComponentFixture<OperatorTenantsPage>, slug = 'acme', name = 'Acme', adminEmail = 'owner@example.com'): Promise<void> {
+    await openCreate(fixture);
+
     typeInto(byTestId(root(fixture), 'tenant-slug') as HTMLInputElement, slug);
     typeInto(byTestId(root(fixture), 'tenant-name') as HTMLInputElement, name);
     typeInto(byTestId(root(fixture), 'tenant-admin-email') as HTMLInputElement, adminEmail);
@@ -88,9 +100,7 @@ describe('OperatorTenantsPage', () => {
     expect(textOf(byTestId(root(fixture), 'tenants-suspension-note'))).toContain('API keys');
   });
 
-  it('renders the restyled screen from the same class: page header, flush card, shared status tag and the create dialog', async () => {
-    restyled.set(true);
-
+  it('renders the page header, the flush card, the shared status tag and the create dialog', async () => {
     const fixture = await open([tenant('acme'), tenant('beta', { status: 'suspended' })]);
 
     expect(byTestId(root(fixture), 'tenants-list-card')).not.toBeNull();
@@ -99,8 +109,7 @@ describe('OperatorTenantsPage', () => {
     expect(byTestId(rowOf(fixture, 'acme'), 'tenant-suspend')).not.toBeNull();
     expect(byTestId(root(fixture), 'tenant-form')).toBeNull();
 
-    (byTestId(root(fixture), 'tenant-new') as HTMLButtonElement).click();
-    await settle(fixture);
+    await openCreate(fixture);
 
     expect(byTestId(document.body, 'tenant-create-dialog')).not.toBeNull();
     expect(byTestId(document.body, 'tenant-slug')).not.toBeNull();
@@ -209,12 +218,10 @@ describe('OperatorTenantsPage', () => {
     expect(byTestId(rowOf(fixture, 'beta'), 'tenant-activate')).not.toBeNull();
   });
 
-  it('suspends after the inline confirmation and activates again', async () => {
+  it('suspends after the shared confirmation and activates again', async () => {
     const fixture = await open([tenant('acme')]);
 
     (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend-confirm') as HTMLButtonElement).click();
 
     const suspend = await nextCall('PATCH', `${LIST_URL}/id-acme/status`);
 
@@ -236,9 +243,8 @@ describe('OperatorTenantsPage', () => {
   it('sends nothing when the suspend is cancelled', async () => {
     const fixture = await open([tenant('acme')]);
 
+    confirmation.confirm.mockImplementationOnce(() => undefined);
     (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend-cancel') as HTMLButtonElement).click();
     await settle(fixture);
 
     expect(byTestId(rowOf(fixture, 'acme'), 'tenant-suspend')).not.toBeNull();
@@ -248,8 +254,6 @@ describe('OperatorTenantsPage', () => {
     const fixture = await open([tenant('acme')]);
 
     (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend-confirm') as HTMLButtonElement).click();
     (await nextCall('PATCH', `${LIST_URL}/id-acme/status`)).flush(errorEnvelope('RESOURCE_NOT_FOUND'), { status: 404, statusText: 'Not Found' });
     (await nextCall('GET', LIST_URL)).flush(pageOf([]));
     await settle(fixture);
@@ -262,8 +266,6 @@ describe('OperatorTenantsPage', () => {
     const fixture = await open([tenant('acme')]);
 
     (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend-confirm') as HTMLButtonElement).click();
     (await nextCall('PATCH', `${LIST_URL}/id-acme/status`)).flush(errorEnvelope('RESOURCE_CONFLICT'), { status: 409, statusText: 'Conflict' });
     (await nextCall('GET', LIST_URL)).flush(pageOf([tenant('acme', { status: 'suspended' })]));
     await settle(fixture);
@@ -276,8 +278,6 @@ describe('OperatorTenantsPage', () => {
     const fixture = await open([tenant('acme')]);
 
     (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(rowOf(fixture, 'acme'), 'tenant-suspend-confirm') as HTMLButtonElement).click();
     (await nextCall('PATCH', `${LIST_URL}/id-acme/status`)).flush(errorEnvelope('INTERNAL_ERROR'), { status: 500, statusText: 'Error' });
     (await nextCall('GET', LIST_URL)).flush(pageOf([tenant('acme')]));
     await settle(fixture);

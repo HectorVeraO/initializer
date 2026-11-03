@@ -1,7 +1,2 @@
 # Feature flag manifest. Rules and shape: cookbooks/tbd-feature-flags.md in the backend component.
-flags:
-  - key: ui_restyle
-    type: release
-    default: false
-    expires_at: "2026-12-01"
-    description: "Restyle of the console shell and the public pages; the web shell reads it, no backend route evaluates it"
+flags: []

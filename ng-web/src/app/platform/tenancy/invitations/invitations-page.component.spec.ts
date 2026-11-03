@@ -3,11 +3,11 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { MessageService } from '@openng/optimus-ui/api';
+import { ConfirmationService, MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import es from '../../../../assets/i18n/es.json';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { accessContext, provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
+import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
 import { nextCall } from '../../../../testing/fixtures/http-testing';
 import type { AccessContext } from '@/platform/core';
 import { InvitationsPage } from './invitations-page.component';
@@ -31,20 +31,20 @@ describe('InvitationsPage', () => {
 
   let visitor: ReturnType<typeof signal<AccessContext | null>>;
 
-  /** What the flag source answers for `ui_restyle`; every other key stays off. */
-  const restyled = signal(false);
+  /** The shared confirmation dialog at its boundary: accepting is one click, so the double runs the accept callback. */
+  let confirmation: { confirm: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     visitor = signal<AccessContext | null>(null);
-    restyled.set(false);
     stubMatchMedia();
     messages = { add: vi.fn() };
+    confirmation = { confirm: vi.fn((options: { accept?: () => void }) => options.accept?.()) };
     configureFeatureTest(
       [
         { path: 'invitations', component: BlankComponent },
         { path: 'forbidden', component: BlankComponent }
       ],
-      [...provideFakeAccess(visitor, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }]
+      [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }, { provide: ConfirmationService, useValue: confirmation }]
     );
     http = TestBed.inject(HttpTestingController);
   });
@@ -74,7 +74,15 @@ describe('InvitationsPage', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
+  /** Opens the invite dialog: the form lives there, never inline in the page. */
+  async function openInvite(fixture: ComponentFixture<InvitationsPage>): Promise<void> {
+    (byTestId(root(fixture), 'invite-new') as HTMLButtonElement).click();
+    await settle(fixture);
+  }
+
   async function invite(fixture: ComponentFixture<InvitationsPage>, email: string): Promise<void> {
+    await openInvite(fixture);
+
     typeInto(byTestId(root(fixture), 'invite-email') as HTMLInputElement, email);
     await settle(fixture);
     (byTestId(root(fixture), 'invite-submit') as HTMLButtonElement).click();
@@ -98,9 +106,7 @@ describe('InvitationsPage', () => {
     expect(byTestId(root(fixture), 'invitations-truncated')).toBeNull();
   });
 
-  it('renders the restyled screen from the same class: page header, flush card, shared status tag and the invite dialog', async () => {
-    restyled.set(true);
-
+  it('renders the page header, the flush card, the shared status tag and the invite dialog', async () => {
     const fixture = await open([invitation('jane@example.com')]);
 
     expect(byTestId(root(fixture), 'invitations-list-card')).not.toBeNull();
@@ -108,8 +114,7 @@ describe('InvitationsPage', () => {
     expect(byTestId(root(fixture), 'invitation-revoke')).not.toBeNull();
     expect(byTestId(root(fixture), 'invite-form')).toBeNull();
 
-    (byTestId(root(fixture), 'invite-new') as HTMLButtonElement).click();
-    await settle(fixture);
+    await openInvite(fixture);
 
     expect(byTestId(document.body, 'invite-create-dialog')).not.toBeNull();
     expect(byTestId(document.body, 'invite-email')).not.toBeNull();
@@ -225,12 +230,10 @@ describe('InvitationsPage', () => {
     expect(router.url).toBe('/invitations');
   });
 
-  it('revokes after the inline confirmation and refetches', async () => {
+  it('revokes after the shared confirmation and refetches', async () => {
     const fixture = await open([invitation('jane@example.com')]);
 
     (byTestId(root(fixture), 'invitation-revoke') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(root(fixture), 'invitation-revoke-confirm') as HTMLButtonElement).click();
 
     (await nextCall('DELETE', `${LIST_URL}/id-jane`)).flush(okEnvelope(invitation('jane@example.com', { status: 'revoked' })));
     (await nextCall('GET', LIST_URL)).flush(pageOf([]));
@@ -242,9 +245,8 @@ describe('InvitationsPage', () => {
   it('sends nothing when the revoke is cancelled', async () => {
     const fixture = await open([invitation('jane@example.com')]);
 
+    confirmation.confirm.mockImplementationOnce(() => undefined);
     (byTestId(root(fixture), 'invitation-revoke') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(root(fixture), 'invitation-revoke-cancel') as HTMLButtonElement).click();
     await settle(fixture);
 
     expect(byTestId(root(fixture), 'invitation-revoke')).not.toBeNull();
@@ -254,8 +256,6 @@ describe('InvitationsPage', () => {
     const fixture = await open([invitation('jane@example.com')]);
 
     (byTestId(root(fixture), 'invitation-revoke') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(root(fixture), 'invitation-revoke-confirm') as HTMLButtonElement).click();
 
     (await nextCall('DELETE', `${LIST_URL}/id-jane`)).flush(errorEnvelope(status === 404 ? 'RESOURCE_NOT_FOUND' : 'INVITATION_NOT_PENDING'), { status, statusText: 'Error' });
     (await nextCall('GET', LIST_URL)).flush(pageOf([]));

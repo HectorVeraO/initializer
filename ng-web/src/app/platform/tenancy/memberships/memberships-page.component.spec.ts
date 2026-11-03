@@ -2,9 +2,10 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MessageService } from '@openng/optimus-ui/api';
+import { ConfirmationService } from '@openng/optimus-ui/api';
 import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { accessContext, provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
+import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
 import { nextCall } from '../../../../testing/fixtures/http-testing';
 import type { AccessContext, TenantRole } from '@/platform/core';
 import { MembershipsPage } from './memberships-page.component';
@@ -28,20 +29,20 @@ describe('MembershipsPage', () => {
 
   let visitor: ReturnType<typeof signal<AccessContext | null>>;
 
-  /** What the flag source answers for `ui_restyle`; every other key stays off. */
-  const restyled = signal(false);
+  /** The shared confirmation dialog at its boundary: accepting is one click, so the double runs the accept callback. */
+  let confirmation: { confirm: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    restyled.set(false);
     stubMatchMedia();
     visitor = signal<AccessContext | null>(null);
     messages = { add: vi.fn() };
+    confirmation = { confirm: vi.fn((options: { accept?: () => void }) => options.accept?.()) };
     configureFeatureTest(
       [
         { path: 'memberships', component: BlankComponent },
         { path: 'forbidden', component: BlankComponent }
       ],
-      [...provideFakeAccess(visitor, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }]
+      [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }, { provide: ConfirmationService, useValue: confirmation }]
     );
     http = TestBed.inject(HttpTestingController);
   });
@@ -87,10 +88,10 @@ describe('MembershipsPage', () => {
     await settle(fixture);
   }
 
+  /** Runs a row action behind the shared confirmation; the double accepts, so one click is enough. */
   async function confirm(fixture: ComponentFixture<MembershipsPage>, name: string, testId: string): Promise<void> {
     (byTestId(rowOf(fixture, name), testId) as HTMLButtonElement).click();
     await settle(fixture);
-    (byTestId(rowOf(fixture, name), `${testId}-confirm`) as HTMLButtonElement).click();
   }
 
   it('lists the members with name, role and status and asks for the first page sorted by createdAt', async () => {
@@ -127,9 +128,7 @@ describe('MembershipsPage', () => {
     expect(byTestId(root(fixture), 'membership-reactivate')).toBeNull();
   });
 
-  it('renders the restyled screen from the same class: flush card, shared status tags and the row actions', async () => {
-    restyled.set(true);
-
+  it('renders the flush card, the shared status tags and the row actions', async () => {
     const fixture = await open([member('jane'), member('omar', { status: 'suspended' })]);
 
     expect(byTestId(root(fixture), 'memberships-list-card')).not.toBeNull();
@@ -139,9 +138,7 @@ describe('MembershipsPage', () => {
     expect(byTestId(rowOf(fixture, 'omar'), 'membership-reactivate')).not.toBeNull();
   });
 
-  it('renders the restyled screen to a viewer with the status tags and no row actions', async () => {
-    restyled.set(true);
-
+  it('renders the status tags and no row actions to a viewer', async () => {
     const fixture = await open([member('jane'), member('omar', { status: 'suspended' })], { role: 'viewer' });
 
     expect(byTestId(root(fixture), 'memberships-list-card')).not.toBeNull();
@@ -230,9 +227,8 @@ describe('MembershipsPage', () => {
   it('sends nothing when the suspend is cancelled', async () => {
     const fixture = await open([member('jane')]);
 
+    confirmation.confirm.mockImplementationOnce(() => undefined);
     (byTestId(rowOf(fixture, 'jane'), 'membership-suspend') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(rowOf(fixture, 'jane'), 'membership-suspend-cancel') as HTMLButtonElement).click();
     await settle(fixture);
 
     expect(byTestId(rowOf(fixture, 'jane'), 'membership-suspend')).not.toBeNull();

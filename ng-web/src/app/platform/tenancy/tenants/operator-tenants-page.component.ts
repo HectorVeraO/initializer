@@ -6,7 +6,6 @@ import { ButtonModule } from '@openng/optimus-ui/button';
 import { DialogModule } from '@openng/optimus-ui/dialog';
 import { InputTextModule } from '@openng/optimus-ui/inputtext';
 import { MessageModule } from '@openng/optimus-ui/message';
-import { TableModule } from '@openng/optimus-ui/table';
 import { firstValueFrom } from 'rxjs';
 import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
@@ -16,14 +15,13 @@ import { injectConfirmDestructive } from '@/core/ui/confirm-delete/confirm-destr
 import { DataTableComponent } from '@/core/ui/data-table/data-table.component';
 import { DataTableColumn } from '@/core/ui/data-table/data-table.types';
 import { FormFieldComponent } from '@/core/ui/form-field/form-field.component';
-import { FormSectionComponent } from '@/core/ui/form-section/form-section.component';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
 import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
 import { StatusTagComponent } from '@/core/ui/status-tag/status-tag.component';
 import { TENANCY_I18N } from '../i18n/scope';
-import { FLAG_SOURCE, InlineConfirmComponent, OneTimeSecretDialogComponent, UI_RESTYLE_FLAG, fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
+import { OneTimeSecretDialogComponent, fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
 import type { TenantStatus } from '@/platform/core';
 import { TenantsApi } from './tenants-api.service';
 import type { TenantView } from './tenants-api.service';
@@ -41,18 +39,15 @@ const FORM_FIELDS: readonly string[] = ['slug', 'name', 'adminEmail'];
     DialogModule,
     InputTextModule,
     MessageModule,
-    TableModule,
     TranslocoModule,
     SantiagoDatePipe,
     DataTableComponent,
     FormFieldComponent,
-    FormSectionComponent,
     ListStateComponent,
     PageHeaderComponent,
     RowActionsComponent,
     SectionCardComponent,
     StatusTagComponent,
-    InlineConfirmComponent,
     OneTimeSecretDialogComponent
   ],
   providers: [provideTranslocoScope(TENANCY_I18N)],
@@ -63,16 +58,12 @@ export class OperatorTenantsPage {
   private readonly api = inject(TenantsApi);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
-  private readonly flags = inject(FLAG_SOURCE);
   private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
 
-  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
-  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
-
-  /** The restyled template creates a tenant in a dialog; the previous one keeps the inline form. */
+  /** The create dialog; the list holds the tenants. */
   protected readonly isCreating = signal(false);
 
   protected readonly columns: DataTableColumn[] = [

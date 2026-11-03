@@ -1,11 +1,11 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MessageService } from '@openng/optimus-ui/api';
+import { ConfirmationService, MessageService } from '@openng/optimus-ui/api';
 import type { AccessContext } from '@/platform/core';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { accessContext, provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
+import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
 import { nextCall } from '../../../../testing/fixtures/http-testing';
 import { parameterView } from '../testing/parameter-view';
 import { ParameterListPage } from './parameter-list.component';
@@ -33,15 +33,15 @@ describe('ParameterListPage', () => {
 
   let visitor: ReturnType<typeof signal<AccessContext | null>>;
 
-  /** What the flag source answers for `ui_restyle`; every other key stays off. */
-  const restyled = signal(false);
+  /** The shared confirmation dialog at its boundary: accepting is one click, so the double runs the accept callback. */
+  let confirmation: { confirm: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    restyled.set(false);
     stubMatchMedia();
     messages = { add: vi.fn() };
+    confirmation = { confirm: vi.fn((options: { accept?: () => void }) => options.accept?.()) };
     visitor = signal<AccessContext | null>(null);
-    configureFeatureTest([], [...provideFakeAccess(visitor, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }]);
+    configureFeatureTest([], [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }, { provide: ConfirmationService, useValue: confirmation }]);
     http = TestBed.inject(HttpTestingController);
   });
 
@@ -81,14 +81,12 @@ describe('ParameterListPage', () => {
     await settle(fixture);
   }
 
+  /** Runs a row action behind the shared confirmation; the double accepts, so one click is enough. */
   async function confirm(fixture: ComponentFixture<ParameterListPage>, key: string, testId: string): Promise<void> {
     await click(fixture, byTestId(rowOf(fixture, key), testId));
-    await click(fixture, byTestId(rowOf(fixture, key), `${testId}-confirm`));
   }
 
-  it('renders the restyled screen from the same class: flush card, data table, row actions and the override dialog', async () => {
-    restyled.set(true);
-
+  it('renders the flush card, the data table, the row actions and the override dialog', async () => {
     const fixture = await open(role('admin'));
 
     expect(byTestId(root(fixture), 'parameters-list-card')).not.toBeNull();
@@ -199,8 +197,11 @@ describe('ParameterListPage', () => {
   it('gives an operator who is also admin of the active tenant both sets of controls', async () => {
     const fixture = await open(role('admin', true));
 
-    expect(byTestId(rowOf(fixture, KEY), 'parameter-set-override')).not.toBeNull();
-    expect(byTestId(rowOf(fixture, KEY), 'parameter-edit')).not.toBeNull();
+    // Four actions on the row: the row keeps them behind its three-dots menu.
+    await click(fixture, byTestId(rowOf(fixture, KEY), 'row-actions-trigger'));
+
+    expect(byTestId(document.body, 'parameter-set-override')).not.toBeNull();
+    expect(byTestId(document.body, 'parameter-edit')).not.toBeNull();
   });
 
   it('disables Delete for a system parameter and sends nothing', async () => {
@@ -211,7 +212,7 @@ describe('ParameterListPage', () => {
     expect(button.disabled).toBe(true);
     expect((byTestId(rowOf(fixture, 'example.b'), 'parameter-delete') as HTMLButtonElement).disabled).toBe(false);
     await click(fixture, button);
-    expect(byTestId(rowOf(fixture, KEY), 'parameter-delete-confirm')).toBeNull();
+    expect(confirmation.confirm).not.toHaveBeenCalled();
   });
 
   describe('overrides', () => {
@@ -253,7 +254,7 @@ describe('ParameterListPage', () => {
       expect(textOf(byTestId(document.body, 'parameter-override-value-error'))).toBe('El valor está fuera del rango permitido.');
     });
 
-    it('clears an override after the inline confirmation and shows the global value again', async () => {
+    it('clears an override after the shared confirmation and shows the global value again', async () => {
       const fixture = await open(role('admin'), [parameterView(KEY, { effectiveValue: 5, source: 'tenant' })]);
 
       await confirm(fixture, KEY, 'parameter-clear-override');
@@ -269,15 +270,15 @@ describe('ParameterListPage', () => {
     it('sends nothing when the clear confirmation is cancelled', async () => {
       const fixture = await open(role('admin'), [parameterView(KEY, { source: 'tenant' })]);
 
+      confirmation.confirm.mockImplementationOnce(() => undefined);
       await click(fixture, byTestId(rowOf(fixture, KEY), 'parameter-clear-override'));
-      await click(fixture, byTestId(rowOf(fixture, KEY), 'parameter-clear-override-cancel'));
 
       expect(byTestId(rowOf(fixture, KEY), 'parameter-clear-override')).not.toBeNull();
     });
   });
 
   describe('definitions', () => {
-    it('deletes after the inline confirmation and names how many overrides went with it', async () => {
+    it('deletes after the shared confirmation and names how many overrides went with it', async () => {
       const fixture = await open(OPERATOR_WITHOUT_TENANT, [parameterView(KEY), parameterView('example.b')]);
 
       await confirm(fixture, KEY, 'parameter-delete');

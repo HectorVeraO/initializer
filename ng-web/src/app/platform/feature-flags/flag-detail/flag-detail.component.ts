@@ -8,7 +8,6 @@ import { ButtonModule } from '@openng/optimus-ui/button';
 import { DialogModule } from '@openng/optimus-ui/dialog';
 import { MessageModule } from '@openng/optimus-ui/message';
 import { SelectModule } from '@openng/optimus-ui/select';
-import { TableModule } from '@openng/optimus-ui/table';
 import { ToggleSwitchModule } from '@openng/optimus-ui/toggleswitch';
 import { firstValueFrom, map } from 'rxjs';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
@@ -21,7 +20,7 @@ import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
 import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
-import { FLAG_SOURCE, InlineConfirmComponent, TENANT_DIRECTORY, UI_RESTYLE_FLAG } from '@/platform/core';
+import { TENANT_DIRECTORY } from '@/platform/core';
 import type { TenantRef } from '@/platform/core';
 import { FeatureFlagsApi } from '../feature-flags-api.service';
 import type { FlagView } from '../feature-flags.types';
@@ -41,23 +40,7 @@ interface OverrideRow {
 /** One flag with its tenant overrides; the tenant list resolves ids to names and feeds the picker. */
 @Component({
   selector: 'app-flag-detail',
-  imports: [
-    FormsModule,
-    ButtonModule,
-    DialogModule,
-    MessageModule,
-    SelectModule,
-    TableModule,
-    ToggleSwitchModule,
-    TranslocoModule,
-    DataTableComponent,
-    FormFieldComponent,
-    ListStateComponent,
-    PageHeaderComponent,
-    RowActionsComponent,
-    SectionCardComponent,
-    InlineConfirmComponent
-  ],
+  imports: [FormsModule, ButtonModule, DialogModule, MessageModule, SelectModule, ToggleSwitchModule, TranslocoModule, DataTableComponent, FormFieldComponent, ListStateComponent, PageHeaderComponent, RowActionsComponent, SectionCardComponent],
   providers: [provideTranslocoScope(PLATFORM_FEATURE_FLAGS_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './flag-detail.component.html'
@@ -68,16 +51,12 @@ export class FlagDetailPage {
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
   private readonly route = inject(ActivatedRoute);
-  private readonly flags = inject(FLAG_SOURCE);
   private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
 
-  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
-  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
-
-  /** The restyled template adds an override in a dialog; the previous one keeps the inline form. */
+  /** The add-override dialog; the list holds the overrides. */
   protected readonly isAddingOverride = signal(false);
 
   protected readonly overrideColumns: DataTableColumn[] = [

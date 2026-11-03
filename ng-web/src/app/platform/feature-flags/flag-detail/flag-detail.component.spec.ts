@@ -1,9 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
-import { MessageService } from '@openng/optimus-ui/api';
+import { ConfirmationService, MessageService } from '@openng/optimus-ui/api';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 import { RuntimeConfigService } from '@/core/config/runtime-config.service';
 import { unwrapData } from '@/core/envelope';
@@ -11,7 +11,6 @@ import type { ApiEnvelope, ApiPage } from '@/core/envelope';
 import { TENANT_DIRECTORY } from '@/platform/core';
 import type { TenantDirectory, TenantRef } from '@/platform/core';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, stubScrollIntoView, textOf } from '@/core/testing/ui-testing';
-import { provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
 import { flagView, tenantOverride, tenantView } from '../testing/flag-view';
@@ -59,24 +58,24 @@ describe('FlagDetailPage', () => {
   // Read when the page first asks for the directory: a tenant directory that reads GET /api/v1/tenants unless a spec picks another binding.
   let directory: 'tenants-api' | TenantDirectory | null;
 
-  /** What the flag source answers for `ui_restyle`; every other key stays off. */
-  const restyled = signal(false);
+  /** The shared destructive confirmation at its boundary: accepting is one click, so the double runs the accept callback. */
+  let confirmation: { confirm: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     stubBroadcastChannel();
     stubMatchMedia();
     stubScrollIntoView();
-    restyled.set(false);
     messages = { add: vi.fn() };
+    confirmation = { confirm: vi.fn((options: { accept?: () => void }) => options.accept?.()) };
     directory = 'tenants-api';
     params = new BehaviorSubject(convertToParamMap({ key: KEY }));
     configureFeatureTest(
       [],
       [
         { provide: MessageService, useValue: messages },
+        { provide: ConfirmationService, useValue: confirmation },
         { provide: TENANT_DIRECTORY, useFactory: () => (directory === 'tenants-api' ? inject(HttpTenantDirectory) : directory) },
-        { provide: ActivatedRoute, useValue: { paramMap: params, snapshot: { paramMap: convertToParamMap({ key: KEY }) } } },
-        ...provideFakeAccess(null, { flags: restyledFlags(restyled) })
+        { provide: ActivatedRoute, useValue: { paramMap: params, snapshot: { paramMap: convertToParamMap({ key: KEY }) } } }
       ]
     );
     http = TestBed.inject(HttpTestingController);
@@ -136,16 +135,21 @@ describe('FlagDetailPage', () => {
   }
 
   async function pickTenant(fixture: ComponentFixture<FlagDetailPage>, slug: string): Promise<void> {
-    await click(fixture, byTestId(root(fixture), 'flag-tenant-select'));
+    await click(fixture, byTestId(document.body, 'flag-tenant-select'));
 
     const option = allByTestId(document.body, 'flag-tenant-option').find((candidate) => candidate.getAttribute('data-key') === slug);
 
     await click(fixture, option as HTMLElement);
   }
 
-  it('renders the restyled screen from the same class: summary card, overrides card and the add-override dialog', async () => {
-    restyled.set(true);
+  /** Opens the add-override dialog: the form of an override lives there, never inline in the page. */
+  async function openAddDialog(fixture: ComponentFixture<FlagDetailPage>): Promise<void> {
+    await click(fixture, byTestId(root(fixture), 'flag-tenant-add'));
 
+    expect(byTestId(document.body, 'flag-tenant-form')).not.toBeNull();
+  }
+
+  it('renders the summary card, the overrides card and the add-override dialog', async () => {
     const fixture = await open([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, false)] })]);
 
     expect(byTestId(root(fixture), 'flag-detail-summary-card')).not.toBeNull();
@@ -154,10 +158,9 @@ describe('FlagDetailPage', () => {
     expect(byTestId(root(fixture), 'flag-tenant-remove')).not.toBeNull();
     expect(byTestId(root(fixture), 'flag-tenant-form')).toBeNull();
 
-    await click(fixture, byTestId(root(fixture), 'flag-tenant-add'));
+    await openAddDialog(fixture);
 
     expect(byTestId(document.body, 'flag-tenant-add-dialog')).not.toBeNull();
-    expect(byTestId(document.body, 'flag-tenant-form')).not.toBeNull();
     expect(byTestId(document.body, 'flag-tenant-select')).not.toBeNull();
   });
 
@@ -174,9 +177,7 @@ describe('FlagDetailPage', () => {
     expect(textOf(root(fixture))).toContain(otherKey);
   });
 
-  it('drops the previous flag description while the next key loads, in the restyled header', async () => {
-    restyled.set(true);
-
+  it('drops the previous flag description while the next key loads, in the page header', async () => {
     const otherKey = 'example_other_flag';
 
     const fixture = await open([flagView(KEY), flagView(otherKey, { description: 'Other flag' })]);
@@ -303,22 +304,28 @@ describe('FlagDetailPage', () => {
 
       expect(textOf(byTestId(rowOf(fixture, 'tenant-a'), 'flag-tenant-cell-name'))).toBe('Tenant A');
       expect(byTestId(root(fixture), 'flag-tenants-absent')).toBeNull();
-      expect(byTestId(root(fixture), 'flag-tenant-select')).not.toBeNull();
+
+      await openAddDialog(fixture);
+
+      expect(byTestId(document.body, 'flag-tenant-select')).not.toBeNull();
     });
 
     it('warns and shows tenant ids when the directory fails', async () => {
       const fixture = await openWithDirectory({ list: () => throwError(() => new Error('down')) });
 
       expect(byTestId(root(fixture), 'flag-tenants-failed')).not.toBeNull();
-      expect(byTestId(root(fixture), 'flag-tenant-select')).not.toBeNull();
       expect(textOf(byTestId(rowOf(fixture, TENANT_A), 'flag-tenant-cell-name'))).toBe(TENANT_A);
+
+      await openAddDialog(fixture);
+
+      expect(byTestId(document.body, 'flag-tenant-select')).not.toBeNull();
     });
 
     it('replaces the override section by a short text when no directory is bound, and asks for no tenants', async () => {
       const fixture = await openWithDirectory(null);
 
       expect(textOf(byTestId(root(fixture), 'flag-tenants-absent'))).toBe(featureFlagsEs.detail.tenantsAbsent);
-      expect(byTestId(root(fixture), 'flag-tenant-select')).toBeNull();
+      expect(byTestId(root(fixture), 'flag-tenant-add')).toBeNull();
       expect(byTestId(root(fixture), 'flag-tenant-form')).toBeNull();
       expect(byTestId(root(fixture), 'flag-tenants-failed')).toBeNull();
       http.expectNone(TENANTS_URL);
@@ -336,14 +343,17 @@ describe('FlagDetailPage', () => {
     it('starts with Save disabled until a tenant is chosen', async () => {
       const fixture = await open();
 
-      expect((byTestId(root(fixture), 'flag-tenant-save') as HTMLButtonElement).disabled).toBe(true);
+      await openAddDialog(fixture);
+
+      expect((byTestId(document.body, 'flag-tenant-save') as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('puts the chosen tenant with enabled true by default and shows the new row', async () => {
       const fixture = await open();
 
+      await openAddDialog(fixture);
       await pickTenant(fixture, 'tenant-b');
-      await click(fixture, byTestId(root(fixture), 'flag-tenant-save'));
+      await click(fixture, byTestId(document.body, 'flag-tenant-save'));
 
       const put = await nextCall('PUT', `${LIST_URL}/${KEY}/tenants/${TENANT_B}`);
 
@@ -352,15 +362,16 @@ describe('FlagDetailPage', () => {
       await settle(fixture);
 
       expect(byTestId(rowOf(fixture, 'tenant-b'), 'flag-tenant-cell-enabled')?.getAttribute('data-value')).toBe('true');
-      expect((byTestId(root(fixture), 'flag-tenant-save') as HTMLButtonElement).disabled).toBe(true);
+      expect(byTestId(document.body, 'flag-tenant-form')).toBeNull();
     });
 
     it('updates the row of a tenant that already has an override instead of adding another', async () => {
       const fixture = await open([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, true)] })]);
 
+      await openAddDialog(fixture);
       await pickTenant(fixture, 'tenant-a');
       await click(fixture, toggleOf(fixture));
-      await click(fixture, byTestId(root(fixture), 'flag-tenant-save'));
+      await click(fixture, byTestId(document.body, 'flag-tenant-save'));
 
       const put = await nextCall('PUT', `${LIST_URL}/${KEY}/tenants/${TENANT_A}`);
 
@@ -375,9 +386,10 @@ describe('FlagDetailPage', () => {
     it('sends enabled false when the toggle is switched off', async () => {
       const fixture = await open();
 
+      await openAddDialog(fixture);
       await pickTenant(fixture, 'tenant-a');
       await click(fixture, toggleOf(fixture));
-      await click(fixture, byTestId(root(fixture), 'flag-tenant-save'));
+      await click(fixture, byTestId(document.body, 'flag-tenant-save'));
 
       const put = await nextCall('PUT', `${LIST_URL}/${KEY}/tenants/${TENANT_A}`);
 
@@ -391,8 +403,9 @@ describe('FlagDetailPage', () => {
     it('toasts and refetches on 404 RESOURCE_NOT_FOUND for a vanished tenant', async () => {
       const fixture = await open();
 
+      await openAddDialog(fixture);
       await pickTenant(fixture, 'tenant-a');
-      await click(fixture, byTestId(root(fixture), 'flag-tenant-save'));
+      await click(fixture, byTestId(document.body, 'flag-tenant-save'));
       (await nextCall('PUT', `${LIST_URL}/${KEY}/tenants/${TENANT_A}`)).flush(errorEnvelope('RESOURCE_NOT_FOUND'), { status: 404, statusText: 'x' });
       await answerLoad([flagView(KEY)], [TENANTS[1]]);
       await settle(fixture);
@@ -404,8 +417,9 @@ describe('FlagDetailPage', () => {
     it('toasts and shows not found when 404 FLAG_NOT_DEFINED_IN_MANIFEST removes the flag', async () => {
       const fixture = await open();
 
+      await openAddDialog(fixture);
       await pickTenant(fixture, 'tenant-a');
-      await click(fixture, byTestId(root(fixture), 'flag-tenant-save'));
+      await click(fixture, byTestId(document.body, 'flag-tenant-save'));
       (await nextCall('PUT', `${LIST_URL}/${KEY}/tenants/${TENANT_A}`)).flush(errorEnvelope('FLAG_NOT_DEFINED_IN_MANIFEST'), { status: 404, statusText: 'x' });
       await answerLoad([flagView('other_flag')]);
       await settle(fixture);
@@ -416,11 +430,10 @@ describe('FlagDetailPage', () => {
   });
 
   describe('removing an override', () => {
-    it('deletes after the inline confirmation and drops the row', async () => {
+    it('deletes after the shared confirmation and drops the row', async () => {
       const fixture = await open([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, false)] })]);
 
       await click(fixture, byTestId(rowOf(fixture, 'tenant-a'), 'flag-tenant-remove'));
-      await click(fixture, byTestId(rowOf(fixture, 'tenant-a'), 'flag-tenant-remove-confirm'));
 
       const del = await nextCall('DELETE', `${LIST_URL}/${KEY}/tenants/${TENANT_A}`);
 
@@ -434,8 +447,8 @@ describe('FlagDetailPage', () => {
     it('sends nothing when the confirmation is cancelled', async () => {
       const fixture = await open([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, false)] })]);
 
+      confirmation.confirm.mockImplementationOnce(() => undefined);
       await click(fixture, byTestId(rowOf(fixture, 'tenant-a'), 'flag-tenant-remove'));
-      await click(fixture, byTestId(rowOf(fixture, 'tenant-a'), 'flag-tenant-remove-cancel'));
 
       http.expectNone(`${LIST_URL}/${KEY}/tenants/${TENANT_A}`);
       expect(rowOf(fixture, 'tenant-a')).not.toBeUndefined();
@@ -445,7 +458,6 @@ describe('FlagDetailPage', () => {
       const fixture = await open([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, false)] })]);
 
       await click(fixture, byTestId(rowOf(fixture, 'tenant-a'), 'flag-tenant-remove'));
-      await click(fixture, byTestId(rowOf(fixture, 'tenant-a'), 'flag-tenant-remove-confirm'));
       (await nextCall('DELETE', `${LIST_URL}/${KEY}/tenants/${TENANT_A}`)).flush(errorEnvelope('INTERNAL_ERROR'), { status: 500, statusText: 'x' });
       await answerLoad([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, false)] })]);
       await settle(fixture);

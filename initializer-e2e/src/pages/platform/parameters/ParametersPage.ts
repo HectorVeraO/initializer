@@ -52,7 +52,7 @@ export class ParametersPage {
     expect(response.status()).toBe(200);
   }
 
-  /** Clears the tenant override: the restyled row asks in the shared dialog, the previous one inline. */
+  /** Clears the tenant override: the row action asks in the shared dialog. */
   async clearOverride(key: string): Promise<void> {
     await confirmRowAction(
       this.page,
