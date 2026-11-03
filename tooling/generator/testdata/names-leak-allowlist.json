@@ -88,6 +88,11 @@
     },
     {
       "path": "README.md",
+      "context": "initializer upgrade",
+      "reason": "the upgrade command of the tool"
+    },
+    {
+      "path": "README.md",
       "context": "| go-srv |",
       "reason": "stack id column of the module table"
     },

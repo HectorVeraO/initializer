@@ -15,6 +15,7 @@ Usage:
 
 Commands:
   generate [DIR]   Create a project in DIR (default ./<name>)
+  upgrade [DIR]    Bring a generated project up to the current catalog
   verify [DIR]     Compare a generated project with its initializer.lock.json
   module ls        List the catalog's modules
   stack ls         List the catalog's stacks
@@ -121,7 +122,7 @@ func TestOverviewOnRequestGoesToStdoutAndExitsZero(t *testing.T) {
 }
 
 func TestEveryCommandHelpIsTheSameFromEverySpelling(t *testing.T) {
-	commands := [][]string{{"generate"}, {"verify"}, {"module", "ls"}, {"stack", "ls"}, {"catalog", "build"}, {"version"}, {"help"}}
+	commands := [][]string{{"generate"}, {"upgrade"}, {"verify"}, {"module", "ls"}, {"stack", "ls"}, {"catalog", "build"}, {"version"}, {"help"}}
 	for _, words := range commands {
 		name := strings.Join(words, " ")
 		t.Run(name, func(t *testing.T) {
@@ -155,10 +156,12 @@ func TestGenerateHelpListsEveryFlagAndNoHiddenAlias(t *testing.T) {
 func TestOtherCommandHelpListsItsFlags(t *testing.T) {
 	cases := map[string][]string{
 		"verify":        {"verify"},
+		"upgrade":       {"upgrade"},
 		"catalog build": {"catalog", "build"},
 	}
 	wants := map[string][]string{
-		"verify": {"initializer verify [DIR] [flags]", "# in ./acme", "initializer verify acme"},
+		"verify":  {"initializer verify [DIR] [flags]", "# in ./acme", "initializer verify acme"},
+		"upgrade": {"initializer upgrade [DIR] [flags]", "--dry-run", "--force", "--root DIR", "initializer upgrade acme --dry-run"},
 		"catalog build": {"--root DIR", "--files PATH", "--out PATH", "(required)", "initializer catalog build --out catalog.lock.json",
 			"initializer catalog build --root . --files files.bin --out catalog.lock.json"},
 	}
