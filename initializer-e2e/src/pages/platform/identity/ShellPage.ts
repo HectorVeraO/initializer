@@ -11,11 +11,9 @@ export class ShellPage {
   readonly moduleSections: Locator;
   readonly tenantSwitcher: Locator;
   readonly accountMenu: Locator;
-  /** Restyled topbar (`ui_restyle` on). */
-  readonly restyledTopbar: Locator;
-  /** Pre-restyle topbar (`ui_restyle` off). */
-  readonly legacyTopbar: Locator;
-  /** Circular avatar that opens the account popover of the restyled topbar. */
+  /** The topbar of the shell. */
+  readonly topbar: Locator;
+  /** Circular avatar that opens the account popover of the topbar. */
   readonly accountTrigger: Locator;
 
   constructor(private readonly page: Page) {
@@ -27,8 +25,7 @@ export class ShellPage {
     this.moduleSections = page.locator('[data-testid^="menu-module-"]');
     this.tenantSwitcher = page.getByTestId('topbar-tenant-switcher');
     this.accountMenu = page.getByTestId('topbar-account-menu');
-    this.restyledTopbar = page.getByTestId('shell-topbar-restyled');
-    this.legacyTopbar = page.getByTestId('shell-topbar-legacy');
+    this.topbar = page.getByTestId('shell-topbar-restyled');
     this.accountTrigger = page.getByTestId('account-menu-trigger');
   }
 
@@ -39,7 +36,7 @@ export class ShellPage {
     return email;
   }
 
-  /** Reveals the account block: the restyled frame keeps it behind the avatar; the legacy frame renders it inline. Does nothing when it is already open. */
+  /** Reveals the account block behind the avatar of the topbar. Does nothing when it is already open. */
   async openAccountMenu(): Promise<void> {
     await expect
       .poll(

@@ -47,6 +47,9 @@ describe('OperatorTenantsPage trace reference', () => {
 
     const root = fixture.nativeElement as HTMLElement;
 
+    (byTestId(root, 'tenant-new') as HTMLButtonElement).click();
+    await settle(fixture);
+
     typeInto(byTestId(root, 'tenant-slug') as HTMLInputElement, 'acme');
     typeInto(byTestId(root, 'tenant-name') as HTMLInputElement, 'Acme');
     typeInto(byTestId(root, 'tenant-admin-email') as HTMLInputElement, 'owner@example.com');

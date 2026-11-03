@@ -26,21 +26,16 @@ export class FeatureFlagsPage {
     return cell;
   }
 
-  /** Opens the detail of a flag from the list; the summary is in both templates. */
+  /** Opens the detail of a flag from the list. */
   async open(key: string): Promise<void> {
     await clickRowAction(this.row(key), 'flag-open');
     await expect(this.page.getByTestId('flag-detail-summary')).toBeVisible();
   }
 
-  /** Opens the restyled add-override dialog; the previous screen renders the form inline. */
+  /** Opens the add-override dialog. */
   async openAddOverride(): Promise<void> {
-    const dialogAction = this.page.getByTestId('flag-tenant-add');
-    await expect(
-      dialogAction.or(this.page.getByTestId('flag-tenant-form')),
-    ).toBeVisible();
-    if (await dialogAction.isVisible()) {
-      await dialogAction.click();
-    }
+    await this.page.getByTestId('flag-tenant-add').click();
+    await expect(this.page.getByTestId('flag-tenant-form')).toBeVisible();
   }
 
   /** The tenant override row whose `data-key` is the tenant slug. */
@@ -82,7 +77,7 @@ export class FeatureFlagsPage {
     expect(response.status()).toBe(200);
   }
 
-  /** Removes the override of a tenant: the restyled row asks in the shared dialog, the previous one inline. */
+  /** Removes the override of a tenant: the row action asks in the shared dialog. */
   async removeTenantOverride(slug: string): Promise<void> {
     await confirmRowAction(
       this.page,

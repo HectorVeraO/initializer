@@ -25,7 +25,7 @@ export class MembershipsPage {
     return cell;
   }
 
-  /** Picks `role` in the row's select and waits for the PATCH to answer 200. The select is in the role cell in both templates. */
+  /** Picks `role` in the row's select and waits for the PATCH to answer 200. */
   async changeRole(
     emailPrefix: string,
     role: 'admin' | 'member' | 'viewer',
@@ -44,7 +44,7 @@ export class MembershipsPage {
     await answered;
   }
 
-  /** Suspends the member: the restyled row asks in the shared dialog, the previous one inline. */
+  /** Suspends the member: the row action asks in the shared dialog. */
   async suspend(emailPrefix: string): Promise<void> {
     await confirmRowAction(
       this.page,

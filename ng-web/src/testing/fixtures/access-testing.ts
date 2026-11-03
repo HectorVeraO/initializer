@@ -1,6 +1,6 @@
 import { Provider, Signal, computed, inject, isSignal, signal } from '@angular/core';
 import { Router, UrlTree } from '@angular/router';
-import { ACCESS_PROVIDER, FLAG_SOURCE, TENANT_SELECTION, UI_RESTYLE_FLAG } from '@/platform/core';
+import { ACCESS_PROVIDER, FLAG_SOURCE, TENANT_SELECTION } from '@/platform/core';
 import type { AccessContext, AccessProvider, FlagSource, SignInOptions } from '@/platform/core';
 
 /** What a spec may replace on the fake access provider; every member defaults to a resolved spy. */
@@ -11,15 +11,8 @@ export interface FakeAccessOverrides {
   readonly reload?: () => Promise<void>;
   readonly signOut?: () => Promise<void>;
   readonly signIn?: (options: SignInOptions) => Promise<void>;
-  /** Flags the fake `FLAG_SOURCE` enables; a signal lets one spec drive both states. Every other key is false. */
+  /** Flags the fake `FLAG_SOURCE` enables; a signal lets one spec change them during a spec. Every other key is false. */
   readonly flags?: Readonly<Record<string, boolean | Signal<boolean>>>;
-}
-
-/** The flag override that drives `ui_restyle` from a signal; every other key stays off. */
-export function restyledFlags(restyled: Signal<boolean>): Readonly<Record<string, Signal<boolean>>> {
-  const flags: Readonly<Record<string, Signal<boolean>>> = { [UI_RESTYLE_FLAG]: restyled };
-
-  return flags;
 }
 
 /** Synthetic `AccessContext`: Jane Doe, admin of `tenant-a`. Override any top-level part. */

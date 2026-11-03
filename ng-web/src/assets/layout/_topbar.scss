@@ -58,42 +58,6 @@
       margin-left: auto;
     }
 
-    // The legacy topbar (shown while `ui_restyle` is off) renders its controls
-    // with these two classes; the restyled topbar uses pButton instead.
-    .layout-topbar-action {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 40px;
-      height: 40px;
-      padding: 0;
-      border: 0;
-      border-radius: 9999px;
-      background: transparent;
-      color: var(--p-text-color);
-      cursor: pointer;
-      transition: background-color var(--layout-transition);
-
-      &:hover {
-        background-color: var(--p-navigation-item-focus-background);
-      }
-
-      &:focus-visible {
-        outline: var(--p-focus-ring-width) var(--p-focus-ring-style) var(--p-focus-ring-color);
-        outline-offset: var(--p-focus-ring-offset);
-      }
-
-      i {
-        font-size: 20px;
-      }
-    }
-
-    .layout-config-menu {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
     .layout-topbar-avatar {
       display: inline-flex;
       padding: 0;

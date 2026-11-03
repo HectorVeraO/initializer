@@ -26,15 +26,10 @@ export class ApiKeysPage {
     this.secretValue = page.getByTestId('one-time-secret-value');
   }
 
-  /** Opens the restyled create dialog; the previous screen renders the form inline. */
+  /** Opens the create dialog. */
   async openCreate(): Promise<void> {
-    const headerAction = this.page.getByTestId('api-key-new');
-    await expect(
-      headerAction.or(this.page.getByTestId('api-key-form')),
-    ).toBeVisible();
-    if (await headerAction.isVisible()) {
-      await headerAction.click();
-    }
+    await this.page.getByTestId('api-key-new').click();
+    await expect(this.name).toBeVisible();
   }
 
   /** Fills the create form with one scope and submits it. */
@@ -70,7 +65,7 @@ export class ApiKeysPage {
     return cell;
   }
 
-  /** Revokes the key: the restyled row asks in the shared dialog, the previous one inline. */
+  /** Revokes the key: the row action asks in the shared dialog. */
   async revoke(name: string): Promise<void> {
     await confirmRowAction(
       this.page,

@@ -16,21 +16,15 @@ export class OperatorTenantsPage {
     this.submit = page.getByTestId('tenant-submit');
   }
 
-  /** Opens the restyled create dialog; the previous screen renders the form inline. */
+  /** Opens the create dialog. */
   async openCreate(): Promise<void> {
-    const headerAction = this.page.getByTestId('tenant-new');
-    await expect(
-      headerAction.or(this.page.getByTestId('tenant-form')),
-    ).toBeVisible();
-    if (await headerAction.isVisible()) {
-      await headerAction.click();
-    }
+    await this.page.getByTestId('tenant-new').click();
+    await expect(this.slug).toBeVisible();
   }
 
   /**
-   * Fills the create form and submits it, whichever template the screen shows.
-   * A created tenant always ends as a row and, with the first-admin link, in
-   * the one-time secret dialog.
+   * Fills the create form and submits it. A created tenant always ends as a
+   * row and, with the first-admin link, in the one-time secret dialog.
    */
   async create(slug: string, name: string, adminEmail: string): Promise<void> {
     await this.openCreate();
@@ -57,7 +51,7 @@ export class OperatorTenantsPage {
     return cell;
   }
 
-  /** Suspends the tenant: the restyled row asks in the shared dialog, the previous one inline. */
+  /** Suspends the tenant: the row action asks in the shared dialog. */
   async suspend(slug: string): Promise<void> {
     await confirmRowAction(
       this.page,

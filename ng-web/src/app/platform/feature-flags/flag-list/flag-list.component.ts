@@ -1,11 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { TranslocoModule, TranslocoService, provideTranslocoScope } from '@jsverse/transloco';
 import { MessageService } from '@openng/optimus-ui/api';
 import { MessageModule } from '@openng/optimus-ui/message';
 import { SelectModule } from '@openng/optimus-ui/select';
-import { TableModule } from '@openng/optimus-ui/table';
 import { Observable, firstValueFrom } from 'rxjs';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
@@ -15,7 +13,6 @@ import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
 import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
-import { FLAG_SOURCE, UI_RESTYLE_FLAG } from '@/platform/core';
 import { FeatureFlagsApi } from '../feature-flags-api.service';
 import type { FlagView } from '../feature-flags.types';
 import { PLATFORM_FEATURE_FLAGS_I18N } from '../i18n/scope';
@@ -33,7 +30,7 @@ interface GlobalOption {
 /** The flags of the manifest with the global override select; the detail holds the tenant overrides. */
 @Component({
   selector: 'app-flag-list',
-  imports: [FormsModule, RouterLink, MessageModule, SelectModule, TableModule, TranslocoModule, DataTableComponent, ListStateComponent, PageHeaderComponent, RowActionsComponent, SectionCardComponent],
+  imports: [FormsModule, MessageModule, SelectModule, TranslocoModule, DataTableComponent, ListStateComponent, PageHeaderComponent, RowActionsComponent, SectionCardComponent],
   providers: [provideTranslocoScope(PLATFORM_FEATURE_FLAGS_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './flag-list.component.html'
@@ -42,13 +39,9 @@ export class FlagListPage {
   private readonly api = inject(FeatureFlagsApi);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
-  private readonly flags = inject(FLAG_SOURCE);
 
   private loadSequence = 0;
   private hasLoaded = false;
-
-  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
-  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
 
   protected readonly columns: DataTableColumn[] = [
     { field: 'key', labelKey: 'featureFlags.list.key' },

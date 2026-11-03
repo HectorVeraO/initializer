@@ -6,7 +6,7 @@ import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, st
 import es from '../../../assets/i18n/es.json';
 import apiKeysEs from './i18n/es.json';
 import { errorEnvelope, okEnvelope } from '../../../testing/fixtures/api-envelope';
-import { accessContext, provideFakeAccess, restyledFlags } from '../../../testing/fixtures/access-testing';
+import { accessContext, provideFakeAccess } from '../../../testing/fixtures/access-testing';
 import { nextCall } from '../../../testing/fixtures/http-testing';
 import type { AccessContext } from '@/platform/core';
 import { ApiKeysPage, endOfDayUtc } from './api-keys-page.component';
@@ -51,12 +51,8 @@ describe('ApiKeysPage', () => {
   /** The shared confirmation dialog at its boundary: accepting is one click, so the double runs the accept callback. */
   let confirmation: { confirm: ReturnType<typeof vi.fn> };
 
-  /** What the flag source answers for `ui_restyle`; every other key stays off. */
-  const restyled = signal(false);
-
   beforeEach(() => {
     visitor = signal<AccessContext | null>(null);
-    restyled.set(false);
     stubMatchMedia();
     messages = { add: vi.fn() };
     confirmation = { confirm: vi.fn((options: { accept?: () => void }) => options.accept?.()) };
@@ -65,7 +61,7 @@ describe('ApiKeysPage', () => {
         { path: 'api-keys', component: BlankComponent },
         { path: 'forbidden', component: BlankComponent }
       ],
-      [...provideFakeAccess(visitor, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }, { provide: ConfirmationService, useValue: confirmation }]
+      [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }, { provide: ConfirmationService, useValue: confirmation }]
     );
     http = TestBed.inject(HttpTestingController);
   });
@@ -102,7 +98,15 @@ describe('ApiKeysPage', () => {
     return host?.querySelector('input') as HTMLInputElement;
   }
 
+  /** Opens the create dialog: the form of a key lives there, never inline in the page. */
+  async function openCreate(fixture: ComponentFixture<ApiKeysPage>): Promise<void> {
+    (byTestId(root(fixture), 'api-key-new') as HTMLButtonElement).click();
+    await settle(fixture);
+  }
+
   async function fill(fixture: ComponentFixture<ApiKeysPage>, name: string, scopes: string[]): Promise<void> {
+    await openCreate(fixture);
+
     typeInto(byTestId(root(fixture), 'api-key-name') as HTMLInputElement, name);
     for (const scope of scopes) {
       scopeBox(fixture, scope).click();
@@ -123,16 +127,14 @@ describe('ApiKeysPage', () => {
     expect(rows.map((row) => row.getAttribute('data-key'))).toEqual(['ci', 'old']);
     expect(textOf(byTestId(rows[0], 'api-keys-cell-prefix'))).toBe('synthetic_pfx');
     expect(textOf(byTestId(rows[0], 'api-keys-cell-scopes'))).toBe('tenant:read');
-    expect(textOf(byTestId(rows[0], 'api-keys-cell-status'))).toBe('Activa');
-    expect(textOf(byTestId(rows[1], 'api-keys-cell-status'))).toBe('Revocada');
+    expect(textOf(byTestId(rows[0], 'api-keys-cell-status'))).toBe('Activo');
+    expect(textOf(byTestId(rows[1], 'api-keys-cell-status'))).toBe('Revocado');
     expect(byTestId(rows[0], 'api-key-revoke')).not.toBeNull();
     expect(byTestId(rows[1], 'api-key-revoke')).toBeNull();
     expect(byTestId(root(fixture), 'api-keys-truncated')).toBeNull();
   });
 
-  it('renders the restyled screen from the same class: page header, flush card and shared status tag', async () => {
-    restyled.set(true);
-
+  it('renders the page header, the flush card and the shared status tag', async () => {
     const fixture = await open([apiKey('ci')]);
 
     expect(byTestId(root(fixture), 'api-keys-list-card')).not.toBeNull();
@@ -141,13 +143,10 @@ describe('ApiKeysPage', () => {
     expect(byTestId(root(fixture), 'api-key-form')).toBeNull();
   });
 
-  it('creates a key from the restyled dialog and revokes it from its row action', async () => {
-    restyled.set(true);
-
+  it('creates a key from the dialog and revokes it from its row action', async () => {
     const fixture = await open([]);
 
-    (byTestId(root(fixture), 'api-key-new') as HTMLButtonElement).click();
-    await settle(fixture);
+    await openCreate(fixture);
 
     typeInto(byTestId(document.body, 'api-key-name') as HTMLInputElement, 'ci');
     const box = (allByTestId(document.body, 'api-key-scope').find((element) => element.getAttribute('data-key') === 'tenant:read') as HTMLElement).querySelector('input') as HTMLInputElement;
@@ -201,6 +200,8 @@ describe('ApiKeysPage', () => {
   it('offers the scopes the server returns', async () => {
     const fixture = await open([], 0, [{ name: 'custom:scope', description: 'Synthetic', level: 'tenant' }]);
 
+    await openCreate(fixture);
+
     const boxes = allByTestId(root(fixture), 'api-key-scope');
 
     expect(boxes.map((box) => box.getAttribute('data-key'))).toEqual(['custom:scope']);
@@ -221,12 +222,16 @@ describe('ApiKeysPage', () => {
   it('shows an empty scope state and disables submit when no scope is offered', async () => {
     const fixture = await open([], 0, []);
 
+    await openCreate(fixture);
+
     expect(byTestId(root(fixture), 'api-key-scopes-empty')).not.toBeNull();
     expect((byTestId(root(fixture), 'api-key-submit') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('offers a tenantless operator only the scopes of level any', async () => {
     const fixture = await open([], 0, [...SCOPES, ANY_SCOPE], accessContext(TENANTLESS_OPERATOR));
+
+    await openCreate(fixture);
 
     const boxes = allByTestId(root(fixture), 'api-key-scope');
 
@@ -237,6 +242,8 @@ describe('ApiKeysPage', () => {
   it('offers a session with an active tenant every scope', async () => {
     const fixture = await open([], 0, [...SCOPES, ANY_SCOPE]);
 
+    await openCreate(fixture);
+
     const boxes = allByTestId(root(fixture), 'api-key-scope');
 
     expect(boxes.map((box) => box.getAttribute('data-key'))).toEqual(['api-keys:read', 'tenant:read', 'probe:whoami']);
@@ -244,6 +251,8 @@ describe('ApiKeysPage', () => {
 
   it('says no scope fits a key without a tenant and disables submit when no scope has level any', async () => {
     const fixture = await open([], 0, SCOPES, accessContext(TENANTLESS_OPERATOR));
+
+    await openCreate(fixture);
 
     expect(allByTestId(root(fixture), 'api-key-scope')).toEqual([]);
     expect(textOf(byTestId(root(fixture), 'api-key-scopes-empty'))).toBe(apiKeysEs.noScopesWithoutTenant);
@@ -259,6 +268,9 @@ describe('ApiKeysPage', () => {
     (await nextCall('GET', SCOPES_URL)).flush(errorEnvelope('INTERNAL_ERROR'), { status: 500, statusText: 'Error' });
     (await nextCall('GET', LIST_URL)).flush(pageOf([]));
     await settle(fixture);
+
+    await openCreate(fixture);
+
     expect(byTestId(root(fixture), 'api-key-scopes-load-error')).not.toBeNull();
     expect(byTestId(root(fixture), 'api-key-scopes-empty')).toBeNull();
     expect((byTestId(root(fixture), 'api-key-submit') as HTMLButtonElement).disabled).toBe(true);
@@ -334,6 +346,12 @@ describe('ApiKeysPage', () => {
 
     expect(document.body.innerHTML).not.toContain(SYNTHETIC_KEY);
     expect(byTestId(document.body, 'one-time-secret-value')).toBeNull();
+
+    // The create dialog closed on the saved key; opening it again starts from an empty name.
+    expect(byTestId(root(fixture), 'api-key-name')).toBeNull();
+
+    await openCreate(fixture);
+
     expect((byTestId(root(fixture), 'api-key-name') as HTMLInputElement).value).toBe('');
   });
 
@@ -373,6 +391,8 @@ describe('ApiKeysPage', () => {
 
   it('shows every 422 issue under its field at once and keeps what was typed', async () => {
     const fixture = await open([]);
+
+    await openCreate(fixture);
 
     typeInto(byTestId(root(fixture), 'api-key-name') as HTMLInputElement, 'typed-name');
     await submit(fixture);
@@ -425,6 +445,8 @@ describe('ApiKeysPage', () => {
   it('shows the form and the revoke button to a tenantless platform operator: the page adds no role gate of its own', async () => {
     const fixture = await open([apiKey('ci')], 1, SCOPES, accessContext(TENANTLESS_OPERATOR));
 
+    await openCreate(fixture);
+
     expect(byTestId(root(fixture), 'api-key-form')).not.toBeNull();
     expect(byTestId(allByTestId(root(fixture), 'api-keys-row')[0], 'api-key-revoke')).not.toBeNull();
   });
@@ -442,27 +464,24 @@ describe('ApiKeysPage', () => {
     expect(byTestId(document.body, 'one-time-secret-value')).toBeNull();
   });
 
-  it('revokes after the inline confirmation and shows the row as revoked', async () => {
+  it('revokes after the shared confirmation and shows the row as revoked', async () => {
     const fixture = await open([apiKey('ci')]);
 
     (byTestId(root(fixture), 'api-key-revoke') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(root(fixture), 'api-key-revoke-confirm') as HTMLButtonElement).click();
 
     (await nextCall('DELETE', `${LIST_URL}/id-ci`)).flush(okEnvelope(apiKey('ci', { status: 'revoked' })));
     (await nextCall('GET', LIST_URL)).flush(pageOf([apiKey('ci', { status: 'revoked' })]));
     await settle(fixture);
 
-    expect(textOf(byTestId(root(fixture), 'api-keys-cell-status'))).toBe('Revocada');
+    expect(textOf(byTestId(root(fixture), 'api-keys-cell-status'))).toBe('Revocado');
     expect(byTestId(root(fixture), 'api-key-revoke')).toBeNull();
   });
 
   it('sends nothing when the revoke is cancelled', async () => {
     const fixture = await open([apiKey('ci')]);
 
+    confirmation.confirm.mockImplementationOnce(() => undefined);
     (byTestId(root(fixture), 'api-key-revoke') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(root(fixture), 'api-key-revoke-cancel') as HTMLButtonElement).click();
     await settle(fixture);
 
     expect(byTestId(root(fixture), 'api-key-revoke')).not.toBeNull();
@@ -472,8 +491,6 @@ describe('ApiKeysPage', () => {
     const fixture = await open([apiKey('ci')]);
 
     (byTestId(root(fixture), 'api-key-revoke') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(root(fixture), 'api-key-revoke-confirm') as HTMLButtonElement).click();
 
     (await nextCall('DELETE', `${LIST_URL}/id-ci`)).flush(errorEnvelope('RESOURCE_NOT_FOUND'), { status: 404, statusText: 'Error' });
     (await nextCall('GET', LIST_URL)).flush(pageOf([]));
@@ -487,8 +504,6 @@ describe('ApiKeysPage', () => {
     const fixture = await open([apiKey('ci')]);
 
     (byTestId(root(fixture), 'api-key-revoke') as HTMLButtonElement).click();
-    await settle(fixture);
-    (byTestId(root(fixture), 'api-key-revoke-confirm') as HTMLButtonElement).click();
 
     (await nextCall('DELETE', `${LIST_URL}/id-ci`)).flush(errorEnvelope('INTERNAL_ERROR'), { status: 500, statusText: 'Error' });
     (await nextCall('GET', LIST_URL)).flush(pageOf([apiKey('ci')]));
@@ -500,6 +515,8 @@ describe('ApiKeysPage', () => {
 
   it('narrows the offered scopes to level any after switching to a session without a tenant', async () => {
     const fixture = await open([], 0, [...SCOPES, ANY_SCOPE]);
+
+    await openCreate(fixture);
 
     expect(allByTestId(root(fixture), 'api-key-scope')).toHaveLength(3);
 

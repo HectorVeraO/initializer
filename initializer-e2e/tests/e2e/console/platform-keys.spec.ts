@@ -25,6 +25,9 @@ test.describe('Console with api-keys and no tenancy', () => {
       await shellPage.nav('api-keys');
       await expect(apiKeysPage.owner).toHaveText(OWNER_GLOBAL);
 
+      // The scope list and the submit button live in the create dialog.
+      await apiKeysPage.openCreate();
+
       // No module of this project registers a scope of level any, so nothing is offered.
       await expect(apiKeysPage.scopesEmpty).toHaveText(
         NO_SCOPES_WITHOUT_TENANT,

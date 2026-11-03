@@ -3,9 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { TranslocoModule, TranslocoService, provideTranslocoScope } from '@jsverse/transloco';
 import { MessageService } from '@openng/optimus-ui/api';
 import { MessageModule } from '@openng/optimus-ui/message';
-import { ButtonModule } from '@openng/optimus-ui/button';
 import { SelectModule } from '@openng/optimus-ui/select';
-import { TableModule } from '@openng/optimus-ui/table';
 import { firstValueFrom } from 'rxjs';
 import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
@@ -19,7 +17,7 @@ import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-action
 import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
 import { StatusTagComponent } from '@/core/ui/status-tag/status-tag.component';
 import { TENANCY_I18N } from '../i18n/scope';
-import { ACCESS_PROVIDER, FLAG_SOURCE, InlineConfirmComponent, UI_RESTYLE_FLAG } from '@/platform/core';
+import { ACCESS_PROVIDER } from '@/platform/core';
 import type { MembershipStatus, TenantRole } from '@/platform/core';
 import { MembershipsApi } from './memberships-api.service';
 import type { MemberView, MembershipChange } from './memberships-api.service';
@@ -29,7 +27,7 @@ const ROLES: readonly TenantRole[] = ['admin', 'member', 'viewer'];
 /** Members of the active tenant. Every role reads the list; only an admin sees the write controls. */
 @Component({
   selector: 'app-memberships-page',
-  imports: [FormsModule, ButtonModule, MessageModule, SelectModule, TableModule, TranslocoModule, DataTableComponent, ListStateComponent, PageHeaderComponent, RowActionsComponent, SectionCardComponent, StatusTagComponent, InlineConfirmComponent],
+  imports: [FormsModule, MessageModule, SelectModule, TranslocoModule, DataTableComponent, ListStateComponent, PageHeaderComponent, RowActionsComponent, SectionCardComponent, StatusTagComponent],
   providers: [provideTranslocoScope(TENANCY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './memberships-page.component.html'
@@ -39,14 +37,10 @@ export class MembershipsPage {
   private readonly access = inject(ACCESS_PROVIDER);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
-  private readonly flags = inject(FLAG_SOURCE);
   private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
-
-  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
-  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
 
   protected readonly roleOptions = ROLES.map((role) => ({ value: role, labelKey: `tenancy.roles.${role}` }));
 

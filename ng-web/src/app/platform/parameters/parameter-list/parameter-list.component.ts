@@ -3,7 +3,6 @@ import { TranslocoModule, TranslocoService, provideTranslocoScope } from '@jsver
 import { MessageService } from '@openng/optimus-ui/api';
 import { ButtonModule } from '@openng/optimus-ui/button';
 import { MessageModule } from '@openng/optimus-ui/message';
-import { TableModule } from '@openng/optimus-ui/table';
 import { TagModule } from '@openng/optimus-ui/tag';
 import { firstValueFrom } from 'rxjs';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
@@ -15,7 +14,7 @@ import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
 import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
-import { ACCESS_PROVIDER, FLAG_SOURCE, InlineConfirmComponent, UI_RESTYLE_FLAG } from '@/platform/core';
+import { ACCESS_PROVIDER } from '@/platform/core';
 import { displayValue, jsonText } from '../json-value';
 import { PLATFORM_PARAMETERS_I18N } from '../i18n/scope';
 import { ParameterDefinitionDialog } from '../parameter-definition-dialog/parameter-definition-dialog.component';
@@ -28,21 +27,7 @@ const SCOPE_ALIAS = PLATFORM_PARAMETERS_I18N.alias as string;
 /** The parameters of the platform with the value in effect for the active tenant; admins override it, platform operators define parameters. */
 @Component({
   selector: 'app-parameter-list',
-  imports: [
-    ButtonModule,
-    MessageModule,
-    TableModule,
-    TagModule,
-    TranslocoModule,
-    DataTableComponent,
-    ListStateComponent,
-    PageHeaderComponent,
-    RowActionsComponent,
-    SectionCardComponent,
-    InlineConfirmComponent,
-    ParameterOverrideDialog,
-    ParameterDefinitionDialog
-  ],
+  imports: [ButtonModule, MessageModule, TagModule, TranslocoModule, DataTableComponent, ListStateComponent, PageHeaderComponent, RowActionsComponent, SectionCardComponent, ParameterOverrideDialog, ParameterDefinitionDialog],
   providers: [provideTranslocoScope(PLATFORM_PARAMETERS_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './parameter-list.component.html'
@@ -52,14 +37,10 @@ export class ParameterListPage {
   private readonly access = inject(ACCESS_PROVIDER);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
-  private readonly flags = inject(FLAG_SOURCE);
   private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
-
-  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
-  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
 
   protected readonly columns: DataTableColumn[] = [
     { field: 'key', labelKey: 'parameters.list.key' },

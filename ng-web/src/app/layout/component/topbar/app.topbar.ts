@@ -9,7 +9,7 @@ import { BRAND, BRAND_LOGO_URL } from '@/core/config/brand';
 import { LayoutService } from '../../service/layout.service';
 import { TranslocoModule, TranslocoService } from '@jsverse/transloco';
 
-/** The restyled 57 px topbar: wordmark, menu toggle, context slot, language and theme controls, and the account slot (its own avatar and popover). */
+/** The 57 px topbar: wordmark, menu toggle, context slot, language and theme controls, and the account slot (its own avatar and popover). */
 @Component({
   selector: 'p-topbar',
   standalone: true,
