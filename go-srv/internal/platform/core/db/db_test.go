@@ -12,7 +12,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/db"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/internal/testpg"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testpg"
 )
 
 func secret(t *testing.T, value string) config.Secret {

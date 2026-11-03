@@ -11,8 +11,8 @@ import (
 	"example.com/fixture/srv/internal/dispatch"
 	"example.com/fixture/srv/internal/platform/core"
 	"example.com/fixture/srv/internal/platform/core/api"
-	"example.com/fixture/srv/internal/platform/core/coretest"
 	"example.com/fixture/srv/internal/platform/core/reqctx"
+	"example.com/fixture/srv/internal/testkit/coretest"
 )
 
 // accountID is the account every request of this file acts as.

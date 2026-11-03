@@ -12,7 +12,13 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
 )
 
-const coreModuleFolder = "core"
+const (
+	coreModuleFolder = "core"
+	// testKitFolder holds test support only: a _test.go file may import it, no
+	// other file may. The boundary test's rule 7 holds the same line in a
+	// generated project.
+	testKitFolder = "testkit"
+)
 
 type parsedGo struct {
 	failed  bool
@@ -402,7 +408,9 @@ func within(imported, base string) bool {
 	return imported == base || strings.HasPrefix(imported, base+"/")
 }
 
-// checkBoundary applies IMPORT_BOUNDARY to the imports of one file.
+// checkBoundary applies IMPORT_BOUNDARY to the imports of one file. A _test.go
+// file may import the test kit at internal/testkit, and a file of the kit is
+// test support itself: it may import a module and its siblings.
 func (b *builder) checkBoundary(p string, pg *parsedGo, owner *moduleDoc) {
 	module := b.goModule
 	if module == "" || pg == nil || pg.failed {
@@ -410,6 +418,13 @@ func (b *builder) checkBoundary(p string, pg *parsedGo, owner *moduleDoc) {
 	}
 	platform := module + "/internal/platform"
 	core := platform + "/" + coreModuleFolder
+	testKit := module + "/internal/" + testKitFolder
+	isTestFile := strings.HasSuffix(p, "_test.go")
+	kitDir := ""
+	if owner != nil {
+		kitDir = owner.stack.root + "internal/" + testKitFolder
+	}
+	inTestKit := kitDir != "" && within(p, kitDir)
 	for _, imp := range pg.imports {
 		if !within(imp.path, module) {
 			continue
@@ -422,12 +437,17 @@ func (b *builder) checkBoundary(p string, pg *parsedGo, owner *moduleDoc) {
 			}
 		case owner == nil || owner.stack.name != manifest.StackGoSrv:
 		case owner.module.Module == manifest.CoreModule:
-			if within(imp.path, platform) && !within(imp.path, core) {
+			switch {
+			case within(imp.path, platform) && !within(imp.path, core) && !inTestKit:
 				violation = "core must not import another module"
+			case within(imp.path, testKit) && !isTestFile && !inTestKit:
+				violation = "only a _test.go file may import the test kit"
 			}
 		default:
 			own := platform + "/" + owner.folder
-			if !within(imp.path, core) && !within(imp.path, own) {
+			inOwnTree := within(imp.path, core) || within(imp.path, own)
+			isTestKit := within(imp.path, testKit) && isTestFile
+			if !inOwnTree && !isTestKit {
 				violation = "a module may import only core and its own folder"
 			}
 		}

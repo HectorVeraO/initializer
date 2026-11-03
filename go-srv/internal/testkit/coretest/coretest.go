@@ -19,10 +19,10 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/featureflag"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/internal/testpg"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/parameter"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/telemetry"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testpg"
 )
 
 const (

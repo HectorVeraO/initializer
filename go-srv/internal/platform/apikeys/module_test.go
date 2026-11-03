@@ -9,7 +9,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
 )
 
 func TestModuleProvidesTheAPIKeyResolver(t *testing.T) {

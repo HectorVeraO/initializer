@@ -14,8 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/internal/testpg"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/migrate"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testpg"
 )
 
 func fixture(module string) migrate.Set {

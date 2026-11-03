@@ -18,9 +18,9 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/parameter"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/parameters"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
 )
 
 // probeKey is the parameter the probe module reads.

@@ -259,6 +259,7 @@ Format: see `.claude/references/code-path-parity-format.md`. Root keeps a one-li
 - **Node pin**: `mise.toml` and `ng-web/Dockerfile` name the same Node version. Full row: `.claude/references/code-path-parity.md`.
 - **Local secret defaults**: the compose `:-` password defaults equal `.deploy/local/.example.env`. Full row: `.claude/references/code-path-parity.md`.
 - **Env path prefixing**: `tooling/generator/internal/render/render.go` and the two `ci.yml` blocks prefix the same TCK env path list. Full row: `.claude/references/code-path-parity.md`.
+- **Test kit import rule**: the `testkit` literal and the `_test.go` exemption are the same in `go-srv/internal/platform/core/boundary_test.go` and `tooling/generator/internal/catalog/checks.go`. Full row: `.claude/references/code-path-parity.md`.
 
 ## Anti-degradation governance
 
