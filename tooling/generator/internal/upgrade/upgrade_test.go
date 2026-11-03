@@ -304,7 +304,7 @@ func TestApplyRefusesAFolderThatLeavesTheProject(t *testing.T) {
 	}
 }
 
-func TestApplyWritesThroughAFolderThatStaysInsideTheProject(t *testing.T) {
+func TestApplyRefusesAFolderThatIsASymlinkEvenWhenItStaysInside(t *testing.T) {
 	dir := projectDir(t, map[string]string{"real/keep.txt": "keep"})
 	if err := os.Symlink(filepath.Join(dir, "real"), filepath.Join(dir, "linked")); err != nil {
 		t.Skipf("this machine cannot create a symlink: %v", err)
@@ -314,11 +314,11 @@ func TestApplyWritesThroughAFolderThatStaysInsideTheProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := statuses(result)["linked/x.go"]; got != Added {
-		t.Fatalf("linked/x.go: status %q, want %q", got, Added)
+	if got := statuses(result)["linked/x.go"]; got != SkippedNotFile {
+		t.Fatalf("linked/x.go: status %q, want %q", got, SkippedNotFile)
 	}
-	if content := read(t, dir, "real/x.go"); content != "planned" {
-		t.Errorf("real/x.go = %q, want the planned content", content)
+	if content := read(t, dir, "real/x.go"); content != "" {
+		t.Errorf("real/x.go = %q, want the target untouched", content)
 	}
 }
 
