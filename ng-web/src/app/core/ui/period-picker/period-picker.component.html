@@ -1,0 +1,43 @@
+<div class="flex flex-wrap items-end gap-3" data-testid="period-picker">
+  <div class="flex flex-col gap-1.5">
+    <label for="period-preset" class="text-sm text-color">{{ 'period.label' | transloco }}</label>
+    <p-select
+      inputId="period-preset"
+      styleClass="min-w-52"
+      data-testid="period-preset"
+      appendTo="body"
+      [options]="presetOptions()"
+      optionLabel="label"
+      optionValue="value"
+      [ngModel]="preset()"
+      (ngModelChange)="choose($event)"
+      [ngModelOptions]="{ standalone: true }"
+    >
+      <ng-template #item let-option>
+        <span [attr.data-testid]="'period-option-' + option.value">{{ option.label }}</span>
+      </ng-template>
+    </p-select>
+  </div>
+  @if (preset() === 'custom') {
+    <div class="flex flex-col gap-1.5">
+      <label for="period-custom-input" class="text-sm text-color">{{ 'period.customRange' | transloco }}</label>
+      <p-datepicker
+        inputId="period-custom-input"
+        selectionMode="range"
+        dateFormat="dd/mm/yy"
+        appendTo="body"
+        styleClass="min-w-64"
+        [showIcon]="true"
+        iconDisplay="input"
+        [readonlyInput]="true"
+        [placeholder]="'period.rangePlaceholder' | transloco"
+        [ngModel]="customRange()"
+        (ngModelChange)="onCustomRange($event)"
+        [ngModelOptions]="{ standalone: true }"
+        data-testid="period-custom"
+      />
+    </div>
+  } @else if (period() !== null) {
+    <span class="pb-2.5 text-sm text-muted-color" data-testid="period-label">{{ 'period.range' | transloco: { from: rangeFrom(), to: rangeTo() } }}</span>
+  }
+</div>

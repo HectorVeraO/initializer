@@ -2,35 +2,51 @@
   #innerTable
   [value]="value"
   [loading]="loading"
-  [paginator]="true"
+  [paginator]="showPaginator"
   paginatorDropdownAppendTo="body"
+  paginatorStyleClass="px-4 py-3"
   [rows]="rows"
   [rowsPerPageOptions]="rowsPerPageOptions"
   [dataKey]="dataKey"
   [styleClass]="styleClass"
+  [tableStyle]="tableStyle"
+  [rowHover]="true"
   [globalFilterFields]="globalFilterFields"
   [showCurrentPageReport]="true"
   [currentPageReportTemplate]="'common.pageReport' | transloco"
   [showFirstLastIcon]="false"
+  [lazy]="lazy"
+  [lazyLoadOnInit]="false"
+  [totalRecords]="lazy ? totalRecords : value.length"
+  [first]="lazy ? first : 0"
+  [expandedRowKeys]="expandedKeys"
+  [sortField]="lazy ? sortField : undefined"
+  [sortOrder]="sortOrder"
+  (onLazyLoad)="onLazyLoad($event)"
 >
   <ng-template pTemplate="header">
     <tr>
+      @if (expandable) {
+        <th class="w-12">
+          <span class="sr-only">{{ 'common.details' | transloco }}</span>
+        </th>
+      }
       @for (col of columns; track col.field) {
         @if (col.sortable) {
           <th [pSortableColumn]="col.field" [style.width]="col.width">
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1.5" [class.justify-end]="col.align === 'right'" [class.text-right]="col.align === 'right'">
               {{ col.labelKey | transloco }}
               <p-sortIcon [field]="col.field" />
-              @if (col.filterType) {
+              @if (col.filterType && !lazy) {
                 <p-columnFilter [type]="col.filterType" [field]="col.field" display="menu" />
               }
             </div>
           </th>
         } @else {
           <th [style.width]="col.width">
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1.5" [class.justify-end]="col.align === 'right'" [class.text-right]="col.align === 'right'">
               {{ col.labelKey | transloco }}
-              @if (col.filterType) {
+              @if (col.filterType && !lazy) {
                 <p-columnFilter [type]="col.filterType" [field]="col.field" display="menu" />
               }
             </div>
@@ -38,18 +54,28 @@
         }
       }
       @if (showActionsColumn) {
-        <th [style.width]="actionsColumnWidth"></th>
+        <th [style.width]="actionsColumnWidth">
+          <span class="sr-only">{{ 'common.actions' | transloco }}</span>
+        </th>
       }
     </tr>
   </ng-template>
 
   <ng-template pTemplate="body" let-row>
-    <ng-container *ngTemplateOutlet="bodyTemplate ?? null; context: { $implicit: row }" />
+    <ng-container *ngTemplateOutlet="bodyTemplate ?? null; context: rowContext(row)" />
+  </ng-template>
+
+  <ng-template pTemplate="expandedrow" let-row>
+    <tr>
+      <td [attr.colspan]="colspan" class="p-0">
+        <ng-container *ngTemplateOutlet="expandedTemplate ?? null; context: { $implicit: row }" />
+      </td>
+    </tr>
   </ng-template>
 
   <ng-template pTemplate="emptymessage">
     <tr>
-      <td [attr.colspan]="colspan" class="text-center py-6 text-surface-500">
+      <td [attr.colspan]="colspan" class="py-8 text-center text-muted-color">
         {{ emptyMessageKey | transloco }}
       </td>
     </tr>

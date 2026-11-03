@@ -143,6 +143,19 @@ export function stubScrollIntoView(): void {
   Element.prototype.scrollIntoView = vi.fn();
 }
 
+/** jsdom has no ResizeObserver; the tabs and the scrollable overlays measure their container with one. */
+export function stubResizeObserver(): void {
+  Object.defineProperty(window, 'ResizeObserver', {
+    writable: true,
+    configurable: true,
+    value: class ResizeObserverStub {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    }
+  });
+}
+
 /** The one pending request with this method and path (query string left out); fails when there is none or several. */
 export function expectCall(method: string, path: string): TestRequest {
   return httpController().expectOne((request) => request.method === method && request.url === path);
