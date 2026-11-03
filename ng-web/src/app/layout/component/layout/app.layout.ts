@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { Subject, filter } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import { FLAG_SOURCE } from '@/platform/core';
+import { FLAG_SOURCE, UI_RESTYLE_FLAG } from '@/platform/core';
 import { AppTopbar } from '../topbar/app.topbar';
 import { AppTopbarLegacy } from '../topbar/app.topbar-legacy';
 import { AppSidebar } from '../side-bar/app.sidebar';
@@ -13,8 +13,8 @@ import { TranslocoModule } from '@jsverse/transloco';
 import { ConfirmDialog } from '@openng/optimus-ui/confirmdialog';
 import { ConfirmNameDialogComponent } from '@/core/ui/confirm-name-dialog/confirm-name-dialog.component';
 
-/** Release flag that picks the restyled chrome; the only place the shell reads it. */
-export const UI_RESTYLE_FLAG = 'ui_restyle';
+// The flag lives in the shell contract so every screen can name the same key; the shell reads it once, here.
+export { UI_RESTYLE_FLAG };
 
 @Component({
   selector: 'p-layout',

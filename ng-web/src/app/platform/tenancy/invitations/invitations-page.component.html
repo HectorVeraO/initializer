@@ -1,74 +1,147 @@
-<p-page-header [title]="'tenancy.invitations.title' | transloco" />
+@if (restyled()) {
+  <p-page-header [title]="'tenancy.invitations.title' | transloco">
+    <button pButton type="button" data-testid="invite-new" (click)="openInvite()">
+      <i pButtonIcon class="pi pi-plus"></i>
+      <span pButtonLabel>{{ 'tenancy.invitations.inviteTitle' | transloco }}</span>
+    </button>
+  </p-page-header>
 
-<p-form-section [title]="'tenancy.invitations.inviteTitle' | transloco">
-  <form [formGroup]="form" class="flex flex-col gap-4" data-testid="invite-form" (ngSubmit)="submit()">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-      <div class="flex flex-col gap-2 md:col-span-2">
-        <label for="invite-email">{{ 'tenancy.invitations.email' | transloco }}</label>
+  <p-section-card [title]="'tenancy.invitations.listTitle' | transloco" [flush]="true" data-testid="invitations-list-card">
+    <p-list-state
+      class="block"
+      [class.p-6]="isEmpty() || loadFailed()"
+      feature="invitations"
+      [loading]="isLoading()"
+      [loadFailed]="loadFailed()"
+      [empty]="isEmpty()"
+      sectionKey="tenancy.invitations.section"
+      emptyKey="tenancy.invitations.empty"
+      (retry)="reload()"
+    >
+      <p-data-table [columns]="columns" [value]="rows()" dataKey="id" [emptyMessageKey]="'tenancy.invitations.empty'">
+        <ng-template #body let-row>
+          <tr data-testid="invitations-row" [attr.data-key]="row.email">
+            <td data-testid="invitations-cell-email">{{ row.email }}</td>
+            <td data-testid="invitations-cell-role" [attr.data-value]="row.role">{{ 'tenancy.roles.' + row.role | transloco }}</td>
+            <td data-testid="invitations-cell-status" [attr.data-value]="row.status">
+              <p-status-tag family="invitationStatus" [value]="row.status" />
+            </td>
+            <td data-testid="invitations-cell-expires">{{ row.expiresAt | santiagoDate }}</td>
+            <td class="text-right">
+              <p-row-actions [actions]="rowActions(row)" />
+            </td>
+          </tr>
+        </ng-template>
+      </p-data-table>
+      @if (isTruncated()) {
+        <p class="mx-0 mt-2 mb-0 px-4 pb-4 text-sm" data-testid="invitations-truncated">{{ 'tenancy.invitations.truncated' | transloco: { shown: rows().length, total: totalItems() } }}</p>
+      }
+    </p-list-state>
+  </p-section-card>
+
+  <p-dialog [visible]="isInviting()" (visibleChange)="onInviteVisibleChange($event)" [modal]="true" [header]="'tenancy.invitations.inviteTitle' | transloco" [style]="{ width: '34rem', maxWidth: '95vw' }" data-testid="invite-create-dialog">
+    <form [formGroup]="form" class="flex flex-col gap-4" data-testid="invite-form" (ngSubmit)="submit()">
+      <p-form-field [label]="'tenancy.invitations.email' | transloco" controlId="invite-email" [errors]="emailMessages()" errorTestId="invite-email-error">
         <input pInputText id="invite-email" formControlName="email" type="email" autocomplete="off" data-testid="invite-email" />
-        @for (message of emailMessages(); track $index) {
-          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="invite-email-error">{{ message }}</p-message>
-        }
-      </div>
+      </p-form-field>
 
-      <div class="flex flex-col gap-2">
-        <label for="invite-role">{{ 'tenancy.invitations.role' | transloco }}</label>
+      <p-form-field [label]="'tenancy.invitations.role' | transloco" controlId="invite-role" [errors]="roleMessages()" errorTestId="invite-role-error">
         <p-select inputId="invite-role" formControlName="role" [options]="roleOptions" optionValue="value" appendTo="body" data-testid="invite-role">
           <ng-template #selectedItem let-option>{{ option.labelKey | transloco }}</ng-template>
           <ng-template #item let-option>
             <span data-testid="invite-role-option" [attr.data-key]="option.value">{{ option.labelKey | transloco }}</span>
           </ng-template>
         </p-select>
-        @for (message of roleMessages(); track $index) {
-          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="invite-role-error">{{ message }}</p-message>
-        }
-      </div>
-    </div>
+      </p-form-field>
 
-    @if (formMessages().length > 0) {
-      <div role="alert" data-testid="invite-issues">
-        <p-message severity="error">
-          @for (message of formMessages(); track $index) {
-            <div>{{ message }}</div>
+      @if (formMessages().length > 0) {
+        <div role="alert" data-testid="invite-issues">
+          <p-message severity="error">
+            @for (message of formMessages(); track $index) {
+              <div>{{ message }}</div>
+            }
+          </p-message>
+        </div>
+      }
+    </form>
+    <ng-template #footer>
+      <button pButton type="button" severity="secondary" [outlined]="true" data-testid="invite-cancel" (click)="onInviteVisibleChange(false)">{{ 'common.cancel' | transloco }}</button>
+      <button pButton type="button" data-testid="invite-submit" [disabled]="isSubmitting()" (click)="submit()">{{ 'tenancy.invitations.submit' | transloco }}</button>
+    </ng-template>
+  </p-dialog>
+} @else {
+  <p-page-header [title]="'tenancy.invitations.title' | transloco" />
+
+  <p-form-section [title]="'tenancy.invitations.inviteTitle' | transloco">
+    <form [formGroup]="form" class="flex flex-col gap-4" data-testid="invite-form" (ngSubmit)="submit()">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+        <div class="flex flex-col gap-2 md:col-span-2">
+          <label for="invite-email">{{ 'tenancy.invitations.email' | transloco }}</label>
+          <input pInputText id="invite-email" formControlName="email" type="email" autocomplete="off" data-testid="invite-email" />
+          @for (message of emailMessages(); track $index) {
+            <p-message severity="error" variant="simple" size="small" role="alert" data-testid="invite-email-error">{{ message }}</p-message>
           }
-        </p-message>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <label for="invite-role">{{ 'tenancy.invitations.role' | transloco }}</label>
+          <p-select inputId="invite-role" formControlName="role" [options]="roleOptions" optionValue="value" appendTo="body" data-testid="invite-role">
+            <ng-template #selectedItem let-option>{{ option.labelKey | transloco }}</ng-template>
+            <ng-template #item let-option>
+              <span data-testid="invite-role-option" [attr.data-key]="option.value">{{ option.labelKey | transloco }}</span>
+            </ng-template>
+          </p-select>
+          @for (message of roleMessages(); track $index) {
+            <p-message severity="error" variant="simple" size="small" role="alert" data-testid="invite-role-error">{{ message }}</p-message>
+          }
+        </div>
       </div>
-    }
 
-    <div>
-      <button pButton type="submit" data-testid="invite-submit" [disabled]="isSubmitting()">{{ 'tenancy.invitations.submit' | transloco }}</button>
-    </div>
-  </form>
-</p-form-section>
+      @if (formMessages().length > 0) {
+        <div role="alert" data-testid="invite-issues">
+          <p-message severity="error">
+            @for (message of formMessages(); track $index) {
+              <div>{{ message }}</div>
+            }
+          </p-message>
+        </div>
+      }
 
-<div class="card mt-4">
-  <p-list-state feature="invitations" [loading]="isLoading()" [loadFailed]="loadFailed()" [empty]="isEmpty()" sectionKey="tenancy.invitations.section" emptyKey="tenancy.invitations.empty" (retry)="reload()">
-    <p-table [value]="rows()" dataKey="id">
-      <ng-template pTemplate="header">
-        <tr>
-          <th>{{ 'tenancy.invitations.email' | transloco }}</th>
-          <th>{{ 'tenancy.invitations.role' | transloco }}</th>
-          <th>{{ 'tenancy.invitations.status' | transloco }}</th>
-          <th>{{ 'tenancy.invitations.expires' | transloco }}</th>
-          <th></th>
-        </tr>
-      </ng-template>
-      <ng-template pTemplate="body" let-row>
-        <tr data-testid="invitations-row" [attr.data-key]="row.email">
-          <td data-testid="invitations-cell-email">{{ row.email }}</td>
-          <td data-testid="invitations-cell-role" [attr.data-value]="row.role">{{ 'tenancy.roles.' + row.role | transloco }}</td>
-          <td data-testid="invitations-cell-status" [attr.data-value]="row.status">{{ 'tenancy.invitations.statuses.' + row.status | transloco }}</td>
-          <td data-testid="invitations-cell-expires">{{ row.expiresAt | santiagoDate }}</td>
-          <td class="text-right">
-            <app-inline-confirm labelKey="tenancy.invitations.revoke" testId="invitation-revoke" (confirmed)="revoke(row)" />
-          </td>
-        </tr>
-      </ng-template>
-    </p-table>
-    @if (isTruncated()) {
-      <p class="mt-2 mb-0 text-sm" data-testid="invitations-truncated">{{ 'tenancy.invitations.truncated' | transloco: { shown: rows().length, total: totalItems() } }}</p>
-    }
-  </p-list-state>
-</div>
+      <div>
+        <button pButton type="submit" data-testid="invite-submit" [disabled]="isSubmitting()">{{ 'tenancy.invitations.submit' | transloco }}</button>
+      </div>
+    </form>
+  </p-form-section>
+
+  <div class="card mt-4">
+    <p-list-state feature="invitations" [loading]="isLoading()" [loadFailed]="loadFailed()" [empty]="isEmpty()" sectionKey="tenancy.invitations.section" emptyKey="tenancy.invitations.empty" (retry)="reload()">
+      <p-table [value]="rows()" dataKey="id">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>{{ 'tenancy.invitations.email' | transloco }}</th>
+            <th>{{ 'tenancy.invitations.role' | transloco }}</th>
+            <th>{{ 'tenancy.invitations.status' | transloco }}</th>
+            <th>{{ 'tenancy.invitations.expires' | transloco }}</th>
+            <th></th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-row>
+          <tr data-testid="invitations-row" [attr.data-key]="row.email">
+            <td data-testid="invitations-cell-email">{{ row.email }}</td>
+            <td data-testid="invitations-cell-role" [attr.data-value]="row.role">{{ 'tenancy.roles.' + row.role | transloco }}</td>
+            <td data-testid="invitations-cell-status" [attr.data-value]="row.status">{{ 'tenancy.invitations.statuses.' + row.status | transloco }}</td>
+            <td data-testid="invitations-cell-expires">{{ row.expiresAt | santiagoDate }}</td>
+            <td class="text-right">
+              <app-inline-confirm labelKey="tenancy.invitations.revoke" testId="invitation-revoke" (confirmed)="revoke(row)" />
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+      @if (isTruncated()) {
+        <p class="mt-2 mb-0 text-sm" data-testid="invitations-truncated">{{ 'tenancy.invitations.truncated' | transloco: { shown: rows().length, total: totalItems() } }}</p>
+      }
+    </p-list-state>
+  </div>
+}
 
 <app-one-time-secret-dialog titleKey="tenancy.invitations.linkTitle" [secret]="secret()" (closed)="closeSecret()" />

@@ -8,9 +8,14 @@ import { TagModule } from '@openng/optimus-ui/tag';
 import { firstValueFrom } from 'rxjs';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
+import { injectConfirmDestructive } from '@/core/ui/confirm-delete/confirm-destructive';
+import { DataTableComponent } from '@/core/ui/data-table/data-table.component';
+import { DataTableColumn } from '@/core/ui/data-table/data-table.types';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
-import { ACCESS_PROVIDER, InlineConfirmComponent } from '@/platform/core';
+import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
+import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
+import { ACCESS_PROVIDER, FLAG_SOURCE, InlineConfirmComponent, UI_RESTYLE_FLAG } from '@/platform/core';
 import { displayValue, jsonText } from '../json-value';
 import { PLATFORM_PARAMETERS_I18N } from '../i18n/scope';
 import { ParameterDefinitionDialog } from '../parameter-definition-dialog/parameter-definition-dialog.component';
@@ -23,7 +28,21 @@ const SCOPE_ALIAS = PLATFORM_PARAMETERS_I18N.alias as string;
 /** The parameters of the platform with the value in effect for the active tenant; admins override it, platform operators define parameters. */
 @Component({
   selector: 'app-parameter-list',
-  imports: [ButtonModule, MessageModule, TableModule, TagModule, TranslocoModule, ListStateComponent, PageHeaderComponent, InlineConfirmComponent, ParameterOverrideDialog, ParameterDefinitionDialog],
+  imports: [
+    ButtonModule,
+    MessageModule,
+    TableModule,
+    TagModule,
+    TranslocoModule,
+    DataTableComponent,
+    ListStateComponent,
+    PageHeaderComponent,
+    RowActionsComponent,
+    SectionCardComponent,
+    InlineConfirmComponent,
+    ParameterOverrideDialog,
+    ParameterDefinitionDialog
+  ],
   providers: [provideTranslocoScope(PLATFORM_PARAMETERS_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './parameter-list.component.html'
@@ -33,9 +52,24 @@ export class ParameterListPage {
   private readonly access = inject(ACCESS_PROVIDER);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
+  private readonly flags = inject(FLAG_SOURCE);
+  private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
+
+  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
+  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
+
+  protected readonly columns: DataTableColumn[] = [
+    { field: 'key', labelKey: 'parameters.list.key' },
+    { field: 'valueType', labelKey: 'parameters.list.type' },
+    { field: 'effectiveValue', labelKey: 'parameters.list.value' },
+    { field: 'source', labelKey: 'parameters.list.source' },
+    { field: 'defaultValue', labelKey: 'parameters.list.default' },
+    { field: 'bounds', labelKey: 'parameters.list.bounds' },
+    { field: 'isSystemRequired', labelKey: 'parameters.list.system' }
+  ];
 
   protected readonly rows = signal<ParameterView[]>([]);
   protected readonly totalItems = signal(0);
@@ -104,6 +138,20 @@ export class ParameterListPage {
     return this.transloco.translate(`${SCOPE_ALIAS}.list.range`, { min, max });
   }
 
+  /** The row actions: override or edit, and the two destructive writes behind the shared confirmation. */
+  protected rowActions(row: ParameterView): RowAction[] {
+    const hasOverride = row.source === 'tenant';
+
+    const actions: RowAction[] = [
+      { id: 'override', labelKey: 'parameters.list.setOverride', icon: 'pi pi-pencil', testId: 'parameter-set-override', hidden: !this.canOverride(), run: () => this.openOverride(row) },
+      { id: 'clear', labelKey: 'parameters.list.clearOverride', icon: 'pi pi-undo', testId: 'parameter-clear-override', destructive: true, hidden: !this.canOverride() || !hasOverride, run: () => this.confirmClear(row) },
+      { id: 'edit', labelKey: 'parameters.list.edit', icon: 'pi pi-cog', testId: 'parameter-edit', hidden: !this.isOperator(), run: () => this.openDefinition(row) },
+      { id: 'delete', labelKey: 'parameters.list.delete', icon: 'pi pi-trash', testId: 'parameter-delete', destructive: true, hidden: !this.isOperator(), disabled: row.isSystemRequired, run: () => this.confirmRemove(row) }
+    ];
+
+    return actions;
+  }
+
   protected openOverride(row: ParameterView): void {
     this.overrideTarget.set(row);
   }
@@ -141,6 +189,19 @@ export class ParameterListPage {
 
       this.messages.add({ severity: 'success', summary });
     });
+  }
+
+  private confirmClear(row: ParameterView): void {
+    this.confirmAction(`${SCOPE_ALIAS}.list.clearOverride`, () => void this.clearOverride(row));
+  }
+
+  private confirmRemove(row: ParameterView): void {
+    this.confirmAction(`${SCOPE_ALIAS}.list.delete`, () => void this.remove(row));
+  }
+
+  /** Destructive row write behind the shared one-click confirmation; `labelKey` names the accept button. */
+  private confirmAction(labelKey: string, run: () => void): void {
+    this.confirmDestructive({ acceptLabel: this.transloco.translate(labelKey) }, run);
   }
 
   /** Runs a write on one row, then refetches. A failure becomes a message on that row; a `404` says the row is gone. */

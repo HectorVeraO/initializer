@@ -5,6 +5,7 @@ import { MessageService } from '@openng/optimus-ui/api';
 import { ButtonModule } from '@openng/optimus-ui/button';
 import { CheckboxModule } from '@openng/optimus-ui/checkbox';
 import { DatePickerModule } from '@openng/optimus-ui/datepicker';
+import { DialogModule } from '@openng/optimus-ui/dialog';
 import { InputTextModule } from '@openng/optimus-ui/inputtext';
 import { MessageModule } from '@openng/optimus-ui/message';
 import { TableModule } from '@openng/optimus-ui/table';
@@ -12,11 +13,18 @@ import { firstValueFrom } from 'rxjs';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { SantiagoDatePipe } from '@/core/format/santiago-date.pipe';
+import { injectConfirmDestructive } from '@/core/ui/confirm-delete/confirm-destructive';
+import { DataTableComponent } from '@/core/ui/data-table/data-table.component';
+import { DataTableColumn } from '@/core/ui/data-table/data-table.types';
+import { FormFieldComponent } from '@/core/ui/form-field/form-field.component';
 import { FormSectionComponent } from '@/core/ui/form-section/form-section.component';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
+import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
+import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
+import { StatusTagComponent } from '@/core/ui/status-tag/status-tag.component';
 import { API_KEYS_I18N } from './i18n/scope';
-import { ACCESS_PROVIDER, InlineConfirmComponent, OneTimeSecretDialogComponent, fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
+import { ACCESS_PROVIDER, FLAG_SOURCE, InlineConfirmComponent, OneTimeSecretDialogComponent, UI_RESTYLE_FLAG, fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
 import { ApiKeysApi } from './api-keys-api.service';
 import type { ApiKeyScope, ApiKeyView } from './api-keys-api.service';
 
@@ -51,9 +59,15 @@ export function endOfDayUtc(day: Date): string {
     TableModule,
     TranslocoModule,
     SantiagoDatePipe,
+    DataTableComponent,
+    DialogModule,
+    FormFieldComponent,
     FormSectionComponent,
     ListStateComponent,
     PageHeaderComponent,
+    RowActionsComponent,
+    SectionCardComponent,
+    StatusTagComponent,
     InlineConfirmComponent,
     OneTimeSecretDialogComponent
   ],
@@ -66,9 +80,25 @@ export class ApiKeysPage {
   private readonly access = inject(ACCESS_PROVIDER);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
+  private readonly flags = inject(FLAG_SOURCE);
+  private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
+
+  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
+  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
+
+  /** The restyled template creates a key in a dialog; the previous one keeps the inline form. */
+  protected readonly isCreating = signal(false);
+
+  protected readonly columns: DataTableColumn[] = [
+    { field: 'name', labelKey: 'apiKeys.name' },
+    { field: 'keyPrefix', labelKey: 'apiKeys.prefix' },
+    { field: 'scopes', labelKey: 'apiKeys.scopes' },
+    { field: 'expiresAt', labelKey: 'apiKeys.expires' },
+    { field: 'status', labelKey: 'apiKeys.status' }
+  ];
 
   protected readonly form = new FormGroup({
     name: new FormControl('', { nonNullable: true }),
@@ -151,6 +181,25 @@ export class ApiKeysPage {
     void this.load();
   }
 
+  protected openCreate(): void {
+    this.submitErrors.clear();
+    this.lastError.set(null);
+    this.isCreating.set(true);
+  }
+
+  protected onCreateVisibleChange(isVisible: boolean): void {
+    if (!isVisible) {
+      this.isCreating.set(false);
+    }
+  }
+
+  /** One row action: revoke an active key after the shared confirmation. */
+  protected rowActions(key: ApiKeyView): RowAction[] {
+    const actions: RowAction[] = [{ id: 'revoke', labelKey: 'apiKeys.revoke', icon: 'pi pi-ban', testId: 'api-key-revoke', destructive: true, hidden: key.status !== 'active', run: () => this.confirmRevoke(key) }];
+
+    return actions;
+  }
+
   protected isScopeSelected(name: string): boolean {
     const isSelected = this.selectedScopes().includes(name);
 
@@ -188,6 +237,7 @@ export class ApiKeysPage {
       this.secret.set(created.plainTextKey);
       this.form.reset({ name: '', expiresAt: null });
       this.selectedScopes.set([]);
+      this.isCreating.set(false);
       await this.load();
     } catch (error) {
       this.lastError.set(error);
@@ -209,6 +259,10 @@ export class ApiKeysPage {
 
   protected closeSecret(): void {
     this.secret.set(null);
+  }
+
+  private confirmRevoke(key: ApiKeyView): void {
+    this.confirmDestructive({ acceptLabel: this.transloco.translate('apiKeys.revoke') }, () => void this.revoke(key));
   }
 
   /** A `404` on a row means it is gone: the list was refetched, tell the person why the row vanished. */

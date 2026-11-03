@@ -1,13 +1,14 @@
-<p-page-header [title]="key()" />
+@if (restyled()) {
+  <p-page-header [title]="key()" [subtitle]="description()" subtitleTestId="flag-detail-description" />
 
-<p-message severity="info" class="mb-3" data-testid="flag-detail-notice">{{ 'featureFlags.notice' | transloco }}</p-message>
+  <p-message severity="info" class="mb-4" data-testid="flag-detail-notice">{{ 'featureFlags.notice' | transloco }}</p-message>
 
-@if (isNotFound() && isTruncated()) {
-  <p-message severity="warn" class="mb-3" data-testid="flag-detail-truncated">{{ 'featureFlags.detail.truncated' | transloco: { shown: listedCount(), total: totalItems() } }}</p-message>
-}
+  @if (isNotFound() && isTruncated()) {
+    <p-message severity="warn" class="mb-4" data-testid="flag-detail-truncated">{{ 'featureFlags.detail.truncated' | transloco: { shown: listedCount(), total: totalItems() } }}</p-message>
+  }
 
-<div class="card">
   <p-list-state
+    class="block"
     feature="flag-detail"
     [loading]="isLoading()"
     [loadFailed]="loadFailed()"
@@ -18,83 +19,194 @@
     (retry)="reload()"
   >
     @if (flag(); as current) {
-      <dl class="grid grid-cols-2 gap-2 mb-4" data-testid="flag-detail-summary">
-        <dt>{{ 'featureFlags.detail.type' | transloco }}</dt>
-        <dd class="m-0" data-testid="flag-detail-type" [attr.data-value]="current.type">{{ 'featureFlags.types.' + current.type | transloco }}</dd>
-        <dt>{{ 'featureFlags.detail.default' | transloco }}</dt>
-        <dd class="m-0" data-testid="flag-detail-default" [attr.data-value]="current.default">{{ (current.default ? 'featureFlags.state.on' : 'featureFlags.state.off') | transloco }}</dd>
-        <dt>{{ 'featureFlags.detail.expires' | transloco }}</dt>
-        <dd class="m-0" data-testid="flag-detail-expires">{{ current.expiresAt ?? ('featureFlags.list.noExpiry' | transloco) }}</dd>
-        <dt>{{ 'featureFlags.detail.global' | transloco }}</dt>
-        <dd class="m-0" data-testid="flag-detail-global">
-          @if (current.globalOverride; as override) {
-            {{ (override.enabled ? 'featureFlags.global.on' : 'featureFlags.global.off') | transloco }}
-          } @else {
-            {{ 'featureFlags.global.inherit' | transloco }}
-          }
-        </dd>
-      </dl>
-      @if (current.description !== '') {
-        <p class="mt-0" data-testid="flag-detail-description">{{ current.description }}</p>
-      }
+      <div class="flex flex-col gap-4">
+        <p-section-card [title]="'featureFlags.detail.summaryTitle' | transloco" data-testid="flag-detail-summary-card">
+          <dl class="m-0 grid grid-cols-2 gap-2" data-testid="flag-detail-summary">
+            <dt>{{ 'featureFlags.detail.type' | transloco }}</dt>
+            <dd class="m-0" data-testid="flag-detail-type" [attr.data-value]="current.type">{{ 'featureFlags.types.' + current.type | transloco }}</dd>
+            <dt>{{ 'featureFlags.detail.default' | transloco }}</dt>
+            <dd class="m-0" data-testid="flag-detail-default" [attr.data-value]="current.default">{{ (current.default ? 'featureFlags.state.on' : 'featureFlags.state.off') | transloco }}</dd>
+            <dt>{{ 'featureFlags.detail.expires' | transloco }}</dt>
+            <dd class="m-0" data-testid="flag-detail-expires">{{ current.expiresAt ?? ('featureFlags.list.noExpiry' | transloco) }}</dd>
+            <dt>{{ 'featureFlags.detail.global' | transloco }}</dt>
+            <dd class="m-0" data-testid="flag-detail-global">
+              @if (current.globalOverride; as override) {
+                {{ (override.enabled ? 'featureFlags.global.on' : 'featureFlags.global.off') | transloco }}
+              } @else {
+                {{ 'featureFlags.global.inherit' | transloco }}
+              }
+            </dd>
+          </dl>
+        </p-section-card>
 
-      @if (hasTenantDirectory) {
-        <h3>{{ 'featureFlags.detail.tenantsTitle' | transloco }}</h3>
-        @if (tenantsFailed()) {
-          <p-message severity="warn" class="mb-3" data-testid="flag-tenants-failed">{{ 'featureFlags.detail.tenantsFailed' | transloco }}</p-message>
-        }
-        @if (rows().length === 0) {
-          <p data-testid="flag-tenants-empty">{{ 'featureFlags.detail.noOverrides' | transloco }}</p>
+        @if (hasTenantDirectory) {
+          <p-section-card [title]="'featureFlags.detail.tenantsTitle' | transloco" [flush]="true" data-testid="flag-tenant-list-card">
+            <button cardActions pButton type="button" size="small" data-testid="flag-tenant-add" (click)="openAddOverride()">
+              <i pButtonIcon class="pi pi-plus"></i>
+              <span pButtonLabel>{{ 'featureFlags.detail.addTitle' | transloco }}</span>
+            </button>
+
+            @if (tenantsFailed()) {
+              <div class="px-4 pt-4">
+                <p-message severity="warn" class="mb-0" data-testid="flag-tenants-failed">{{ 'featureFlags.detail.tenantsFailed' | transloco }}</p-message>
+              </div>
+            }
+
+            @if (rows().length === 0) {
+              <p class="m-0 p-6" data-testid="flag-tenants-empty">{{ 'featureFlags.detail.noOverrides' | transloco }}</p>
+            } @else {
+              <p-data-table [columns]="overrideColumns" [value]="rows()" dataKey="tenantId" [emptyMessageKey]="'featureFlags.detail.noOverrides'">
+                <ng-template #body let-row>
+                  <tr data-testid="flag-tenant-row" [attr.data-key]="row.dataKey">
+                    <td data-testid="flag-tenant-cell-name">{{ row.name }}</td>
+                    <td data-testid="flag-tenant-cell-slug" class="font-mono">{{ row.slug }}</td>
+                    <td data-testid="flag-tenant-cell-enabled" [attr.data-value]="row.enabled">{{ (row.enabled ? 'featureFlags.state.on' : 'featureFlags.state.off') | transloco }}</td>
+                    <td class="text-right">
+                      <p-row-actions [actions]="rowActions(row)" />
+                    </td>
+                  </tr>
+                </ng-template>
+              </p-data-table>
+            }
+          </p-section-card>
+
+          <p-dialog [visible]="isAddingOverride()" (visibleChange)="onAddVisibleChange($event)" [modal]="true" [header]="'featureFlags.detail.addTitle' | transloco" [style]="{ width: '34rem', maxWidth: '95vw' }" data-testid="flag-tenant-add-dialog">
+            <div class="flex flex-col gap-4" data-testid="flag-tenant-form">
+              <p-form-field [label]="'featureFlags.detail.tenant' | transloco" controlId="flag-tenant-select">
+                <p-select
+                  inputId="flag-tenant-select"
+                  data-testid="flag-tenant-select"
+                  [ngModel]="pickedTenantId()"
+                  (onChange)="pickedTenantId.set($event.value)"
+                  [options]="tenants()"
+                  optionValue="id"
+                  optionLabel="name"
+                  appendTo="body"
+                  [placeholder]="'featureFlags.detail.pickTenant' | transloco"
+                  [ariaLabel]="'featureFlags.detail.tenant' | transloco"
+                >
+                  <ng-template #item let-option>
+                    <span data-testid="flag-tenant-option" [attr.data-key]="option.slug">{{ option.name }} ({{ option.slug }})</span>
+                  </ng-template>
+                </p-select>
+              </p-form-field>
+
+              <p-form-field [label]="'featureFlags.detail.enabledToggle' | transloco" controlId="flag-tenant-enabled">
+                <p-toggleswitch inputId="flag-tenant-enabled" data-testid="flag-tenant-enabled" [ngModel]="newEnabled()" (onChange)="newEnabled.set($event.checked)" [ariaLabel]="'featureFlags.detail.enabledToggle' | transloco" />
+              </p-form-field>
+            </div>
+            <ng-template #footer>
+              <button pButton type="button" severity="secondary" [outlined]="true" data-testid="flag-tenant-cancel" (click)="onAddVisibleChange(false)">{{ 'common.cancel' | transloco }}</button>
+              <button pButton type="button" data-testid="flag-tenant-save" [disabled]="pickedTenantId() === null || isSaving()" (click)="save()">{{ 'featureFlags.detail.save' | transloco }}</button>
+            </ng-template>
+          </p-dialog>
         } @else {
-          <p-table [value]="rows()" dataKey="tenantId">
-            <ng-template pTemplate="header">
-              <tr>
-                <th>{{ 'featureFlags.detail.tenantName' | transloco }}</th>
-                <th>{{ 'featureFlags.detail.tenantSlug' | transloco }}</th>
-                <th>{{ 'featureFlags.detail.enabled' | transloco }}</th>
-                <th></th>
-              </tr>
-            </ng-template>
-            <ng-template pTemplate="body" let-row>
-              <tr data-testid="flag-tenant-row" [attr.data-key]="row.dataKey">
-                <td data-testid="flag-tenant-cell-name">{{ row.name }}</td>
-                <td data-testid="flag-tenant-cell-slug" class="font-mono">{{ row.slug }}</td>
-                <td data-testid="flag-tenant-cell-enabled" [attr.data-value]="row.enabled">{{ (row.enabled ? 'featureFlags.state.on' : 'featureFlags.state.off') | transloco }}</td>
-                <td class="text-right">
-                  <app-inline-confirm labelKey="featureFlags.detail.remove" testId="flag-tenant-remove" (confirmed)="remove(row)" />
-                </td>
-              </tr>
-            </ng-template>
-          </p-table>
+          <p-section-card [title]="'featureFlags.detail.tenantsTitle' | transloco">
+            <p class="m-0" data-testid="flag-tenants-absent">{{ 'featureFlags.detail.tenantsAbsent' | transloco }}</p>
+          </p-section-card>
         }
-
-        <h3 class="mt-4">{{ 'featureFlags.detail.addTitle' | transloco }}</h3>
-        <div class="flex flex-wrap items-center gap-3" data-testid="flag-tenant-form">
-          <p-select
-            data-testid="flag-tenant-select"
-            [ngModel]="pickedTenantId()"
-            (onChange)="pickedTenantId.set($event.value)"
-            [options]="tenants()"
-            optionValue="id"
-            optionLabel="name"
-            appendTo="body"
-            [placeholder]="'featureFlags.detail.pickTenant' | transloco"
-            [ariaLabel]="'featureFlags.detail.tenant' | transloco"
-          >
-            <ng-template #item let-option>
-              <span data-testid="flag-tenant-option" [attr.data-key]="option.slug">{{ option.name }} ({{ option.slug }})</span>
-            </ng-template>
-          </p-select>
-          <span class="inline-flex items-center gap-2">
-            <p-toggleswitch data-testid="flag-tenant-enabled" [ngModel]="newEnabled()" (onChange)="newEnabled.set($event.checked)" [ariaLabel]="'featureFlags.detail.enabledToggle' | transloco" />
-            {{ 'featureFlags.detail.enabledToggle' | transloco }}
-          </span>
-          <button pButton type="button" data-testid="flag-tenant-save" [disabled]="pickedTenantId() === null || isSaving()" (click)="save()">{{ 'featureFlags.detail.save' | transloco }}</button>
-        </div>
-      } @else {
-        <h3>{{ 'featureFlags.detail.tenantsTitle' | transloco }}</h3>
-        <p data-testid="flag-tenants-absent">{{ 'featureFlags.detail.tenantsAbsent' | transloco }}</p>
-      }
+      </div>
     }
   </p-list-state>
-</div>
+} @else {
+  <p-page-header [title]="key()" />
+
+  <p-message severity="info" class="mb-3" data-testid="flag-detail-notice">{{ 'featureFlags.notice' | transloco }}</p-message>
+
+  @if (isNotFound() && isTruncated()) {
+    <p-message severity="warn" class="mb-3" data-testid="flag-detail-truncated">{{ 'featureFlags.detail.truncated' | transloco: { shown: listedCount(), total: totalItems() } }}</p-message>
+  }
+
+  <div class="card">
+    <p-list-state
+      feature="flag-detail"
+      [loading]="isLoading()"
+      [loadFailed]="loadFailed()"
+      [notFound]="isNotFound()"
+      sectionKey="featureFlags.detail.section"
+      notFoundKey="featureFlags.detail.notFound"
+      backPath="/operator/feature-flags"
+      (retry)="reload()"
+    >
+      @if (flag(); as current) {
+        <dl class="grid grid-cols-2 gap-2 mb-4" data-testid="flag-detail-summary">
+          <dt>{{ 'featureFlags.detail.type' | transloco }}</dt>
+          <dd class="m-0" data-testid="flag-detail-type" [attr.data-value]="current.type">{{ 'featureFlags.types.' + current.type | transloco }}</dd>
+          <dt>{{ 'featureFlags.detail.default' | transloco }}</dt>
+          <dd class="m-0" data-testid="flag-detail-default" [attr.data-value]="current.default">{{ (current.default ? 'featureFlags.state.on' : 'featureFlags.state.off') | transloco }}</dd>
+          <dt>{{ 'featureFlags.detail.expires' | transloco }}</dt>
+          <dd class="m-0" data-testid="flag-detail-expires">{{ current.expiresAt ?? ('featureFlags.list.noExpiry' | transloco) }}</dd>
+          <dt>{{ 'featureFlags.detail.global' | transloco }}</dt>
+          <dd class="m-0" data-testid="flag-detail-global">
+            @if (current.globalOverride; as override) {
+              {{ (override.enabled ? 'featureFlags.global.on' : 'featureFlags.global.off') | transloco }}
+            } @else {
+              {{ 'featureFlags.global.inherit' | transloco }}
+            }
+          </dd>
+        </dl>
+        @if (current.description !== '') {
+          <p class="mt-0" data-testid="flag-detail-description">{{ current.description }}</p>
+        }
+
+        @if (hasTenantDirectory) {
+          <h3>{{ 'featureFlags.detail.tenantsTitle' | transloco }}</h3>
+          @if (tenantsFailed()) {
+            <p-message severity="warn" class="mb-3" data-testid="flag-tenants-failed">{{ 'featureFlags.detail.tenantsFailed' | transloco }}</p-message>
+          }
+          @if (rows().length === 0) {
+            <p data-testid="flag-tenants-empty">{{ 'featureFlags.detail.noOverrides' | transloco }}</p>
+          } @else {
+            <p-table [value]="rows()" dataKey="tenantId">
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>{{ 'featureFlags.detail.tenantName' | transloco }}</th>
+                  <th>{{ 'featureFlags.detail.tenantSlug' | transloco }}</th>
+                  <th>{{ 'featureFlags.detail.enabled' | transloco }}</th>
+                  <th></th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-row>
+                <tr data-testid="flag-tenant-row" [attr.data-key]="row.dataKey">
+                  <td data-testid="flag-tenant-cell-name">{{ row.name }}</td>
+                  <td data-testid="flag-tenant-cell-slug" class="font-mono">{{ row.slug }}</td>
+                  <td data-testid="flag-tenant-cell-enabled" [attr.data-value]="row.enabled">{{ (row.enabled ? 'featureFlags.state.on' : 'featureFlags.state.off') | transloco }}</td>
+                  <td class="text-right">
+                    <app-inline-confirm labelKey="featureFlags.detail.remove" testId="flag-tenant-remove" (confirmed)="remove(row)" />
+                  </td>
+                </tr>
+              </ng-template>
+            </p-table>
+          }
+
+          <h3 class="mt-4">{{ 'featureFlags.detail.addTitle' | transloco }}</h3>
+          <div class="flex flex-wrap items-center gap-3" data-testid="flag-tenant-form">
+            <p-select
+              data-testid="flag-tenant-select"
+              [ngModel]="pickedTenantId()"
+              (onChange)="pickedTenantId.set($event.value)"
+              [options]="tenants()"
+              optionValue="id"
+              optionLabel="name"
+              appendTo="body"
+              [placeholder]="'featureFlags.detail.pickTenant' | transloco"
+              [ariaLabel]="'featureFlags.detail.tenant' | transloco"
+            >
+              <ng-template #item let-option>
+                <span data-testid="flag-tenant-option" [attr.data-key]="option.slug">{{ option.name }} ({{ option.slug }})</span>
+              </ng-template>
+            </p-select>
+            <span class="inline-flex items-center gap-2">
+              <p-toggleswitch data-testid="flag-tenant-enabled" [ngModel]="newEnabled()" (onChange)="newEnabled.set($event.checked)" [ariaLabel]="'featureFlags.detail.enabledToggle' | transloco" />
+              {{ 'featureFlags.detail.enabledToggle' | transloco }}
+            </span>
+            <button pButton type="button" data-testid="flag-tenant-save" [disabled]="pickedTenantId() === null || isSaving()" (click)="save()">{{ 'featureFlags.detail.save' | transloco }}</button>
+          </div>
+        } @else {
+          <h3>{{ 'featureFlags.detail.tenantsTitle' | transloco }}</h3>
+          <p data-testid="flag-tenants-absent">{{ 'featureFlags.detail.tenantsAbsent' | transloco }}</p>
+        }
+      }
+    </p-list-state>
+  </div>
+}

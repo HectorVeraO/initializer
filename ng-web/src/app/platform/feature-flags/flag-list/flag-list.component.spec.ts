@@ -1,7 +1,9 @@
 import { HttpTestingController } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MessageService } from '@openng/optimus-ui/api';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, stubScrollIntoView, textOf } from '@/core/testing/ui-testing';
+import { provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
 import { flagView, tenantOverride } from '../testing/flag-view';
@@ -22,12 +24,16 @@ describe('FlagListPage', () => {
 
   let messages: { add: ReturnType<typeof vi.fn> };
 
+  /** What the flag source answers for `ui_restyle`; every other key stays off. */
+  const restyled = signal(false);
+
   beforeEach(() => {
+    restyled.set(false);
     stubBroadcastChannel();
     stubMatchMedia();
     stubScrollIntoView();
     messages = { add: vi.fn() };
-    configureFeatureTest([], [{ provide: MessageService, useValue: messages }]);
+    configureFeatureTest([], [...provideFakeAccess(null, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }]);
     http = TestBed.inject(HttpTestingController);
   });
 
@@ -70,6 +76,16 @@ describe('FlagListPage', () => {
     (option as HTMLElement).click();
     await settle(fixture);
   }
+
+  it('renders the restyled screen from the same class: flush card, data table and the open link action', async () => {
+    restyled.set(true);
+
+    const fixture = await open();
+
+    expect(byTestId(root(fixture), 'flags-list-card')).not.toBeNull();
+    expect(byTestId(rowOf(fixture, OPS), 'flag-open')?.getAttribute('href')).toBe(`/operator/feature-flags/${OPS}`);
+    expect(byTestId(rowOf(fixture, OPS), 'flag-global-select')).not.toBeNull();
+  });
 
   it('requests the first page of 100 without a sort', async () => {
     const fixture = TestBed.createComponent(FlagListPage);

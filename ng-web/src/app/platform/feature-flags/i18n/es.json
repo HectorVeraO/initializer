@@ -5,6 +5,7 @@
   "notice": "Los tenants ven un cambio en la próxima actualización de su sesión o al cambiar de tenant.",
   "list": {
     "title": "Feature flags",
+    "listTitle": "Flags",
     "section": "feature flags",
     "empty": "No hay feature flags.",
     "truncated": "Mostrando {{shown}} de {{total}} flags.",
@@ -32,6 +33,7 @@
   },
   "detail": {
     "title": "Feature flag",
+    "summaryTitle": "Resumen",
     "section": "feature flag",
     "notFound": "Esa flag no está definida en el manifiesto.",
     "truncated": "Solo se pudieron buscar {{shown}} de {{total}} flags, así que esta podría existir más allá de ellas.",

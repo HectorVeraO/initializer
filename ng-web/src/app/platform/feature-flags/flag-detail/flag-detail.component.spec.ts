@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
@@ -11,6 +11,7 @@ import type { ApiEnvelope, ApiPage } from '@/core/envelope';
 import { TENANT_DIRECTORY } from '@/platform/core';
 import type { TenantDirectory, TenantRef } from '@/platform/core';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, stubScrollIntoView, textOf } from '@/core/testing/ui-testing';
+import { provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { nextCall, stubBroadcastChannel } from '../../../../testing/fixtures/http-testing';
 import { flagView, tenantOverride, tenantView } from '../testing/flag-view';
@@ -58,10 +59,14 @@ describe('FlagDetailPage', () => {
   // Read when the page first asks for the directory: a tenant directory that reads GET /api/v1/tenants unless a spec picks another binding.
   let directory: 'tenants-api' | TenantDirectory | null;
 
+  /** What the flag source answers for `ui_restyle`; every other key stays off. */
+  const restyled = signal(false);
+
   beforeEach(() => {
     stubBroadcastChannel();
     stubMatchMedia();
     stubScrollIntoView();
+    restyled.set(false);
     messages = { add: vi.fn() };
     directory = 'tenants-api';
     params = new BehaviorSubject(convertToParamMap({ key: KEY }));
@@ -70,7 +75,8 @@ describe('FlagDetailPage', () => {
       [
         { provide: MessageService, useValue: messages },
         { provide: TENANT_DIRECTORY, useFactory: () => (directory === 'tenants-api' ? inject(HttpTenantDirectory) : directory) },
-        { provide: ActivatedRoute, useValue: { paramMap: params, snapshot: { paramMap: convertToParamMap({ key: KEY }) } } }
+        { provide: ActivatedRoute, useValue: { paramMap: params, snapshot: { paramMap: convertToParamMap({ key: KEY }) } } },
+        ...provideFakeAccess(null, { flags: restyledFlags(restyled) })
       ]
     );
     http = TestBed.inject(HttpTestingController);
@@ -137,6 +143,24 @@ describe('FlagDetailPage', () => {
     await click(fixture, option as HTMLElement);
   }
 
+  it('renders the restyled screen from the same class: summary card, overrides card and the add-override dialog', async () => {
+    restyled.set(true);
+
+    const fixture = await open([flagView(KEY, { tenantOverrides: [tenantOverride(TENANT_A, false)] })]);
+
+    expect(byTestId(root(fixture), 'flag-detail-summary-card')).not.toBeNull();
+    expect(byTestId(root(fixture), 'flag-detail-summary')).not.toBeNull();
+    expect(byTestId(root(fixture), 'flag-tenant-list-card')).not.toBeNull();
+    expect(byTestId(root(fixture), 'flag-tenant-remove')).not.toBeNull();
+    expect(byTestId(root(fixture), 'flag-tenant-form')).toBeNull();
+
+    await click(fixture, byTestId(root(fixture), 'flag-tenant-add'));
+
+    expect(byTestId(document.body, 'flag-tenant-add-dialog')).not.toBeNull();
+    expect(byTestId(document.body, 'flag-tenant-form')).not.toBeNull();
+    expect(byTestId(document.body, 'flag-tenant-select')).not.toBeNull();
+  });
+
   it('loads the flag of the new key when the route key changes', async () => {
     const otherKey = 'example_other_flag';
 
@@ -148,6 +172,26 @@ describe('FlagDetailPage', () => {
     await settle(fixture);
 
     expect(textOf(root(fixture))).toContain(otherKey);
+  });
+
+  it('drops the previous flag description while the next key loads, in the restyled header', async () => {
+    restyled.set(true);
+
+    const otherKey = 'example_other_flag';
+
+    const fixture = await open([flagView(KEY), flagView(otherKey, { description: 'Other flag' })]);
+
+    expect(textOf(byTestId(root(fixture), 'flag-detail-description'))).toBe('Synthetic flag');
+
+    params.next(convertToParamMap({ key: otherKey }));
+    fixture.detectChanges();
+
+    // The header belongs to the page, not the list state, so it must not keep the previous flag's lead.
+    expect(byTestId(root(fixture), 'flag-detail-description')).toBeNull();
+
+    await answerLoad([flagView(KEY), flagView(otherKey, { description: 'Other flag' })]);
+    await settle(fixture);
+    await vi.waitFor(() => expect(textOf(byTestId(root(fixture), 'flag-detail-description'))).toBe('Other flag'));
   });
 
   it('reads the flag from the list and the tenants from the tenant list', async () => {

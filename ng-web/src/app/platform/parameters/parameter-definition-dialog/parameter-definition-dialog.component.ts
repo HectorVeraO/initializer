@@ -11,6 +11,7 @@ import { ToggleSwitchModule } from '@openng/optimus-ui/toggleswitch';
 import { firstValueFrom, startWith } from 'rxjs';
 import { errorMessage } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
+import { FormFieldComponent } from '@/core/ui/form-field/form-field.component';
 import { fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
 import { jsonText, parseJsonText } from '../json-value';
 import { PLATFORM_PARAMETERS_I18N } from '../i18n/scope';
@@ -70,7 +71,7 @@ function readAllowed(text: string): FieldRead<unknown[] | null> {
 /** Creates a parameter definition, or edits one when `parameter` is set. `key`, `valueType` and `isSystemRequired` are read-only on edit. */
 @Component({
   selector: 'app-parameter-definition-dialog',
-  imports: [ReactiveFormsModule, ButtonModule, DialogModule, InputTextModule, MessageModule, SelectModule, ToggleSwitchModule, TranslocoModule],
+  imports: [ReactiveFormsModule, ButtonModule, DialogModule, FormFieldComponent, InputTextModule, MessageModule, SelectModule, ToggleSwitchModule, TranslocoModule],
   providers: [provideTranslocoScope(PLATFORM_PARAMETERS_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './parameter-definition-dialog.component.html'

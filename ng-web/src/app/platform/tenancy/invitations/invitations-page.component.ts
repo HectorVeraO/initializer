@@ -3,6 +3,7 @@ import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { TranslocoModule, TranslocoService, provideTranslocoScope } from '@jsverse/transloco';
 import { MessageService } from '@openng/optimus-ui/api';
 import { ButtonModule } from '@openng/optimus-ui/button';
+import { DialogModule } from '@openng/optimus-ui/dialog';
 import { InputTextModule } from '@openng/optimus-ui/inputtext';
 import { MessageModule } from '@openng/optimus-ui/message';
 import { SelectModule } from '@openng/optimus-ui/select';
@@ -12,11 +13,18 @@ import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { SantiagoDatePipe } from '@/core/format/santiago-date.pipe';
+import { injectConfirmDestructive } from '@/core/ui/confirm-delete/confirm-destructive';
+import { DataTableComponent } from '@/core/ui/data-table/data-table.component';
+import { DataTableColumn } from '@/core/ui/data-table/data-table.types';
+import { FormFieldComponent } from '@/core/ui/form-field/form-field.component';
 import { FormSectionComponent } from '@/core/ui/form-section/form-section.component';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
+import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
+import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
+import { StatusTagComponent } from '@/core/ui/status-tag/status-tag.component';
 import { TENANCY_I18N } from '../i18n/scope';
-import { ACCESS_PROVIDER, InlineConfirmComponent, OneTimeSecretDialogComponent, fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
+import { ACCESS_PROVIDER, FLAG_SOURCE, InlineConfirmComponent, OneTimeSecretDialogComponent, UI_RESTYLE_FLAG, fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
 import type { TenantRole } from '@/platform/core';
 import { InvitationsApi } from './invitations-api.service';
 import type { InvitationView } from './invitations-api.service';
@@ -42,9 +50,15 @@ const EMAIL_CODES: readonly string[] = [ApiErrorCode.MembershipAlreadyActive, Ap
     TableModule,
     TranslocoModule,
     SantiagoDatePipe,
+    DataTableComponent,
+    DialogModule,
+    FormFieldComponent,
     FormSectionComponent,
     ListStateComponent,
     PageHeaderComponent,
+    RowActionsComponent,
+    SectionCardComponent,
+    StatusTagComponent,
     InlineConfirmComponent,
     OneTimeSecretDialogComponent
   ],
@@ -57,9 +71,24 @@ export class InvitationsPage {
   private readonly access = inject(ACCESS_PROVIDER);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
+  private readonly flags = inject(FLAG_SOURCE);
+  private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
+
+  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
+  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
+
+  /** The restyled template invites in a dialog; the previous one keeps the inline form. */
+  protected readonly isInviting = signal(false);
+
+  protected readonly columns: DataTableColumn[] = [
+    { field: 'email', labelKey: 'tenancy.invitations.email' },
+    { field: 'role', labelKey: 'tenancy.invitations.role' },
+    { field: 'status', labelKey: 'tenancy.invitations.status' },
+    { field: 'expiresAt', labelKey: 'tenancy.invitations.expires' }
+  ];
 
   protected readonly form = new FormGroup({
     email: new FormControl('', { nonNullable: true }),
@@ -132,6 +161,25 @@ export class InvitationsPage {
     void this.load();
   }
 
+  protected openInvite(): void {
+    this.submitErrors.clear();
+    this.lastError.set(null);
+    this.isInviting.set(true);
+  }
+
+  protected onInviteVisibleChange(isVisible: boolean): void {
+    if (!isVisible) {
+      this.isInviting.set(false);
+    }
+  }
+
+  /** One row action: revoke a pending invitation after the shared confirmation. */
+  protected rowActions(invitation: InvitationView): RowAction[] {
+    const actions: RowAction[] = [{ id: 'revoke', labelKey: 'tenancy.invitations.revoke', icon: 'pi pi-ban', testId: 'invitation-revoke', destructive: true, run: () => this.confirmRevoke(invitation) }];
+
+    return actions;
+  }
+
   protected async submit(): Promise<void> {
     if (this.isSubmitting()) {
       return;
@@ -146,6 +194,7 @@ export class InvitationsPage {
 
       this.secret.set(created.invitationUrl);
       this.form.controls.email.reset('');
+      this.isInviting.set(false);
       await this.load();
     } catch (error) {
       this.lastError.set(error);
@@ -167,6 +216,10 @@ export class InvitationsPage {
 
   protected closeSecret(): void {
     this.secret.set(null);
+  }
+
+  private confirmRevoke(invitation: InvitationView): void {
+    this.confirmDestructive({ acceptLabel: this.transloco.translate('tenancy.invitations.revoke') }, () => void this.revoke(invitation));
   }
 
   /** A `404` or `409` on a row means it is gone or no longer pending: the list was refetched, tell the person why the row vanished. */
