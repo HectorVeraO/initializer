@@ -11,11 +11,23 @@ export class InvitationsPage {
     this.submit = page.getByTestId('invite-submit');
   }
 
+  /** Opens the restyled invite dialog; the previous screen renders the form inline. */
+  async openInvite(): Promise<void> {
+    const headerAction = this.page.getByTestId('invite-new');
+    await expect(
+      headerAction.or(this.page.getByTestId('invite-form')),
+    ).toBeVisible();
+    if (await headerAction.isVisible()) {
+      await headerAction.click();
+    }
+  }
+
   /** Fills the invite form (role left on its default `member` unless given) and submits it. */
   async invite(
     email: string,
     role?: 'admin' | 'member' | 'viewer',
   ): Promise<void> {
+    await this.openInvite();
     await expect(this.email).toBeVisible();
     await this.email.fill(email);
     if (role !== undefined) {

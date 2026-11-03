@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { clickRowAction, confirmRowAction } from '../core/row-actions';
 
 /** The feature-flags screens (`/operator/feature-flags` and `/operator/feature-flags/<key>`). */
 export class FeatureFlagsPage {
@@ -25,10 +26,21 @@ export class FeatureFlagsPage {
     return cell;
   }
 
-  /** Opens the detail of a flag from the list. */
+  /** Opens the detail of a flag from the list; the summary is in both templates. */
   async open(key: string): Promise<void> {
-    await this.row(key).getByTestId('flag-open').click();
-    await expect(this.page.getByTestId('flag-tenant-form')).toBeVisible();
+    await clickRowAction(this.row(key), 'flag-open');
+    await expect(this.page.getByTestId('flag-detail-summary')).toBeVisible();
+  }
+
+  /** Opens the restyled add-override dialog; the previous screen renders the form inline. */
+  async openAddOverride(): Promise<void> {
+    const dialogAction = this.page.getByTestId('flag-tenant-add');
+    await expect(
+      dialogAction.or(this.page.getByTestId('flag-tenant-form')),
+    ).toBeVisible();
+    if (await dialogAction.isVisible()) {
+      await dialogAction.click();
+    }
   }
 
   /** The tenant override row whose `data-key` is the tenant slug. */
@@ -47,6 +59,8 @@ export class FeatureFlagsPage {
 
   /** Picks the tenant `slug`, sets the toggle to `enabled` and saves; waits for the PUT to answer 200. */
   async addTenantOverride(slug: string, enabled: boolean): Promise<void> {
+    await this.openAddOverride();
+    await expect(this.page.getByTestId('flag-tenant-select')).toBeVisible();
     await this.page.getByTestId('flag-tenant-select').click();
     await this.page
       .getByTestId('flag-tenant-option')
@@ -68,10 +82,13 @@ export class FeatureFlagsPage {
     expect(response.status()).toBe(200);
   }
 
-  /** Removes the override of a tenant with the inline confirmation. */
+  /** Removes the override of a tenant: the restyled row asks in the shared dialog, the previous one inline. */
   async removeTenantOverride(slug: string): Promise<void> {
-    const row = this.tenantRow(slug);
-    await row.getByTestId('flag-tenant-remove').click();
-    await row.getByTestId('flag-tenant-remove-confirm').click();
+    await confirmRowAction(
+      this.page,
+      this.tenantRow(slug),
+      'flag-tenant-remove',
+      'Quitar',
+    );
   }
 }

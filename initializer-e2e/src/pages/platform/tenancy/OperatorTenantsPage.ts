@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { clickRowAction, confirmRowAction } from '../core/row-actions';
 
 /** The operator tenants screen (`/operator/tenants`). */
 export class OperatorTenantsPage {
@@ -15,13 +16,31 @@ export class OperatorTenantsPage {
     this.submit = page.getByTestId('tenant-submit');
   }
 
-  /** Fills the create form and submits it. */
+  /** Opens the restyled create dialog; the previous screen renders the form inline. */
+  async openCreate(): Promise<void> {
+    const headerAction = this.page.getByTestId('tenant-new');
+    await expect(
+      headerAction.or(this.page.getByTestId('tenant-form')),
+    ).toBeVisible();
+    if (await headerAction.isVisible()) {
+      await headerAction.click();
+    }
+  }
+
+  /**
+   * Fills the create form and submits it, whichever template the screen shows.
+   * A created tenant always ends as a row and, with the first-admin link, in
+   * the one-time secret dialog.
+   */
   async create(slug: string, name: string, adminEmail: string): Promise<void> {
+    await this.openCreate();
     await expect(this.slug).toBeVisible();
     await this.slug.fill(slug);
     await this.name.fill(name);
     await this.adminEmail.fill(adminEmail);
     await this.submit.click();
+    await expect(this.row(slug)).toBeVisible();
+    await expect(this.page.getByTestId('one-time-secret-value')).toBeVisible();
   }
 
   /** The row of the tenant with this slug. */
@@ -38,14 +57,17 @@ export class OperatorTenantsPage {
     return cell;
   }
 
-  /** Suspend with the inline confirmation. */
+  /** Suspends the tenant: the restyled row asks in the shared dialog, the previous one inline. */
   async suspend(slug: string): Promise<void> {
-    const row = this.row(slug);
-    await row.getByTestId('tenant-suspend').click();
-    await row.getByTestId('tenant-suspend-confirm').click();
+    await confirmRowAction(
+      this.page,
+      this.row(slug),
+      'tenant-suspend',
+      'Suspender',
+    );
   }
 
   async activate(slug: string): Promise<void> {
-    await this.row(slug).getByTestId('tenant-activate').click();
+    await clickRowAction(this.row(slug), 'tenant-activate');
   }
 }

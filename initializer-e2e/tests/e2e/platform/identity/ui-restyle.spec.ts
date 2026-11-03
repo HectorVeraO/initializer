@@ -113,13 +113,12 @@ test.describe('Restyled module pages', () => {
         await page.goto('/operator/tenants');
         await expect(page.getByTestId('tenants-list-card')).toBeVisible();
         await expect(page.getByTestId('tenants-suspension-note')).toBeVisible();
-        await page.getByTestId('tenant-new').click();
         await operatorTenantsPage.create(
           slug,
           `E2E ${id}`,
           emailFor('owner', id),
         );
-        await expect(page.getByTestId('one-time-secret-dialog')).toBeVisible();
+        await expect(page.getByTestId('one-time-secret-value')).toBeVisible();
         await page.getByTestId('one-time-secret-close').click();
         await expect(operatorTenantsPage.status(slug)).toHaveText('Activo');
 
@@ -203,13 +202,7 @@ test.describe('Restyled module pages', () => {
         await page.goto('/parameters');
         await expect(page.getByTestId('parameters-list-card')).toBeVisible();
         await expect(parametersPage.value(key)).toHaveText('3');
-        await parametersPage
-          .row(key)
-          .getByTestId('parameter-set-override')
-          .click();
-        await expect(
-          page.getByTestId('parameter-override-value'),
-        ).toBeVisible();
+        await parametersPage.openOverride(key);
         await page.getByTestId('parameter-override-cancel').click();
         await expect(page.getByTestId('parameter-override-value')).toHaveCount(
           0,

@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { confirmRowAction } from '../core/row-actions';
 
 /** The admin API keys screen (`/api-keys`). */
 export class ApiKeysPage {
@@ -25,8 +26,20 @@ export class ApiKeysPage {
     this.secretValue = page.getByTestId('one-time-secret-value');
   }
 
+  /** Opens the restyled create dialog; the previous screen renders the form inline. */
+  async openCreate(): Promise<void> {
+    const headerAction = this.page.getByTestId('api-key-new');
+    await expect(
+      headerAction.or(this.page.getByTestId('api-key-form')),
+    ).toBeVisible();
+    if (await headerAction.isVisible()) {
+      await headerAction.click();
+    }
+  }
+
   /** Fills the create form with one scope and submits it. */
   async create(name: string, scope: string): Promise<void> {
+    await this.openCreate();
     await expect(this.name).toBeVisible();
     await this.name.fill(name);
     const box = this.page
@@ -57,10 +70,13 @@ export class ApiKeysPage {
     return cell;
   }
 
-  /** Revoke with the inline confirmation. */
+  /** Revokes the key: the restyled row asks in the shared dialog, the previous one inline. */
   async revoke(name: string): Promise<void> {
-    const row = this.row(name);
-    await row.getByTestId('api-key-revoke').click();
-    await row.getByTestId('api-key-revoke-confirm').click();
+    await confirmRowAction(
+      this.page,
+      this.row(name),
+      'api-key-revoke',
+      'Revocar',
+    );
   }
 }

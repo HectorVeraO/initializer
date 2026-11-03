@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { clickRowAction, confirmRowAction } from '../core/row-actions';
 
 /** The members screen (`/memberships`). */
 export class MembershipsPage {
@@ -24,7 +25,7 @@ export class MembershipsPage {
     return cell;
   }
 
-  /** Picks `role` in the row's select and waits for the PATCH to answer 200. */
+  /** Picks `role` in the row's select and waits for the PATCH to answer 200. The select is in the role cell in both templates. */
   async changeRole(
     emailPrefix: string,
     role: 'admin' | 'member' | 'viewer',
@@ -43,14 +44,17 @@ export class MembershipsPage {
     await answered;
   }
 
-  /** Suspend with the inline confirmation. */
+  /** Suspends the member: the restyled row asks in the shared dialog, the previous one inline. */
   async suspend(emailPrefix: string): Promise<void> {
-    const row = this.row(emailPrefix);
-    await row.getByTestId('membership-suspend').click();
-    await row.getByTestId('membership-suspend-confirm').click();
+    await confirmRowAction(
+      this.page,
+      this.row(emailPrefix),
+      'membership-suspend',
+      'Suspender',
+    );
   }
 
   async reactivate(emailPrefix: string): Promise<void> {
-    await this.row(emailPrefix).getByTestId('membership-reactivate').click();
+    await clickRowAction(this.row(emailPrefix), 'membership-reactivate');
   }
 }
