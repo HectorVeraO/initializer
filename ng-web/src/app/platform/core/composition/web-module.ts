@@ -39,7 +39,7 @@ export interface NavEntry {
   readonly id: string;
   /** Key relative to the module's scope, e.g. 'nav.memberships'. */
   readonly labelKey: string;
-  /** Sakai menu icon class, e.g. 'menu-icon menu-icon-users'. */
+  /** Menu icon class, e.g. 'pi pi-users'. */
   readonly icon: string;
   readonly path: string;
   /** Shown only when allowsAccess(requires) holds. `{}`: any visitor the installed provider admits. */

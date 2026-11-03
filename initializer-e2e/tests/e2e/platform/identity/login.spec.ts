@@ -23,6 +23,7 @@ test.describe('Identity: login', () => {
         '/memberships',
       );
 
+      await shellPage.openAccountMenu();
       await expect(shellPage.accountEmailLocator).toHaveText(auth.email);
       await expect(shellPage.operatorBadge).toBeVisible();
 

@@ -1,22 +1,26 @@
-import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { SelectModule } from '@openng/optimus-ui/select';
 import { FormsModule } from '@angular/forms';
-import { PLATFORM_MODULES, platformTopbar } from '@/platform/core';
-import { BRAND } from '@/core/config/brand';
+import { ButtonModule } from '@openng/optimus-ui/button';
+import { PLATFORM_MODULES, ACCOUNT_SLOT_OVERLAY, platformTopbar } from '@/platform/core';
+import { BRAND, BRAND_LOGO_URL } from '@/core/config/brand';
 import { LayoutService } from '../../service/layout.service';
 import { TranslocoModule, TranslocoService } from '@jsverse/transloco';
 
+/** The restyled 57 px topbar: wordmark, menu toggle, context slot, language and theme controls, and the account slot (its own avatar and popover). */
 @Component({
   selector: 'p-topbar',
   standalone: true,
-  imports: [RouterModule, TranslocoModule, SelectModule, FormsModule, NgComponentOutlet],
+  imports: [RouterModule, TranslocoModule, SelectModule, FormsModule, NgComponentOutlet, ButtonModule],
+  providers: [{ provide: ACCOUNT_SLOT_OVERLAY, useValue: true }],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.topbar.html'
 })
 export class AppTopbar {
   protected readonly brand = BRAND;
+  protected readonly logoUrl = BRAND_LOGO_URL;
 
   public readonly layoutService = inject(LayoutService);
   private readonly translocoService = inject(TranslocoService);

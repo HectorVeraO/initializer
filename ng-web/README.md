@@ -36,6 +36,13 @@ ng build
 
 This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
 
+## Brand assets
+
+The topbar wordmark and the sign-in hero are typographic out of the box. To use
+your own files, drop them in `public/brand/` and point `BRAND_LOGO_URL` and
+`BRAND_HERO_URL` in `src/app/core/config/brand.ts` at them; `public/brand/README.md`
+lists both slots.
+
 ## Running unit tests
 
 To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:

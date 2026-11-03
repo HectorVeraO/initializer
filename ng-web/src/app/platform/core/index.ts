@@ -1,5 +1,6 @@
 export { PLATFORM_MODULES, providePlatform, platformRoutes, platformInterceptors, platformTopbar, navLabel } from './composition/web-module';
 export type { WebModule, NavEntry, TopbarItem, PortBindings } from './composition/web-module';
+export { ACCOUNT_SLOT_OVERLAY } from './composition/topbar-slot';
 export type { AccessContext, AccessRequirement, AccountRef, MembershipRef, MembershipStatus, SignInNotice, SignInOptions, TenantRef, TenantRole, TenantStatus } from './access/access.types';
 export { ACCESS_PROVIDER, OPEN_ACCESS } from './access/access.port';
 export type { AccessProvider } from './access/access.port';

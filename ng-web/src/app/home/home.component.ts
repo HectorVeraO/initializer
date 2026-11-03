@@ -2,12 +2,13 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslocoModule } from '@jsverse/transloco';
 import { environment } from '../../environments/environment';
+import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
 
 /** Landing page of the console shell; outside production it links to the component demos. */
 @Component({
   selector: 'p-home',
   standalone: true,
-  imports: [RouterLink, TranslocoModule],
+  imports: [RouterLink, TranslocoModule, PageHeaderComponent],
   templateUrl: './home.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })

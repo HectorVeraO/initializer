@@ -1,31 +1,51 @@
-<div class="flex items-center justify-center min-h-screen">
-  <form [formGroup]="form" class="card w-full max-w-md flex flex-col gap-4" data-testid="login-form" (ngSubmit)="submit()">
-    <h1 class="text-2xl font-semibold m-0">{{ 'identity.login.title' | transloco }}</h1>
+<div class="grid min-h-screen lg:grid-cols-2">
+  <aside class="hidden flex-col justify-between bg-primary-900 p-12 text-primary-contrast lg:flex" data-testid="login-hero">
+    <span class="text-lg font-medium">{{ brand }}</span>
 
-    @if (notice(); as noticeText) {
-      <div class="text-sm" role="status" data-testid="login-notice">{{ noticeText }}</div>
-    }
-
-    <div class="flex flex-col gap-2">
-      <label for="login-email">{{ 'identity.login.email' | transloco }}</label>
-      <input pInputText id="login-email" formControlName="email" type="email" autocomplete="username" required data-testid="login-email" />
-    </div>
-
-    <div class="flex flex-col gap-2">
-      <label for="login-password">{{ 'identity.login.password' | transloco }}</label>
-      <input pInputText id="login-password" formControlName="password" type="password" autocomplete="current-password" required data-testid="login-password" />
-    </div>
-
-    @if (hasErrors()) {
-      <div role="alert" data-testid="login-error">
-        <p-message severity="error">
-          @for (text of errors(); track $index) {
-            <div>{{ text }}</div>
-          }
-        </p-message>
+    @if (heroUrl) {
+      <img class="max-h-[26rem] w-full rounded-lg object-cover" [src]="heroUrl" [alt]="brand" />
+    } @else {
+      <div class="flex flex-col gap-4">
+        <span class="text-xs uppercase tracking-[0.2em] text-primary-200">{{ 'identity.login.hero.eyebrow' | transloco }}</span>
+        <p class="m-0 max-w-md text-display-md font-medium text-primary-contrast">{{ 'identity.login.hero.title' | transloco }}</p>
+        <p class="m-0 max-w-md text-md text-primary-100">{{ 'identity.login.hero.lead' | transloco }}</p>
       </div>
     }
 
-    <button pButton type="submit" data-testid="login-submit" [disabled]="isSubmitting()">{{ (isSubmitting() ? 'identity.login.submitting' : 'identity.login.submit') | transloco }}</button>
-  </form>
+    <span class="text-xs text-primary-200">{{ 'footer.copyright' | transloco: { year } }}</span>
+  </aside>
+
+  <main class="flex items-center justify-center bg-surface-50 px-6 py-12 dark:bg-surface-950">
+    <form class="flex w-full max-w-sm flex-col gap-4" [formGroup]="form" data-testid="login-form" (ngSubmit)="submit()">
+      <span class="text-lg font-medium text-color lg:hidden">{{ brand }}</span>
+
+      <h1 class="m-0 text-display-xs font-medium text-color">{{ 'identity.login.title' | transloco }}</h1>
+
+      @if (notice(); as noticeText) {
+        <div class="text-sm" role="status" data-testid="login-notice">{{ noticeText }}</div>
+      }
+
+      <div class="flex flex-col gap-2">
+        <label for="login-email">{{ 'identity.login.email' | transloco }}</label>
+        <input pInputText id="login-email" formControlName="email" type="email" autocomplete="username" required data-testid="login-email" />
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label for="login-password">{{ 'identity.login.password' | transloco }}</label>
+        <input pInputText id="login-password" formControlName="password" type="password" autocomplete="current-password" required data-testid="login-password" />
+      </div>
+
+      @if (hasErrors()) {
+        <div role="alert" data-testid="login-error">
+          <p-message severity="error">
+            @for (text of errors(); track $index) {
+              <div>{{ text }}</div>
+            }
+          </p-message>
+        </div>
+      }
+
+      <button pButton type="submit" data-testid="login-submit" [disabled]="isSubmitting()">{{ (isSubmitting() ? 'identity.login.submitting' : 'identity.login.submit') | transloco }}</button>
+    </form>
+  </main>
 </div>

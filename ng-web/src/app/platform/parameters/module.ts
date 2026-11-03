@@ -13,6 +13,6 @@ export const parametersModule: WebModule = {
     }
   ],
   publicRoutes: [],
-  nav: [{ id: 'parameters', labelKey: 'nav.parameters', icon: 'menu-icon menu-icon-sliders', path: '/parameters', requires: { tenant: 'required-unless-operator' } }],
+  nav: [{ id: 'parameters', labelKey: 'nav.parameters', icon: 'pi pi-sliders-h', path: '/parameters', requires: { tenant: 'required-unless-operator' } }],
   i18n: PLATFORM_PARAMETERS_I18N
 };

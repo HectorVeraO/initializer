@@ -13,6 +13,11 @@
     "notices": {
       "invitationAccepted": "Your invitation was accepted. Sign in to continue.",
       "accountCreated": "Your account was created. Sign in to continue."
+    },
+    "hero": {
+      "eyebrow": "Administration console",
+      "title": "Run your platform from one place",
+      "lead": "Sessions, tenants, access and configuration in one clear, consistent console."
     }
   },
   "session": {

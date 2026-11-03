@@ -201,6 +201,23 @@ const REPO_ROOT = path.resolve(E2E_ROOT, '..');
 const DEFAULT_GO_SRV_DATABASE = 'it_e2e_platform';
 
 /**
+ * `APP_FLAGS_FILE` of the e2e stack: the project manifest first, then the
+ * feature-flags fixture the module specs toggle. The loader reads the last
+ * definition of a repeated key and the two files share no key.
+ */
+const FLAGS_FILE = [
+  path.join(REPO_ROOT, 'flags.yaml'),
+  path.join(
+    REPO_ROOT,
+    'specs',
+    'feature-flags',
+    'tck',
+    'fixtures',
+    'flags.yaml',
+  ),
+].join(',');
+
+/**
  * The go-srv database of the e2e run. It lives on the shared compose Postgres
  * and is never the dev database: the name must start with `it_`.
  */
@@ -244,14 +261,7 @@ export function platformStack(): PlatformStack {
     start,
     goSrvDir: path.join(REPO_ROOT, 'go-srv'),
     ngWebDir: path.join(REPO_ROOT, 'ng-web'),
-    flagsFile: path.join(
-      REPO_ROOT,
-      'specs',
-      'feature-flags',
-      'tck',
-      'fixtures',
-      'flags.yaml',
-    ),
+    flagsFile: FLAGS_FILE,
     goSrvEnv: start ? readGoSrvEnv() : {},
   };
 }

@@ -1,9 +1,11 @@
-import { Component, Renderer2, ViewChild, OnDestroy, inject, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Renderer2, OnDestroy, computed, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { Subject, filter } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { FLAG_SOURCE } from '@/platform/core';
 import { AppTopbar } from '../topbar/app.topbar';
+import { AppTopbarLegacy } from '../topbar/app.topbar-legacy';
 import { AppSidebar } from '../side-bar/app.sidebar';
 import { AppFooter } from '../footer/app.footer';
 import { LayoutService } from '../../service/layout.service';
@@ -11,10 +13,13 @@ import { TranslocoModule } from '@jsverse/transloco';
 import { ConfirmDialog } from '@openng/optimus-ui/confirmdialog';
 import { ConfirmNameDialogComponent } from '@/core/ui/confirm-name-dialog/confirm-name-dialog.component';
 
+/** Release flag that picks the restyled chrome; the only place the shell reads it. */
+export const UI_RESTYLE_FLAG = 'ui_restyle';
+
 @Component({
   selector: 'p-layout',
   standalone: true,
-  imports: [CommonModule, AppTopbar, AppSidebar, RouterModule, AppFooter, ConfirmNameDialogComponent, ConfirmDialog, TranslocoModule],
+  imports: [CommonModule, AppTopbar, AppTopbarLegacy, AppSidebar, RouterModule, AppFooter, ConfirmNameDialogComponent, ConfirmDialog, TranslocoModule],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.layout.html'
 })
@@ -23,13 +28,14 @@ export class AppLayout implements OnDestroy {
 
   menuOutsideClickListener: (() => void) | null = null;
 
-  @ViewChild(AppSidebar) appSidebar!: AppSidebar;
-
-  @ViewChild(AppTopbar) appTopBar!: AppTopbar;
-
   public layoutService = inject(LayoutService);
   public renderer = inject(Renderer2);
   public router = inject(Router);
+
+  private readonly flags = inject(FLAG_SOURCE);
+
+  /** Evaluated at the shell boundary only, and follows the session: the frame switches when the flag source does. */
+  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
 
   constructor() {
     this.layoutService.overlayOpen$.pipe(takeUntil(this.destroy$)).subscribe(() => {

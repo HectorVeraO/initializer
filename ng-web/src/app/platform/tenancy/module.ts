@@ -45,9 +45,9 @@ export const tenancyModule: WebModule = {
     }
   ],
   nav: [
-    { id: 'memberships', labelKey: 'nav.memberships', icon: 'menu-icon menu-icon-users', path: '/memberships', requires: TENANT_REQUIRED },
-    { id: 'invitations', labelKey: 'nav.invitations', icon: 'menu-icon menu-icon-file-text', path: '/invitations', requires: ADMIN_OF_TENANT },
-    { id: 'operator-tenants', labelKey: 'nav.operatorTenants', icon: 'menu-icon menu-icon-building', path: '/operator/tenants', requires: PLATFORM_OPERATOR }
+    { id: 'memberships', labelKey: 'nav.memberships', icon: 'pi pi-users', path: '/memberships', requires: TENANT_REQUIRED },
+    { id: 'invitations', labelKey: 'nav.invitations', icon: 'pi pi-envelope', path: '/invitations', requires: ADMIN_OF_TENANT },
+    { id: 'operator-tenants', labelKey: 'nav.operatorTenants', icon: 'pi pi-building', path: '/operator/tenants', requires: PLATFORM_OPERATOR }
   ],
   i18n: TENANCY_I18N,
   topbar: [{ id: 'tenant-switcher', slot: 'context', component: TenantSwitcher }],

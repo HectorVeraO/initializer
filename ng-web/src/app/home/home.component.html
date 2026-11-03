@@ -1,15 +1,19 @@
-<div class="card">
-  <h1 class="text-2xl font-semibold mb-2">{{ 'home.title' | transloco }}</h1>
-  <p class="mb-4" data-testid="home-intro">{{ 'home.intro' | transloco }}</p>
+<p-page-header [title]="'home.title' | transloco" [subtitle]="'home.intro' | transloco" subtitleTestId="home-intro" />
 
-  @if (showDemos) {
-    <h2 class="text-xl font-semibold mb-2">{{ 'home.demos' | transloco }}</h2>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+@if (showDemos) {
+  <section class="flex flex-col gap-4">
+    <h2 class="m-0 text-lg font-medium text-color">{{ 'home.demos' | transloco }}</h2>
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       @for (demo of demos; track demo.id) {
-        <a [routerLink]="demo.path" class="block p-4 border border-surface rounded-border no-underline hover:bg-surface-100 dark:hover:bg-surface-800" [attr.data-testid]="'home-demo-' + demo.id">
+        <a
+          [routerLink]="demo.path"
+          class="flex items-center justify-between gap-3 rounded-lg border border-surface bg-surface-0 p-4 text-color no-underline transition-colors hover:bg-surface-50 dark:bg-surface-900 dark:hover:bg-surface-800"
+          [attr.data-testid]="'home-demo-' + demo.id"
+        >
           <span class="font-medium">{{ demo.label }}</span>
+          <i class="pi pi-arrow-right text-muted-color" aria-hidden="true"></i>
         </a>
       }
     </div>
-  }
-</div>
+  </section>
+}

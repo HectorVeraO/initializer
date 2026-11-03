@@ -223,6 +223,34 @@ export class PlatformApi {
     }
   }
 
+  /** PUT /api/v1/feature-flags/{key} (operator): upserts the global override. */
+  async setGlobalFlag(key: string, enabled: boolean): Promise<void> {
+    const path = `/api/v1/feature-flags/${encodeURIComponent(key)}`;
+    const response = await this.request.put(path, {
+      data: { enabled },
+      headers: { [XSRF_HEADER]: await this.xsrfToken(path) },
+    });
+    if (response.status() !== 200) {
+      throw new Error(
+        `PUT ${path}: ${response.status()} ${await response.text()}`,
+      );
+    }
+  }
+
+  /** DELETE /api/v1/feature-flags/{key} (operator): removes the global override; 200 and 404 both resolve. */
+  async clearGlobalFlag(key: string): Promise<void> {
+    const path = `/api/v1/feature-flags/${encodeURIComponent(key)}`;
+    const response = await this.request.delete(path, {
+      headers: { [XSRF_HEADER]: await this.xsrfToken(path) },
+    });
+    const isExpected = response.status() === 200 || response.status() === 404;
+    if (!isExpected) {
+      throw new Error(
+        `DELETE ${path}: ${response.status()} ${await response.text()}`,
+      );
+    }
+  }
+
   /** GET /api/v1/auth/session -> data. */
   async session(): Promise<SessionView> {
     const response = await this.request.get(SESSION_PATH);

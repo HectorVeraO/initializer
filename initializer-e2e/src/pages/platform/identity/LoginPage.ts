@@ -4,12 +4,16 @@ import type { SeedUser } from '../../../helpers/platform/api';
 
 /** The console login page (`/login`). Selectors are data-testid only. */
 export class LoginPage {
+  readonly hero: Locator;
+  readonly form: Locator;
   readonly email: Locator;
   readonly password: Locator;
   readonly submit: Locator;
   readonly error: Locator;
 
   constructor(private readonly page: Page) {
+    this.hero = page.getByTestId('login-hero');
+    this.form = page.getByTestId('login-form');
     this.email = page.getByTestId('login-email');
     this.password = page.getByTestId('login-password');
     this.submit = page.getByTestId('login-submit');

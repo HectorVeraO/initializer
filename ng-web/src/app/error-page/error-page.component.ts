@@ -1,14 +1,14 @@
 import { Component, computed, inject, input, signal, ChangeDetectionStrategy } from '@angular/core';
 import { TranslocoModule } from '@jsverse/transloco';
+import { ButtonModule } from '@openng/optimus-ui/button';
 import { RuntimeConfigService } from '@/core/config/runtime-config.service';
 
 /** Full-page error. With no `errorKey` it explains why `runtime-config.json` could not be used. */
 @Component({
   selector: 'p-error-page',
-  imports: [TranslocoModule],
+  imports: [TranslocoModule, ButtonModule],
   templateUrl: './error-page.component.html',
-  changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrl: './error-page.component.scss'
+  changeDetection: ChangeDetectionStrategy.Eager
 })
 export class ErrorPageComponent {
   private readonly runtimeConfig = inject(RuntimeConfigService);

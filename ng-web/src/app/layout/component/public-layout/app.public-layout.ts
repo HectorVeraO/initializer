@@ -1,16 +1,12 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { AppFloatingConfigurator } from '../floating-configurator/app.floatingconfigurator';
 
-/** Frame of the pages outside the shell (login): the page plus the floating theme configurator. */
+/** Frame of the pages outside the shell (login, invitation acceptance): the page fills the viewport. */
 @Component({
   selector: 'p-public-layout',
   standalone: true,
-  imports: [RouterOutlet, AppFloatingConfigurator],
+  imports: [RouterOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <p-floating-configurator />
-    <router-outlet />
-  `
+  template: ` <router-outlet /> `
 })
 export class AppPublicLayout {}
