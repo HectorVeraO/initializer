@@ -62,7 +62,7 @@ The console in Docker reaches only the `go-srv` container, so editing `go-srv` r
 
 ## Feature flags
 
-`APP_FLAGS_FILE` is the path of the `flags.yaml` manifest, required when the `feature-flags` module is installed (`../flags.yaml` from `go-srv/`, set by `.example.env`). A relative path resolves against the process working directory. A missing, unreadable or invalid file stops startup with exit `1` and every problem listed.
+`APP_FLAGS_FILE` is the path of the `flags.yaml` manifest, or a comma-separated list of them, required when the `feature-flags` module is installed (`../flags.yaml` from `go-srv/`, set by `.example.env`). The files are read in order and merged, and a later file wins on a duplicate key. A relative path resolves against the process working directory; a blank segment, or a missing, unreadable or invalid file, stops startup with exit `1` and every problem listed.
 <!-- initializer:end feature-flags -->
 
 <!-- initializer:module identity -->

@@ -99,16 +99,36 @@ type EnvPair struct {
 	Key, Value string
 }
 
+// pathKeyPattern matches the keys whose value is a project-root relative path
+// or a comma-separated list of them, so a bare "flags.yaml" is prefixed too.
+var pathKeyPattern = regexp.MustCompile(`_(FILE|FILES|PATH|PATHS|DIR|DIRS)$`)
+
 // goSrvValue returns the value as go-srv reads it when started from go-srv/,
-// the working directory .deploy/local/README.md documents: a project-root
-// relative path gets the "../" prefix; any other value stays as is.
+// the working directory .deploy/local/README.md documents: every segment is
+// trimmed, and every relative path segment of the list gets the "../" prefix;
+// every absolute, URL or non-path segment stays as is.
 func (p EnvPair) goSrvValue() string {
-	isPath := strings.Contains(p.Value, "/") && !strings.Contains(p.Value, "://")
-	isRelative := !strings.HasPrefix(p.Value, "/")
-	if isPath && isRelative {
-		return "../" + p.Value
+	segments := strings.Split(p.Value, ",")
+	isPathKey := pathKeyPattern.MatchString(p.Key)
+	for i, segment := range segments {
+		segments[i] = goSrvSegment(strings.TrimSpace(segment), isPathKey)
 	}
-	return p.Value
+	return strings.Join(segments, ",")
+}
+
+// goSrvSegment prefixes one segment when it is a relative path. A segment is a
+// path when it contains a slash or its key names a path setting, so a bare
+// "flags.yaml" under APP_FLAGS_FILE is prefixed and a bare value such as
+// "change-me-local-only" is not.
+func goSrvSegment(segment string, isPathKey bool) string {
+	isEmpty := segment == ""
+	isURL := strings.Contains(segment, "://")
+	isAbsolute := strings.HasPrefix(segment, "/")
+	isPath := strings.Contains(segment, "/") || isPathKey
+	if isEmpty || !isPath || isURL || isAbsolute {
+		return segment
+	}
+	return "../" + segment
 }
 
 // goSrvEnv returns the pairs with their values as go-srv reads them.

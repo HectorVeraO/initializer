@@ -141,6 +141,59 @@ func LoadManifestFile(path string) (Manifest, error) {
 	return manifest, nil
 }
 
+// LoadManifestFiles parses every path in order and merges them into one
+// manifest; the first unreadable or invalid file stops the load and names its
+// path, with no fallback to defaults.
+func LoadManifestFiles(paths []string) (Manifest, error) {
+	if len(paths) == 0 {
+		return Manifest{}, errors.New("flags manifest: no path given")
+	}
+	manifests := make([]Manifest, 0, len(paths))
+	for _, path := range paths {
+		manifest, err := LoadManifestFile(path)
+		if err != nil {
+			return Manifest{}, err
+		}
+		manifests = append(manifests, manifest)
+	}
+	return mergeManifests(manifests), nil
+}
+
+// SplitManifestPaths splits an APP_FLAGS_FILE value into the paths it names:
+// one or more comma-separated paths, in order. Blank space around a path is
+// trimmed; a blank segment is an error, never skipped.
+func SplitManifestPaths(value string) ([]string, error) {
+	segments := strings.Split(value, ",")
+	paths := make([]string, 0, len(segments))
+	for position, segment := range segments {
+		path := strings.TrimSpace(segment)
+		if path == "" {
+			return nil, fmt.Errorf("%s %q: path %d of the list is empty", flagsFileKey, value, position+1)
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
+}
+
+// mergeManifests layers the manifests in order: a key declared in more than one
+// of them takes the definition of the last one and keeps the position of its
+// first declaration.
+func mergeManifests(manifests []Manifest) Manifest {
+	merged := Manifest{index: make(map[featureflag.Key]int)}
+	for _, manifest := range manifests {
+		for _, flag := range manifest.Flags() {
+			position, seen := merged.index[flag.Key]
+			if seen {
+				merged.flags[position] = flag
+				continue
+			}
+			merged.index[flag.Key] = len(merged.flags)
+			merged.flags = append(merged.flags, flag)
+		}
+	}
+	return merged
+}
+
 // ParseManifest reads and validates a flags.yaml document. Every problem is
 // reported together in a *ManifestError; it never compares expires_at with the
 // current date (that is a CI rule of `gates flags`).
