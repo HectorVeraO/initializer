@@ -6,6 +6,8 @@ import {
   uniqueId,
 } from '../../../../src/helpers/platform/ids';
 import type { Page } from '@playwright/test';
+import type { SeedUser } from '../../../../src/helpers/platform/api';
+import type { LoginPage } from '../../../../src/pages/platform/identity/LoginPage';
 import type { ShellPage } from '../../../../src/pages/platform/identity/ShellPage';
 
 const env = assertPlatformEnv();
@@ -19,19 +21,22 @@ const UI_RESTYLE = 'ui_restyle';
 type Frame = 'restyled' | 'legacy';
 
 /**
- * Opens `path` in a document created after the override and waits for the
- * frame it selects. The screen reads the flag from the session snapshot, so a
- * document that existed before the toggle can still hold the previous one:
- * every case that toggles starts from a fresh document and names the frame
- * before it asserts anything narrower.
+ * Signs in again after the override changed. Every screen reads the flag from
+ * the session snapshot, and a session created before the toggle keeps the old
+ * one however many documents load; discarding the cookies makes the next
+ * sign-in create a new session, and the frame it renders is named before any
+ * screen is asserted.
  */
-async function openWithFrame(
+async function signInWithFrame(
   page: Page,
   shellPage: ShellPage,
-  path: string,
+  loginPage: LoginPage,
+  user: SeedUser,
   frame: Frame,
 ): Promise<void> {
-  await page.goto(path);
+  await page.context().clearCookies();
+  await page.goto('/login');
+  await loginPage.signIn(user, '/home');
   await expect(
     frame === 'restyled' ? shellPage.restyledTopbar : shellPage.legacyTopbar,
   ).toBeVisible();
@@ -131,13 +136,9 @@ test.describe('Restyled module pages', () => {
 
       await operator.setGlobalFlag(UI_RESTYLE, true);
       try {
-        await page.goto('/login');
-        await loginPage.signIn(
-          { email: auth.email, password: auth.password },
-          '/home',
-        );
+        await signInWithFrame(page, shellPage, loginPage, auth, 'restyled');
 
-        await openWithFrame(page, shellPage, '/operator/tenants', 'restyled');
+        await page.goto('/operator/tenants');
         await expect(page.getByTestId('tenants-list-card')).toBeVisible();
         await expect(page.getByTestId('tenants-suspension-note')).toBeVisible();
         await operatorTenantsPage.create(
@@ -149,12 +150,7 @@ test.describe('Restyled module pages', () => {
         await page.getByTestId('one-time-secret-close').click();
         await expect(operatorTenantsPage.status(slug)).toHaveText('Activo');
 
-        await openWithFrame(
-          page,
-          shellPage,
-          '/operator/feature-flags',
-          'restyled',
-        );
+        await page.goto('/operator/feature-flags');
         await expect(page.getByTestId('flags-list-card')).toBeVisible();
         await expect(page.getByTestId('flags-row').first()).toBeVisible();
         await page.getByTestId('flag-open').first().click();
@@ -205,10 +201,9 @@ test.describe('Restyled module pages', () => {
       });
       await operator.setGlobalFlag(UI_RESTYLE, true);
       try {
-        await page.goto('/login');
-        await loginPage.signIn(admin, '/home');
+        await signInWithFrame(page, shellPage, loginPage, admin, 'restyled');
 
-        await openWithFrame(page, shellPage, '/api-keys', 'restyled');
+        await page.goto('/api-keys');
         await expect(page.getByTestId('api-keys-list-card')).toBeVisible();
         await expect(page.getByTestId('api-keys-owner')).toBeVisible();
         await page.getByTestId('api-key-new').click();
@@ -218,7 +213,7 @@ test.describe('Restyled module pages', () => {
         await page.getByTestId('api-key-cancel').click();
         await expect(page.getByTestId('api-key-name')).toHaveCount(0);
 
-        await openWithFrame(page, shellPage, '/invitations', 'restyled');
+        await page.goto('/invitations');
         await expect(page.getByTestId('invitations-list-card')).toBeVisible();
         await page.getByTestId('invite-new').click();
         await expect(invitationsPage.email).toBeVisible();
@@ -226,13 +221,13 @@ test.describe('Restyled module pages', () => {
         await page.getByTestId('invite-cancel').click();
         await expect(invitationsPage.email).toHaveCount(0);
 
-        await openWithFrame(page, shellPage, '/memberships', 'restyled');
+        await page.goto('/memberships');
         await expect(page.getByTestId('memberships-list-card')).toBeVisible();
         await expect(
           membershipsPage.row(admin.email.split('@')[0]),
         ).toBeVisible();
 
-        await openWithFrame(page, shellPage, '/parameters', 'restyled');
+        await page.goto('/parameters');
         await expect(page.getByTestId('parameters-list-card')).toBeVisible();
         await expect(parametersPage.value(key)).toHaveText('3');
         await parametersPage.openOverride(key);
@@ -254,17 +249,13 @@ test.describe('Restyled module pages', () => {
       const { auth } = loadEnv();
 
       await operator.clearGlobalFlag(UI_RESTYLE);
-      await page.goto('/login');
-      await loginPage.signIn(
-        { email: auth.email, password: auth.password },
-        '/home',
-      );
+      await signInWithFrame(page, shellPage, loginPage, auth, 'legacy');
 
-      await openWithFrame(page, shellPage, '/operator/tenants', 'legacy');
+      await page.goto('/operator/tenants');
       await expect(page.getByTestId('tenant-form')).toBeVisible();
       await expect(page.getByTestId('tenants-list-card')).toHaveCount(0);
 
-      await openWithFrame(page, shellPage, '/operator/feature-flags', 'legacy');
+      await page.goto('/operator/feature-flags');
       await expect(page.getByTestId('flags-list-card')).toHaveCount(0);
       await page.getByTestId('flag-open').first().click();
       await expect(page.getByTestId('flag-tenant-form')).toBeVisible();
@@ -304,24 +295,23 @@ test.describe('Restyled module pages', () => {
       await operator.clearGlobalFlag(UI_RESTYLE);
 
       try {
-        await page.goto('/login');
-        await loginPage.signIn(admin, '/home');
+        await signInWithFrame(page, shellPage, loginPage, admin, 'legacy');
 
-        await openWithFrame(page, shellPage, '/api-keys', 'legacy');
+        await page.goto('/api-keys');
         await expect(page.getByTestId('api-key-form')).toBeVisible();
         await expect(page.getByTestId('api-keys-list-card')).toHaveCount(0);
 
-        await openWithFrame(page, shellPage, '/invitations', 'legacy');
+        await page.goto('/invitations');
         await expect(invitationsPage.email).toBeVisible();
         await expect(page.getByTestId('invitations-list-card')).toHaveCount(0);
 
-        await openWithFrame(page, shellPage, '/memberships', 'legacy');
+        await page.goto('/memberships');
         await expect(
           membershipsPage.row(admin.email.split('@')[0]),
         ).toBeVisible();
         await expect(page.getByTestId('memberships-list-card')).toHaveCount(0);
 
-        await openWithFrame(page, shellPage, '/parameters', 'legacy');
+        await page.goto('/parameters');
         await expect(parametersPage.row(key)).toBeVisible();
         await expect(page.getByTestId('parameters-list-card')).toHaveCount(0);
       } finally {
