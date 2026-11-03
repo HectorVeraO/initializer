@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -690,6 +691,68 @@ func TestCoreOnlyProjectShipsNothingOfIdentity(t *testing.T) {
 	}
 	if got := strings.Join(lock.Selection.Modules, ","); got != "core" {
 		t.Errorf("recorded modules = %q", got)
+	}
+}
+
+// indexCookbooks returns the cookbook names the component index lists, or nil
+// when it has no cookbooks row.
+func indexCookbooks(t *testing.T, agents string) []string {
+	t.Helper()
+	for _, line := range strings.Split(agents, "\n") {
+		const rowPrefix = "| `cookbooks/` | The patterns: "
+		rest, isRow := strings.CutPrefix(line, rowPrefix)
+		if !isRow {
+			continue
+		}
+		list, found := strings.CutSuffix(rest, ". Read the one for the task at hand. |")
+		if !found {
+			t.Fatalf("the cookbooks row has another shape: %q", line)
+		}
+		if list == "" {
+			return nil
+		}
+		return strings.Split(list, ", ")
+	}
+	return nil
+}
+
+// The component index and the component folder must agree: the row lists exactly
+// the cookbooks the plan delivers, and the flags cookbook arrives only with the
+// module that owns it.
+func TestTheComponentIndexListsTheDeliveredCookbooks(t *testing.T) {
+	checkout := fixture.LoadCheckout(t)
+	cases := []struct {
+		name string
+		sel  manifest.Selection
+		want []string
+	}{
+		{"core only", selection(targetModule), []string{
+			"architecture.md", "data-migrations.md", "new-domain-module.md", "testing-tck.md"}},
+		{"every module", selection(targetModule, "feature-flags", "parameters", "tenancy"), []string{
+			"architecture.md", "data-migrations.md", "new-domain-module.md", "tbd-feature-flags.md", "testing-tck.md"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			project, err := build(t, os.DirFS(checkout.Root), checkout.Catalog, checkout.CatalogBytes, tc.sel)
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			const folder = "acme-backend-srv/cookbooks/"
+			var delivered []string
+			for path := range projectPaths(project) {
+				if name, isCookbook := strings.CutPrefix(path, folder); isCookbook {
+					delivered = append(delivered, name)
+				}
+			}
+			sort.Strings(delivered)
+			if strings.Join(delivered, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("the folder holds %v, want %v", delivered, tc.want)
+			}
+			listed := indexCookbooks(t, projectFile(t, project, "acme-backend-srv/AGENTS.md"))
+			if strings.Join(listed, ",") != strings.Join(delivered, ",") {
+				t.Errorf("the index lists %v, the folder holds %v", listed, delivered)
+			}
+		})
 	}
 }
 

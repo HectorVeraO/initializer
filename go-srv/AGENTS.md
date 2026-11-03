@@ -14,6 +14,7 @@ Read the fragment routed to your task before building here; this `AGENTS.md` is 
 
 | Task | Fragment |
 |---|---|
+| Adding a product vertical: its module, route, tables, flags or parameters | `cookbooks/new-domain-module.md` |
 | Adding or changing a module, route, handler or error response | `cookbooks/architecture.md` |
 | Creating or changing a table, column, index or migration | `cookbooks/data-migrations.md` |
 | Adding, evaluating or removing a feature flag; splitting a feature into PRs | `cookbooks/tbd-feature-flags.md` |

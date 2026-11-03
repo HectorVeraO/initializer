@@ -14,13 +14,15 @@ import (
 )
 
 // repoPortFiles are the source paths of the declared port files of the
-// repository and, for the ng-web ones, the stack they belong to.
+// repository and, for the ones a stack delivers under its component folder, the
+// stack they belong to.
 var repoPortFiles = map[string]string{
 	".deploy/local/docker-compose.yml": "",
 	".deploy/local/.example.env":       "",
 	".deploy/local/README.md":          "",
 	"mise.toml":                        "",
 	".deploy/local/kratos/kratos.yml":  "",
+	"go-srv/cookbooks/testing-tck.md":  "go-srv",
 	"ng-web/angular.json":              "ng-web",
 	"ng-web/package.json":              "ng-web",
 	"ng-web/proxy.conf.json":           "ng-web",

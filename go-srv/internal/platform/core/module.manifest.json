@@ -15,6 +15,7 @@
     ".deploy/local/.example.env",
     ".deploy/local/README.md",
     ".deploy/local/docker-compose.yml",
+    "go-srv/cookbooks/testing-tck.md",
     "mise.toml"
   ],
   "perComponent": [".deploy/local/.example.env"],
@@ -25,6 +26,7 @@
     "go-srv/",
     "mise.toml",
     "specs/.gitignore",
+    "specs/cookbooks/",
     "specs/package-lock.json",
     "specs/package.json",
     "specs/playwright.config.ts",
@@ -33,8 +35,7 @@
     "specs/tsconfig.json"
   ],
   "exclude": [
-    "go-srv/AGENTS.md",
-    "go-srv/cookbooks/"
+    "go-srv/AGENTS.md"
   ],
   "seeds": [
     "go-srv/cmd/server/product.go"
@@ -120,6 +121,9 @@
     { "path": ".deploy/local/README.md", "text": "mise run dev:%{task.go-srv}\n```" },
     { "path": ".deploy/local/docker-compose.yml", "text": "${APP_PUBLIC_BASE_URL%{instanceEnvSuffix.go-srv}:-" },
     { "path": ".deploy/local/README.md", "text": "`%{component.go-srv}` on 10100 also proxies" },
-    { "path": "go-srv/internal/platform/core/core.go", "text": "defaultService    = \"%{component.go-srv}\"" }
+    { "path": "go-srv/internal/platform/core/core.go", "text": "defaultService    = \"%{component.go-srv}\"" },
+    { "path": "go-srv/cookbooks/architecture.md", "text": "%{component.go-srv}/" },
+    { "path": "go-srv/cookbooks/data-migrations.md", "text": "%{component.go-srv}/" },
+    { "path": "go-srv/cookbooks/new-domain-module.md", "text": "%{component.go-srv}/" }
   ]
 }

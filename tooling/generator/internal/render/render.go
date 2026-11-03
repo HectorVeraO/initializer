@@ -326,6 +326,48 @@ func readmeMulti(in ReadmeInput) ([]byte, error) {
 // moduleIDPattern is the module id grammar shared by both stacks.
 var moduleIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
+// componentPattern is the grammar of a component folder name.
+var componentPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+
+// validCookbookPattern is the shape of a cookbook file name.
+var validCookbookPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*\.md$`)
+
+// AgentsInput is the data of a component's AGENTS.md.
+type AgentsInput struct {
+	// Component is the component folder, validated as a lowercase label.
+	Component string
+	// Modules are the catalog modules the component installs, core excluded.
+	Modules []string
+	// Cookbooks are the cookbook files delivered with the component.
+	Cookbooks []string
+	// Multi reports a project with two or more backends, where the per-component
+	// files sit in a folder of their own under .deploy/local/.
+	Multi bool
+	// Flags reports that the component installs the module that delivers
+	// flags.yaml, APP_FLAGS_FILE and the evaluator.
+	Flags bool
+}
+
+// AgentsMD renders the AGENTS.md of one component: where its code lives, how to
+// build and test it, and the rules that make a change correct there. It names no
+// port and no repository command, so it reads the same in every project.
+func AgentsMD(in AgentsInput) ([]byte, error) {
+	if !componentPattern.MatchString(in.Component) {
+		return nil, fmt.Errorf("component %q is not a lowercase label", in.Component)
+	}
+	for _, module := range in.Modules {
+		if !moduleIDPattern.MatchString(module) {
+			return nil, fmt.Errorf("module id %q is not valid", module)
+		}
+	}
+	for _, cookbook := range in.Cookbooks {
+		if !validCookbookPattern.MatchString(cookbook) {
+			return nil, fmt.Errorf("cookbook %q is not a markdown file name", cookbook)
+		}
+	}
+	return execute("AGENTS.md.tmpl", in)
+}
+
 // WebSymbol returns the wiring symbol of an Angular module: the camelCase id
 // plus "Module" (feature-flags -> featureFlagsModule).
 func WebSymbol(id string) (string, error) {

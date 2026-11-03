@@ -30,6 +30,9 @@ import (
 // readmeName is the rendered project README.
 const readmeName = "README.md"
 
+// agentsName is the rendered AGENTS.md of each Go component.
+const agentsName = "AGENTS.md"
+
 // localDeploy is the folder of the compose project; a multi project delivers
 // the per-component files of each backend in a folder of it named after the
 // component.
@@ -867,14 +870,17 @@ func (b *builder) render() ([]lockfile.File, error) {
 	return generated, nil
 }
 
-// renderGoRoot renders the go-srv composition root of one component with its
-// own module list and Go module path.
+// renderGoRoot renders the go-srv composition root and the AGENTS.md of one
+// component with its own module list and Go module path.
 func (b *builder) renderGoRoot(stack plan.ComponentPlan, record func(string, []byte) error) error {
 	var folders []string
+	var ids []string
 	for _, module := range stack.Modules {
-		if module.Module != manifest.CoreModule {
-			folders = append(folders, lockfile.ModuleFolder(stack.Stack, module.Module))
+		if module.Module == manifest.CoreModule {
+			continue
 		}
+		folders = append(folders, lockfile.ModuleFolder(stack.Stack, module.Module))
+		ids = append(ids, module.Module)
 	}
 	raw, err := render.ModulesGo(b.source, folders)
 	if err != nil {
@@ -887,7 +893,53 @@ func (b *builder) renderGoRoot(stack plan.ComponentPlan, record func(string, []b
 		return fmt.Errorf("%s: %w", sourceForm, err)
 	}
 	root, _ := compositionRoot(stack)
-	return record(root, rewritten)
+	if err := record(root, rewritten); err != nil {
+		return err
+	}
+	agents, err := render.AgentsMD(render.AgentsInput{
+		Component: stack.Name,
+		Modules:   ids,
+		Cookbooks: cookbooksOf(stack),
+		Multi:     b.opts.Plan.Multi(),
+		Flags:     installsModule(stack, "feature-flags"),
+	})
+	if err != nil {
+		return err
+	}
+	return record(stack.Name+"/"+agentsName, agents)
+}
+
+// cookbooksOf returns the cookbook files the plan delivers into the component's
+// cookbooks/ folder, sorted by name: every markdown file a module of its stack
+// installs under <stack>/cookbooks/. Excluded files and the files another module
+// owns never reach the plan, so the rendered index lists what the folder holds.
+func cookbooksOf(stack plan.ComponentPlan) []string {
+	prefix := stack.Stack + "/cookbooks/"
+	seen := map[string]bool{}
+	var names []string
+	for _, module := range stack.Modules {
+		for _, file := range module.Files {
+			rest, isCookbook := strings.CutPrefix(file.Path, prefix)
+			isDirectChild := !strings.Contains(rest, "/")
+			if !isCookbook || !isDirectChild || !strings.HasSuffix(rest, ".md") || seen[rest] {
+				continue
+			}
+			seen[rest] = true
+			names = append(names, rest)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// installsModule reports whether the component installs the module id.
+func installsModule(stack plan.ComponentPlan, id string) bool {
+	for _, module := range stack.Modules {
+		if module.Module == id {
+			return true
+		}
+	}
+	return false
 }
 
 // renderWebRoot renders the ng-web composition root of one component; no path
