@@ -54,7 +54,7 @@ const (
 var (
 	ignoredDirs = map[string]bool{
 		"tck-support": true, "scripts": true, "node_modules": true,
-		"test-results": true, "playwright-report": true,
+		"test-results": true, "playwright-report": true, "cookbooks": true,
 	}
 	tagPattern     = regexp.MustCompile(`^@[a-z][a-z0-9-]*$`)
 	excludedLevels = map[string]bool{"draft": true, "alpha": true}
