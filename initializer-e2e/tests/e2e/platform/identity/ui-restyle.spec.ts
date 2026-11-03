@@ -82,10 +82,7 @@ test.describe('Console shell', () => {
 test.describe('Module pages', () => {
   test.describe.configure({ mode: 'serial' });
 
-  // fixme: the shell renders the frame but the module pages render no screen
-  // under the same session; the unit tests cover every page meanwhile.
-  // Tracked in #279 so the cause is found from a trace, not guessed.
-  test.fixme(
+  test(
     'operator screens: tenants and flags show the shared recipes and open their dialogs',
     { tag: ['@e2e', '@ui-restyle'] },
     async ({ page, loginPage, shellPage, operatorTenantsPage }, testInfo) => {
@@ -122,8 +119,7 @@ test.describe('Module pages', () => {
     },
   );
 
-  // fixme: same as above, #279.
-  test.fixme(
+  test(
     'tenant screens: keys, invitations, members and parameters show the shared recipes and open their dialogs',
     { tag: ['@e2e', '@ui-restyle'] },
     async (
@@ -131,6 +127,7 @@ test.describe('Module pages', () => {
         page,
         loginPage,
         shellPage,
+        tenantSwitcher,
         operator,
         invitationsPage,
         membershipsPage,
@@ -142,7 +139,7 @@ test.describe('Module pages', () => {
       const id = uniqueId(testInfo);
       // The definitions table pages the fetched rows, so the row under test sorts first.
       const key = `aaa.e2e.p${id}.max_attempts`;
-      const { admin } = await newTenantAdmin();
+      const { tenant, admin } = await newTenantAdmin();
 
       await operator.createParameter({
         key,
@@ -155,6 +152,13 @@ test.describe('Module pages', () => {
 
       try {
         await signInToShell(page, shellPage, loginPage, admin);
+
+        // Every screen below is tenant-scoped: the guard sends a session with
+        // no active tenant to /no-tenant before the screen renders.
+        await tenantSwitcher.switchTo(tenant.slug);
+        await expect
+          .poll(() => tenantSwitcher.activeTenantSlug())
+          .toBe(tenant.slug);
 
         await page.goto('/api-keys');
         await expect(page.getByTestId('api-keys-list-card')).toBeVisible();

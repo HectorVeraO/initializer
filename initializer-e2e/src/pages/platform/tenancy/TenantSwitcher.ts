@@ -15,8 +15,15 @@ export class TenantSwitcher {
     return slug === '' ? null : slug;
   }
 
-  /** Opens the tenant switcher, picks the tenant and waits for the switch to answer 200. */
+  /**
+   * Opens the tenant switcher, picks the tenant and waits for the switch to
+   * answer 200. A no-op when `slug` is already active: an unchanged select
+   * fires no request.
+   */
   async switchTo(slug: string): Promise<void> {
+    if ((await this.activeTenantSlug()) === slug) {
+      return;
+    }
     await this.page.getByTestId('tenant-switcher').click();
     const answered = this.page.waitForResponse(
       (response) =>
