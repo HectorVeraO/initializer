@@ -10,7 +10,7 @@ const SHADOW_LG = '0 4px 6px -2px rgba(0, 0, 0, 0.03), 0 12px 16px -4px rgba(0, 
 const SHADOW_XL = '0 8px 8px -4px rgba(0, 0, 0, 0.03), 0 20px 24px -4px rgba(0, 0, 0, 0.08)';
 
 /**
- * initializer design system on top of Aura: the interface green primary scale,
+ * The console design system on top of Aura: the interface green primary scale,
  * neutral grayscale surfaces, Rubik, 8 px radius and the design token shadow
  * scale. Component tokens cover what the screens use; the `css` blocks add only
  * what the token set does not expose (borders on tags, cards and the table
