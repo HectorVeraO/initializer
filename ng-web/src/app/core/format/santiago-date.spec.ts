@@ -1,4 +1,4 @@
-import { formatSantiago } from './santiago-date';
+import { formatSantiago, formatSantiagoDay } from './santiago-date';
 
 describe('formatSantiago', () => {
   it('shows a UTC instant in Chilean summer time (UTC-3)', () => {
@@ -19,5 +19,19 @@ describe('formatSantiago', () => {
 
   it('returns unparseable input unchanged', () => {
     expect(formatSantiago('not a date')).toBe('not a date');
+  });
+});
+
+describe('formatSantiagoDay', () => {
+  it('shows the Santiago day of a UTC instant', () => {
+    expect(formatSantiagoDay('2026-10-01T03:00:00.000Z')).toBe('01/10/2026');
+  });
+
+  it('uses the day the instant falls on in Santiago, not in UTC', () => {
+    expect(formatSantiagoDay('2026-07-15T02:30:00Z')).toBe('14/07/2026');
+  });
+
+  it('returns unparseable input unchanged', () => {
+    expect(formatSantiagoDay('not a date')).toBe('not a date');
   });
 });

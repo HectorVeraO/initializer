@@ -1,17 +1,107 @@
-.layout-main-container {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  justify-content: space-between;
-  padding: 6rem 2rem 0 2rem;
-  transition: margin-left var(--layout-section-transition-duration);
-}
+@layer components {
+  .layout-wrapper {
+    min-height: 100vh;
+    background-color: var(--layout-content-background);
+  }
 
-.layout-main {
-  flex: 1 1 auto;
-  padding-bottom: 2rem;
-}
+  .layout-main-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 100vh;
+    padding-top: var(--layout-topbar-height);
+    margin-left: var(--layout-sidebar-width);
+    transition: margin-left var(--layout-transition);
+  }
 
-img {
-  max-width: none !important;
+  .layout-main {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 1504px;
+    margin: 0 auto;
+    padding: 24px 40px 32px 40px;
+  }
+
+  .layout-footer {
+    padding: 24px 16px;
+    color: var(--p-text-muted-color);
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+  }
+
+  .layout-mask {
+    display: none;
+  }
+
+  @media (min-width: 992px) {
+    // Overlay mode of the shell (the configurator's "Overlay"): the sidebar
+    // slides over the content instead of taking a column, so the container
+    // keeps no left margin. Restored from the retired `_responsive.scss`, on
+    // the dimensions and shadow of this design.
+    .layout-wrapper.layout-overlay {
+      .layout-main-container {
+        margin-left: 0;
+      }
+
+      .layout-sidebar {
+        transform: translateX(-100%);
+        box-shadow:
+          0 8px 8px -4px rgba(0, 0, 0, 0.03),
+          0 20px 24px -4px rgba(0, 0, 0, 0.08);
+      }
+
+      &.layout-overlay-active .layout-sidebar {
+        transform: translateX(0);
+      }
+    }
+
+    .layout-wrapper.layout-static-inactive {
+      .layout-sidebar {
+        transform: translateX(-100%);
+      }
+
+      .layout-main-container {
+        margin-left: 0;
+      }
+    }
+  }
+
+  @media (max-width: 991px) {
+    .blocked-scroll {
+      overflow: hidden;
+    }
+
+    .layout-main-container {
+      margin-left: 0;
+    }
+
+    .layout-main {
+      padding: 16px;
+    }
+
+    .layout-sidebar {
+      transform: translateX(-100%);
+      box-shadow:
+        0 8px 8px -4px rgba(0, 0, 0, 0.03),
+        0 20px 24px -4px rgba(0, 0, 0, 0.08);
+    }
+
+    .layout-mask {
+      position: fixed;
+      inset: var(--layout-topbar-height) 0 0 0;
+      z-index: 998;
+      background-color: var(--p-mask-background);
+    }
+
+    .layout-wrapper.layout-mobile-active {
+      .layout-sidebar {
+        transform: translateX(0);
+      }
+
+      .layout-mask {
+        display: block;
+      }
+    }
+  }
 }

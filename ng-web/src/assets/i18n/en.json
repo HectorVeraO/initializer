@@ -26,7 +26,32 @@
     "notFoundMessage": "The requested resource is not available.",
     "goToDashboard": "Go to dashboard",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "details": "Details",
+    "actions": "Actions",
+    "rowActions": "Row actions"
+  },
+  "filterBar": {
+    "clear": "Clear",
+    "search": "Search"
+  },
+  "period": {
+    "label": "Period",
+    "lastDays": "Last {{days}} days",
+    "custom": "Custom",
+    "customRange": "Custom range",
+    "rangePlaceholder": "dd/mm/yyyy - dd/mm/yyyy",
+    "none": "No range",
+    "range": "Range: {{from}} - {{to}}"
+  },
+  "statuses": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "suspended": "Suspended",
+    "revoked": "Revoked",
+    "pending": "Pending",
+    "accepted": "Accepted",
+    "expired": "Expired"
   },
   "toasts": {
     "deleted": "Deleted",

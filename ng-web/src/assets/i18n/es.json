@@ -26,7 +26,32 @@
     "notFoundMessage": "El recurso solicitado no está disponible.",
     "goToDashboard": "Ir al inicio",
     "yes": "Sí",
-    "no": "No"
+    "no": "No",
+    "details": "Detalles",
+    "actions": "Acciones",
+    "rowActions": "Acciones de la fila"
+  },
+  "filterBar": {
+    "clear": "Limpiar",
+    "search": "Buscar"
+  },
+  "period": {
+    "label": "Periodo",
+    "lastDays": "Últimos {{days}} días",
+    "custom": "Personalizado",
+    "customRange": "Rango personalizado",
+    "rangePlaceholder": "dd/mm/aaaa - dd/mm/aaaa",
+    "none": "Sin rango",
+    "range": "Rango: {{from}} - {{to}}"
+  },
+  "statuses": {
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "suspended": "Suspendido",
+    "revoked": "Revocado",
+    "pending": "Pendiente",
+    "accepted": "Aceptado",
+    "expired": "Vencido"
   },
   "toasts": {
     "deleted": "Eliminado",

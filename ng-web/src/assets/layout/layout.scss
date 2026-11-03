@@ -1,13 +1,10 @@
+// The custom-property aliases of the shell (`--text-color`, `--surface-card`, ...)
+// stay because templates and component styles still read them; the design system
+// itself only reads the `--p-*` tokens. They leave with the shell restyle.
 @use './variables/_common';
 @use './variables/_light';
 @use './variables/_dark';
-@use './_mixins';
-@use './_preloading';
 @use './_core';
-@use './_main';
 @use './_topbar';
 @use './_menu';
-@use './_footer';
-@use './_responsive';
-@use './_utils';
-@use './_typography';
+@use './_main';

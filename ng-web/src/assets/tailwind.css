@@ -3,9 +3,89 @@
 @custom-variant dark (&:where(.app-dark, .app-dark *));
 
 @theme {
-    --breakpoint-sm: 576px;
-    --breakpoint-md: 768px;
-    --breakpoint-lg: 992px;
-    --breakpoint-xl: 1200px;
-    --breakpoint-2xl: 1920px;
+  --breakpoint-sm: 576px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 992px;
+  --breakpoint-xl: 1200px;
+  --breakpoint-2xl: 1920px;
+
+  --font-sans: 'Rubik', ui-sans-serif, system-ui, sans-serif;
+
+  --text-xxs: 10px;
+  --text-xxs--line-height: 16px;
+  --text-xs: 12px;
+  --text-xs--line-height: 18px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-md: 16px;
+  --text-md--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 30px;
+  --text-display-xs: 24px;
+  --text-display-xs--line-height: 32px;
+  --text-display-sm: 30px;
+  --text-display-sm--line-height: 38px;
+  --text-display-md: 36px;
+  --text-display-md--line-height: 44px;
+  --text-display-md--letter-spacing: -0.02em;
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 60px;
+  --text-display-lg--letter-spacing: -0.02em;
+
+  --radius-xxs: 2px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 20px;
+  --radius-4xl: 24px;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0);
+  --shadow-md: 0 2px 4px -2px rgba(0, 0, 0, 0.06), 0 4px 8px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 6px -2px rgba(0, 0, 0, 0.03), 0 12px 16px -4px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 8px 8px -4px rgba(0, 0, 0, 0.03), 0 20px 24px -4px rgba(0, 0, 0, 0.08);
+  --shadow-2xl: 0 24px 48px -12px rgba(0, 0, 0, 0.18);
+  --shadow-3xl: 0 32px 64px -12px rgba(0, 0, 0, 0.14);
+}
+
+/* The state scales of the preset, so `text-success-700` and `bg-danger-50` follow a retuned preset. */
+@theme inline {
+  --color-success-50: var(--p-success-50);
+  --color-success-100: var(--p-success-100);
+  --color-success-200: var(--p-success-200);
+  --color-success-300: var(--p-success-300);
+  --color-success-400: var(--p-success-400);
+  --color-success-500: var(--p-success-500);
+  --color-success-600: var(--p-success-600);
+  --color-success-700: var(--p-success-700);
+  --color-success-800: var(--p-success-800);
+  --color-success-900: var(--p-success-900);
+  --color-success-950: var(--p-success-950);
+
+  --color-danger-50: var(--p-danger-50);
+  --color-danger-100: var(--p-danger-100);
+  --color-danger-200: var(--p-danger-200);
+  --color-danger-300: var(--p-danger-300);
+  --color-danger-400: var(--p-danger-400);
+  --color-danger-500: var(--p-danger-500);
+  --color-danger-600: var(--p-danger-600);
+  --color-danger-700: var(--p-danger-700);
+  --color-danger-800: var(--p-danger-800);
+  --color-danger-900: var(--p-danger-900);
+  --color-danger-950: var(--p-danger-950);
+}
+
+/* Focus ring of the console, on its tokens: for the elements that are not a pButton and carry their own focus styles. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: var(--p-focus-ring-width) var(--p-focus-ring-style) var(--p-focus-ring-color);
+    outline-offset: var(--p-focus-ring-offset);
+  }
 }
