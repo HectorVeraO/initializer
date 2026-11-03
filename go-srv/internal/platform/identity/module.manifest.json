@@ -12,7 +12,10 @@
     { "name": "kratos-public", "offset": 33, "stride": 2 },
     { "name": "kratos-admin", "offset": 34, "stride": 2 }
   ],
-  "portFiles": [".deploy/local/kratos/kratos.yml"],
+  "portFiles": [
+    ".deploy/local/kratos/kratos.yml",
+    "go-srv/internal/platform/identity/kratos/kratos_integration_test.go"
+  ],
   "perComponent": [".deploy/local/kratos/"],
   "files": [
     ".deploy/local/kratos/",

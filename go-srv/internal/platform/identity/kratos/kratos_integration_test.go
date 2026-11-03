@@ -17,20 +17,41 @@ import (
 	"time"
 
 	"errors"
+	"fmt"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/identity/kratos"
 )
 
 // These tests run against the compose Kratos (oryd/kratos). They skip with a
-// message when it is unreachable. APP_TEST_PUBLIC_BASE_URL must equal the
-// origin the shared stack's Kratos was started with.
+// message when it is unreachable. The public base URL must equal the origin the
+// stack's Kratos was started with.
 
-func envOr(key, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
+// envChain returns the first non-empty value among keys, or fallback.
+func envChain(fallback string, keys ...string) string {
+	for _, key := range keys {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
 	}
-	return value
+	return fallback
+}
+
+// kratosURLs are the raw URLs of the Kratos under test.
+type kratosURLs struct {
+	public string
+	admin  string
+	base   string
+}
+
+// kratosURLsFromEnv resolves the URLs: the per-instance test override first,
+// then the app configuration, then the ports of the reference band this file
+// ships with.
+func kratosURLsFromEnv() kratosURLs {
+	return kratosURLs{
+		public: envChain("http://127.0.0.1:10133", "APP_TEST_KRATOS_PUBLIC_URL", "APP_KRATOS_PUBLIC_URL"),
+		admin:  envChain("http://127.0.0.1:10134", "APP_TEST_KRATOS_ADMIN_URL", "APP_KRATOS_ADMIN_URL"),
+		base:   strings.TrimRight(envChain("http://localhost:10120", "APP_TEST_PUBLIC_BASE_URL", "APP_PUBLIC_BASE_URL"), "/"),
+	}
 }
 
 type liveKratos struct {
@@ -52,25 +73,157 @@ func randomHex(t *testing.T, n int) string {
 
 func newLiveKratos(t *testing.T) liveKratos {
 	t.Helper()
-	publicRaw := envOr("APP_TEST_KRATOS_PUBLIC_URL", "http://127.0.0.1:10133")
-	adminRaw := envOr("APP_TEST_KRATOS_ADMIN_URL", "http://127.0.0.1:10134")
-	live := liveKratos{
-		publicURL:  mustParse(t, publicRaw),
-		adminURL:   mustParse(t, adminRaw),
-		publicBase: strings.TrimRight(envOr("APP_TEST_PUBLIC_BASE_URL", "http://localhost:10120"), "/"),
-	}
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(publicRaw + "/health/ready")
+	urls := kratosURLsFromEnv()
+	live, err := newLiveKratosAt(mustParse(t, urls.public), mustParse(t, urls.admin), urls.base)
 	if err != nil {
-		t.Skipf("Kratos unreachable at %s: %v", publicRaw, err)
+		t.Skipf("%v", err)
+	}
+	return live
+}
+
+// newLiveKratosAt probes Kratos at public and builds the harness on the URLs it
+// is given. It returns an error instead of skipping, so the caller owns the skip
+// message and a test can drive it against a stub.
+func newLiveKratosAt(public, admin *url.URL, publicBase string) (liveKratos, error) {
+	live := liveKratos{publicURL: public, adminURL: admin, publicBase: publicBase}
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(public.String() + "/health/ready")
+	if err != nil {
+		return liveKratos{}, fmt.Errorf("Kratos unreachable at %s: %w", public, err)
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Skipf("Kratos at %s not ready: %d", publicRaw, resp.StatusCode)
+		return liveKratos{}, fmt.Errorf("Kratos at %s not ready: %d", public, resp.StatusCode)
 	}
-	live.public = kratos.NewPublic(live.publicURL, "ory_kratos_session")
-	live.admin = kratos.NewAdmin(live.adminURL)
-	return live
+	live.public = kratos.NewPublic(public, "ory_kratos_session")
+	live.admin = kratos.NewAdmin(admin)
+	return live, nil
+}
+
+// kratosEnvKeys are every variable the URL defaults read.
+var kratosEnvKeys = []string{
+	"APP_TEST_KRATOS_PUBLIC_URL", "APP_KRATOS_PUBLIC_URL",
+	"APP_TEST_KRATOS_ADMIN_URL", "APP_KRATOS_ADMIN_URL",
+	"APP_TEST_PUBLIC_BASE_URL", "APP_PUBLIC_BASE_URL",
+}
+
+// setKratosEnv sets every variable of the chain, so a case sees exactly values.
+func setKratosEnv(t *testing.T, values map[string]string) {
+	t.Helper()
+	for _, key := range kratosEnvKeys {
+		t.Setenv(key, values[key])
+	}
+}
+
+func TestKratosURLsFallBackFromTheTestOverrideToTheAppConfiguration(t *testing.T) {
+	cases := []struct {
+		name   string
+		values map[string]string
+		want   kratosURLs
+	}{
+		{
+			name: "the per-instance test override wins",
+			values: map[string]string{
+				"APP_TEST_KRATOS_PUBLIC_URL": "http://override.test:10133",
+				"APP_TEST_KRATOS_ADMIN_URL":  "http://override.test:10134",
+				"APP_TEST_PUBLIC_BASE_URL":   "http://override.test:10120/",
+				"APP_KRATOS_PUBLIC_URL":      "http://configured.test:10133",
+				"APP_KRATOS_ADMIN_URL":       "http://configured.test:10134",
+				"APP_PUBLIC_BASE_URL":        "http://configured.test:10120",
+			},
+			want: kratosURLs{
+				public: "http://override.test:10133",
+				admin:  "http://override.test:10134",
+				base:   "http://override.test:10120",
+			},
+		},
+		{
+			name: "the app configuration defaults the URLs",
+			values: map[string]string{
+				"APP_KRATOS_PUBLIC_URL": "http://configured.test:10133",
+				"APP_KRATOS_ADMIN_URL":  "http://configured.test:10134",
+				"APP_PUBLIC_BASE_URL":   "http://configured.test:10120/",
+			},
+			want: kratosURLs{
+				public: "http://configured.test:10133",
+				admin:  "http://configured.test:10134",
+				base:   "http://configured.test:10120",
+			},
+		},
+		{
+			name:   "the reference band ports are the last fallback",
+			values: map[string]string{},
+			want: kratosURLs{
+				public: "http://127.0.0.1:10133",
+				admin:  "http://127.0.0.1:10134",
+				base:   "http://localhost:10120",
+			},
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			setKratosEnv(t, testCase.values)
+
+			urls := kratosURLsFromEnv()
+
+			if urls != testCase.want {
+				t.Fatalf("urls = %+v, want %+v", urls, testCase.want)
+			}
+		})
+	}
+}
+
+// stubKratos answers the harness's readiness probe and records every path it
+// serves, so a test can see which URL the harness really called.
+func stubKratos(t *testing.T) (*httptest.Server, *[]string) {
+	t.Helper()
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/health/ready":
+			w.WriteHeader(http.StatusOK)
+		case "/sessions/whoami":
+			w.WriteHeader(http.StatusUnauthorized)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server, &paths
+}
+
+func TestNewLiveKratosAtBuildsTheHarnessOnTheURLsItIsGiven(t *testing.T) {
+	server, paths := stubKratos(t)
+
+	live, err := newLiveKratosAt(mustParse(t, server.URL), mustParse(t, server.URL), server.URL)
+
+	if err != nil {
+		t.Fatalf("newLiveKratosAt on a ready stub: %v", err)
+	}
+	if live.publicURL.String() != server.URL || live.adminURL.String() != server.URL || live.publicBase != server.URL {
+		t.Fatalf("harness URLs = %+v, want %s", live, server.URL)
+	}
+	_, err = live.public.WhoAmI(context.Background(), &http.Cookie{Name: "ory_kratos_session", Value: "probe"})
+	if !errors.Is(err, kratos.ErrNoSession) {
+		t.Fatalf("WhoAmI: want ErrNoSession from the stub's 401, got %v", err)
+	}
+	if got := strings.Join(*paths, " "); got != "/health/ready /sessions/whoami" {
+		t.Fatalf("the stub saw %q: the harness called another URL", got)
+	}
+}
+
+func TestNewLiveKratosAtRefusesAKratosThatIsNotReady(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := newLiveKratosAt(mustParse(t, server.URL), mustParse(t, server.URL), server.URL)
+
+	if err == nil {
+		t.Fatal("newLiveKratosAt accepted a Kratos answering 503")
+	}
 }
 
 // account is an identity created for one test and deleted at cleanup.
