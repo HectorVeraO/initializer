@@ -37,16 +37,21 @@ func Module() core.Module {
 	}
 }
 
-// provide loads the manifest named by APP_FLAGS_FILE and publishes the
-// evaluator. A missing key is recorded by the config reader and reported with
-// the other config problems; an unreadable or invalid file fails Provide with
-// every problem listed.
+// provide loads the manifests named by APP_FLAGS_FILE, a comma-separated list
+// read in order and merged, and publishes the evaluator. A missing key is
+// recorded by the config reader and reported with the other config problems; an
+// empty segment, or an unreadable or invalid file, fails Provide with every
+// problem listed.
 func (m *module) provide(ctx context.Context, b *core.Builder) error {
-	path := b.Config().RequiredString(flagsFileKey)
-	if path == "" {
+	value := b.Config().RequiredString(flagsFileKey)
+	if value == "" {
 		return nil
 	}
-	manifest, err := LoadManifestFile(path)
+	paths, err := SplitManifestPaths(value)
+	if err != nil {
+		return err
+	}
+	manifest, err := LoadManifestFiles(paths)
 	if err != nil {
 		logProblems(ctx, b.Logger(), err)
 		return err

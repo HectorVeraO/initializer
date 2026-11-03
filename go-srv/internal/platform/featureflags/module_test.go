@@ -3,6 +3,7 @@ package featureflags_test
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -90,6 +91,53 @@ func TestBuildFailsWhenTheFlagsFileIsMissing(t *testing.T) {
 	_, err := buildWithoutDatabase(t, map[string]string{"APP_FLAGS_FILE": "/nonexistent/flags.yaml"})
 	if err == nil || !strings.Contains(err.Error(), "flags.yaml") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBuildFailsOnAnEmptySegmentInTheFlagsFileList(t *testing.T) {
+	path := writeManifest(t, twoFlagManifest)
+	_, err := buildWithoutDatabase(t, map[string]string{"APP_FLAGS_FILE": path + ",," + path})
+	if err == nil || !strings.Contains(err.Error(), "APP_FLAGS_FILE") || !strings.Contains(err.Error(), "path 2") {
+		t.Fatalf("err = %v, want one naming APP_FLAGS_FILE and the empty path", err)
+	}
+}
+
+func TestBuildFailsWhenOneFileOfTheListIsMissing(t *testing.T) {
+	first := writeManifest(t, twoFlagManifest)
+	missing := filepath.Join(t.TempDir(), "absent-flags.yaml")
+	_, err := buildWithoutDatabase(t, map[string]string{"APP_FLAGS_FILE": first + "," + missing})
+	if err == nil || !strings.Contains(err.Error(), missing) {
+		t.Fatalf("err = %v, want one naming %s", err, missing)
+	}
+}
+
+func TestModuleMergesEveryFlagsFileInOrder(t *testing.T) {
+	projectFile := writeManifest(t, `flags:
+  - key: project_flag
+    type: ops
+    default: true
+    description: Declared in the project flags file
+`)
+	verticalFile := writeManifest(t, `flags:
+  - key: project_flag
+    type: ops
+    default: false
+    description: Redeclared in the vertical fixture
+  - key: vertical_flag
+    type: ops
+    default: true
+    description: Declared only in the vertical fixture
+`)
+	e := newEnvWithFlags(t, projectFile+","+verticalFile)
+	if e.enabledForTenant(t, "project_flag") {
+		t.Fatal("the later file did not win on the duplicate key")
+	}
+	if !e.enabledForTenant(t, "vertical_flag") {
+		t.Fatal("a flag declared only in the second file is not evaluated")
+	}
+	snapshot := e.Evaluator.Snapshot(context.Background(), nil)
+	if len(snapshot) != 2 {
+		t.Fatalf("snapshot = %v, want the merged keys", snapshot)
 	}
 }
 

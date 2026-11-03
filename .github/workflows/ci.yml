@@ -474,9 +474,17 @@ jobs:
           compose="docker compose -f ${project}/.deploy/local/docker-compose.yml"
           # TCK env as KEY=VALUE lines, as the backend reads it from its component folder.
           env_lines='to_entries[]
-            | .value as $v
-            | (($v | test("/")) and ($v | test("://") | not) and ($v | startswith("/") | not)) as $rel
-            | "\(.key)=\(if $rel then "../" + $v else $v end)"'
+            | .key as $k
+            | ($k | test("_(FILE|FILES|PATH|PATHS|DIR|DIRS)$")) as $pathkey
+            | (.value | split(",")
+                | map(. as $s
+                    | ($s | gsub("^\\s+|\\s+$"; "")) as $t
+                    | if (($t | length) > 0) and ($t | startswith("/") | not)
+                         and ($t | contains("://") | not)
+                         and (($t | contains("/")) or $pathkey)
+                      then "../" + $t else $t end)
+                | join(",")) as $v
+            | "\($k)=\($v)"'
           if [ "${MULTI}" = true ]; then
             # Each instance reads its own env file; the public base of each stays the one in its .example.env.
             for name in ${BACKENDS}; do
@@ -834,9 +842,17 @@ jobs:
           set -euo pipefail
           # The lock's TCK env, as the backend reads it from its component folder.
           jq -r '.tckEnv | to_entries[]
-            | .value as $v
-            | (($v | test("/")) and ($v | test("://") | not) and ($v | startswith("/") | not)) as $rel
-            | "\(.key)=\(if $rel then "../" + $v else $v end)"' \
+            | .key as $k
+            | ($k | test("_(FILE|FILES|PATH|PATHS|DIR|DIRS)$")) as $pathkey
+            | (.value | split(",")
+                | map(. as $s
+                    | ($s | gsub("^\\s+|\\s+$"; "")) as $t
+                    | if (($t | length) > 0) and ($t | startswith("/") | not)
+                         and ($t | contains("://") | not)
+                         and (($t | contains("/")) or $pathkey)
+                      then "../" + $t else $t end)
+                | join(",")) as $v
+            | "\($k)=\($v)"' \
             initializer.lock.json >> .deploy/local/.env
           mise exec -- npm --prefix "${WEB}" ci
           mise exec -- npm --prefix specs ci

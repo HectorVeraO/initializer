@@ -119,6 +119,13 @@ type env struct {
 // behind a session of a principal with a generated active tenant.
 func newEnv(t testing.TB, manifest string) *env {
 	t.Helper()
+	return newEnvWithFlags(t, writeManifest(t, manifest))
+}
+
+// newEnvWithFlags is newEnv for an APP_FLAGS_FILE value: one path or a
+// comma-separated list of them.
+func newEnvWithFlags(t testing.TB, flagsFiles string) *env {
+	t.Helper()
 	logger, sink := newLogger()
 	tenant := reqctx.TenantID(randomUUID(t))
 	account := randomUUID(t)
@@ -145,7 +152,7 @@ func newEnv(t testing.TB, manifest string) *env {
 	}}
 	e.Handler = coretest.New(t, []core.Module{featureflags.Module(), probe}, coretest.Options{
 		Database:        true,
-		Config:          map[string]string{"APP_FLAGS_FILE": writeManifest(t, manifest)},
+		Config:          map[string]string{"APP_FLAGS_FILE": flagsFiles},
 		SessionResolver: coretest.Session(principal),
 		Logger:          logger,
 	})
