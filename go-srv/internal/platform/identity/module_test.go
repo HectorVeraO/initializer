@@ -15,8 +15,8 @@ import (
 	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
 )
 
 // exampleEnvPath locates the example env: .deploy/local/.example.env of the

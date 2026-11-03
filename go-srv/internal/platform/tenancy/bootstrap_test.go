@@ -14,8 +14,8 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
 )
 
 const (

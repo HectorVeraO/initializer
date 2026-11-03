@@ -356,6 +356,24 @@ func TestIssueCodes(t *testing.T) {
 		{"main imports a module", func(t *testing.T, r fstest.MapFS) {
 			put(r, "go-srv/cmd/server/main.go", "package main\n\nimport (\n\t\""+fixtureModule+"/internal/platform/parameters\"\n)\n\nfunc main() { _ = parameters.Name }\n")
 		}, []string{"IMPORT_BOUNDARY"}},
+		{"module test file imports the test kit", func(t *testing.T, r fstest.MapFS) {
+			put(r, "go-srv/internal/platform/parameters/helpers_test.go", "package parameters\n\nimport (\n\t\""+fixtureModule+"/internal/testkit/coretest\"\n)\n\nvar _ = coretest.New\n")
+		}, nil},
+		{"module file imports the test kit", func(t *testing.T, r fstest.MapFS) {
+			put(r, paramsFile, "package parameters\n\nimport (\n\t\""+fixtureModule+"/internal/testkit/coretest\"\n)\n\nvar _ = coretest.New\n")
+		}, []string{"IMPORT_BOUNDARY"}},
+		{"core file imports the test kit", func(t *testing.T, r fstest.MapFS) {
+			put(r, "go-srv/internal/platform/core/core.go", "package core\n\nimport (\n\t\""+fixtureModule+"/internal/testkit/coretest\"\n)\n\nvar _ = coretest.New\n\n// Run does nothing.\nfunc Run() {}\n")
+		}, []string{"IMPORT_BOUNDARY"}},
+		{"core test file imports the test kit", func(t *testing.T, r fstest.MapFS) {
+			put(r, "go-srv/internal/platform/core/core_test.go", "package core_test\n\nimport (\n\t\""+fixtureModule+"/internal/testkit/coretest\"\n)\n\nvar _ = coretest.New\n")
+		}, nil},
+		{"test kit file imports its sibling", func(t *testing.T, r fstest.MapFS) {
+			put(r, "go-srv/internal/testkit/coretest/coretest.go", "package coretest\n\nimport (\n\t\""+fixtureModule+"/internal/testkit/testpg\"\n)\n\nvar _ = testpg.New\n")
+		}, nil},
+		{"test kit file imports a module", func(t *testing.T, r fstest.MapFS) {
+			put(r, "go-srv/internal/testkit/coretest/coretest.go", "package coretest\n\nimport (\n\t\""+fixtureModule+"/internal/platform/identity\"\n)\n\nvar _ = identity.Name\n")
+		}, nil},
 		{"package clause differs from the folder", func(t *testing.T, r fstest.MapFS) {
 			put(r, paramsFile, "package params\n")
 		}, []string{"ENTRYPOINT_MISSING"}},

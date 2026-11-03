@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
 )
 
 // FuzzAPIKeyHeader sends arbitrary X-API-Key values to a key-accepting route:

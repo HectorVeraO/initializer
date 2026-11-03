@@ -8,10 +8,10 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/featureflag"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/featureflags"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
 )
 
 // aloneEnv is feature-flags with an operator session and no TenantDirectory

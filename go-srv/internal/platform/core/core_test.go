@@ -27,11 +27,11 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/health"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/internal/testpg"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/parameter"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testpg"
 )
 
 const publicBaseURL = "http://localhost:10120"

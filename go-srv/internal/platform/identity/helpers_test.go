@@ -20,9 +20,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/migrate"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
 )
 
 const adminURLEnv = "APP_TEST_DATABASE_URL"

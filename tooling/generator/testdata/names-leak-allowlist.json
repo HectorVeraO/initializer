@@ -122,7 +122,7 @@
       "reason": "Angular's word"
     },
     {
-      "path": "go-srv/internal/platform/core/coretest/coretest.go",
+      "path": "go-srv/internal/testkit/coretest/coretest.go",
       "context": "\"go-srv\"",
       "reason": "test literal, an arbitrary service name"
     },

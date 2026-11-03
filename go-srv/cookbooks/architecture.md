@@ -1,17 +1,18 @@
 # go-srv -- Architecture and module layout
 
-Read before adding or changing a module, route, handler or error response. Canonical examples: `go-srv/internal/platform/core/health` (mounting, handler, black-box test) and `go-srv/internal/platform/core/coretest` (a module under test).
+Read before adding or changing a module, route, handler or error response. Canonical examples: `go-srv/internal/platform/core/health` (mounting, handler, black-box test) and `go-srv/internal/testkit/coretest` (a module under test).
 
 ## Layout
 
 | Path | Holds |
 |---|---|
 | `cmd/server/main.go` | Fixed: `os.Exit(core.Main(installedModules()))`. `cmd/server/modules.go` is generated and lists the installed modules. No business logic. |
-| `internal/platform/core/` | The always-installed foundation: module seam (`Module`, `Builder`, `Host`, `Build`, `Run`), request chain, `api`, `access`, `reqctx`, `featureflag`, `parameter`, `config`, `telemetry`, `db`, `migrate`, `health`, `clock`, `coretest`. |
+| `internal/platform/core/` | The always-installed foundation: module seam (`Module`, `Builder`, `Host`, `Build`, `Run`), request chain, `api`, `access`, `reqctx`, `featureflag`, `parameter`, `config`, `telemetry`, `db`, `migrate`, `health`, `clock`. |
+| `internal/testkit/` | Test support, outside the platform tree: `coretest` (the module test host) and `testpg` (the throwaway database helper). Only `_test.go` files import it. |
 | `internal/platform/<module>/` | One package tree per catalog module (`identity`, `tenancy`, `apikeys`, `parameters`, `featureflags`). |
 | `specs/<module>/openapi.yaml` (repo root) | The module's HTTP contract. The Go code implements it; it never defines it. |
 
-- Import rules, enforced by `internal/platform/core/boundary_test.go`: a package under `core/` imports no other `internal/platform/<x>`; a module imports from this Go module only `core/...` and its own subtree; `cmd/server` imports only `core` and the module root packages named in `modules.go`; core subpackages never import the `core` root (`core/coretest` is the one exception); the Go module path appears only in `go.mod` and import specs, in an import group of its own; no Go file of a module names a table whose prefix another module claims (rule 6).
+- Import rules, enforced by `internal/platform/core/boundary_test.go`: a package under `core/` imports no other `internal/platform/<x>`; a module imports from this Go module only `core/...` and its own subtree; `cmd/server` imports only `core` and the module root packages named in `modules.go`; core subpackages never import the `core` root; the Go module path appears only in `go.mod` and import specs, in an import group of its own; no Go file of a module names a table whose prefix another module claims (rule 6); no file of the package imports `internal/testkit/...`, a `_test.go` file may (rule 7).
 - Ports are declared in core only: `access.SessionResolver`, `access.APIKeyResolver`, `access.TenantAccess`, `access.TenantDirectory`, `accounts.Directory`, `accounts.Provisioner`, `featureflag.Evaluator`, `parameter.Reader`. A module publishes one with `Builder.Provide*` in `Provide`, once, and reads it from `Host` in `Mount`, `Start` or a handler. Each has a fail-closed default (`access.NoTenantAccess`, `accounts.NoDirectory`, `featureflag.Disabled{}`, `parameter.NoReader{}`, ...); a module never branches on which other modules are installed. Full list: `.claude/references/architecture.md` -> "Modules and core ports".
 - One module owns its routes, its handlers, its persistence prefix and its tests. Nothing outside the module reads its tables.
 - Modules talk to each other only through core ports, never through another module's package or tables; a column that holds another module's id has no foreign key. Account data reaches tenancy through `accounts.Directory` and `accounts.Provisioner`; tenant data reaches identity and api-keys through `access.TenantAccess` and `access.TenantDirectory`.

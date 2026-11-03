@@ -234,7 +234,7 @@ Agent rules:
 
 Backend rules (R1-R6), the same in every selection:
 
-1. **Imports.** A module imports only core (`core/...`, never `core/internal`) and its own subtree (`go-srv/internal/platform/core/boundary_test.go` rule 2).
+1. **Imports.** A module imports only core (`core/...`, never `core/internal`) and its own subtree (`go-srv/internal/platform/core/boundary_test.go` rule 2). Test support lives in `go-srv/internal/testkit/`; only a `_test.go` file imports it (rule 7).
 2. **Cooperation only through core ports.** A module publishes a port with `Builder.Provide*` in `Provide` and reads it from `Host` in `Mount`, `Start` or a handler. A module never branches on which other modules are installed. The `No*` default answers "absent" and fails closed (no tenant, access denied, not found), never a panic.
 3. **No SQL crosses a module.** A module's SQL names only tables with its own prefixes (boundary test rule 6). Account data reaches tenancy only through `accounts.Directory` and `accounts.Provisioner`; tenant data reaches identity and api-keys only through `access.TenantAccess` and `access.TenantDirectory`.
 4. **No cross-module foreign key.** A column that holds another module's id is a plain `uuid` with no `REFERENCES`.

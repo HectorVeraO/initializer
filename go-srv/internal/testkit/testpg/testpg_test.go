@@ -13,7 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/internal/testpg"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testpg"
 )
 
 func syntheticName(t *testing.T, prefix string, created time.Time) string {

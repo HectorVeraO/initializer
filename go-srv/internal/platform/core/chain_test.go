@@ -9,8 +9,8 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
-	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/internal/testpg"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/telemetry"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testpg"
 )
 
 // A panic in a guarded handler is logged after the guard resolved the caller,

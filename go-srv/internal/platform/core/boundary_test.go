@@ -131,7 +131,11 @@ const (
 	internalDir     = "internal"
 	platformDir     = internalDir + "/" + platformDirName
 	coreDir         = platformDir + "/core"
-	serverDir       = "cmd/server"
+	// testkitDirName holds test support only: the module test host coretest and
+	// the database helper testpg. It is neither a module nor a product vertical.
+	testkitDirName = "testkit"
+	testkitDir     = internalDir + "/" + testkitDirName
+	serverDir      = "cmd/server"
 	// modulesGoFile is the generated module list of the server; every other
 	// file of the package may import the module roots it names.
 	modulesGoFile = "modules.go"
@@ -151,14 +155,15 @@ func platformOwner(rel string) (string, bool) {
 }
 
 // productOwner returns the vertical of a product package: the first path
-// element below internal/ when it is not the platform tree, or false.
+// element below internal/ when it is not the platform tree nor the test kit, or
+// false.
 func productOwner(rel string) (string, bool) {
 	below, found := strings.CutPrefix(rel, internalDir+"/")
 	if !found {
 		return "", false
 	}
 	owner, _, _ := strings.Cut(below, "/")
-	if owner == "" || owner == platformDirName {
+	if owner == "" || owner == platformDirName || owner == testkitDirName {
 		return "", false
 	}
 	return owner, true
@@ -185,7 +190,8 @@ func isUnder(rel, dir string) bool {
 }
 
 // ruleCoreImportsNoModule is rule 1: a core package imports nothing under
-// internal/ outside the core tree.
+// internal/ outside the core tree. The test kit is not a dependency of the
+// code: only a _test.go file may import it, which rule 7 enforces.
 func ruleCoreImportsNoModule(modulePath string, packages []listedPackage) []string {
 	var problems []string
 	for _, p := range packages {
@@ -195,7 +201,7 @@ func ruleCoreImportsNoModule(modulePath string, packages []listedPackage) []stri
 		}
 		for _, imp := range p.allImports() {
 			target, internal := relImport(modulePath, imp)
-			if internal && isUnder(target, internalDir) && !isUnder(target, coreDir) {
+			if internal && isUnder(target, internalDir) && !isUnder(target, coreDir) && !isUnder(target, testkitDir) {
 				problems = append(problems, fmt.Sprintf("rule 1: %s imports %s", p.ImportPath, imp))
 			}
 		}
@@ -205,7 +211,8 @@ func ruleCoreImportsNoModule(modulePath string, packages []listedPackage) []stri
 
 // ruleModuleImports is rule 2: a platform module package imports only core and
 // its own subtree; a product package imports only non-internal core packages
-// and its own subtree.
+// and its own subtree. A _test.go file may import the test kit; rule 7 keeps it
+// out of every other file.
 func ruleModuleImports(modulePath string, packages []listedPackage) []string {
 	var problems []string
 	for _, p := range packages {
@@ -217,6 +224,9 @@ func ruleModuleImports(modulePath string, packages []listedPackage) []string {
 		for _, imp := range p.allImports() {
 			target, internal := relImport(modulePath, imp)
 			if !internal {
+				continue
+			}
+			if isUnder(target, testkitDir) {
 				continue
 			}
 			if !isUnder(target, dir) && !isPublicCore(target) {
@@ -316,15 +326,17 @@ func sortedKeys(values map[string]bool) []string {
 	return keys
 }
 
-// ruleCoreSubpackagesNotRoot is rule 5. core/coretest is the one exception: it
-// is the test host and runs core.Build.
+// ruleCoreSubpackagesNotRoot is rule 5: a package under core/ other than the
+// root imports the core root from nowhere, so core.Build runs only through the
+// root package a module receives in its Host. The test host that runs
+// core.Build lives outside the core tree (internal/testkit), so it needs no
+// exception here.
 func ruleCoreSubpackagesNotRoot(modulePath string, packages []listedPackage) []string {
 	var problems []string
 	root := modulePath + "/" + coreDir
 	for _, p := range packages {
 		rel, _ := relImport(modulePath, p.ImportPath)
-		isTestHost := rel == coreDir+"/coretest"
-		if !isUnder(rel, coreDir) || rel == coreDir || isTestHost {
+		if !isUnder(rel, coreDir) || rel == coreDir {
 			continue
 		}
 		for _, imp := range p.allImports() {
@@ -515,7 +527,8 @@ func readTablePrefixes(root string) map[string][]string {
 }
 
 // productDirs returns the names of the product verticals under internal/:
-// every directory there that is not the platform tree, sorted.
+// every directory there that is neither the platform tree nor the test kit,
+// sorted.
 func productDirs(root string) []string {
 	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(internalDir)))
 	if err != nil {
@@ -523,7 +536,7 @@ func productDirs(root string) []string {
 	}
 	var names []string
 	for _, entry := range entries {
-		if !entry.IsDir() || entry.Name() == platformDirName {
+		if !entry.IsDir() || entry.Name() == platformDirName || entry.Name() == testkitDirName {
 			continue
 		}
 		names = append(names, entry.Name())
@@ -824,6 +837,29 @@ func foreignTablesIn(root, path, self string, ownerOfPrefix map[string]string) [
 	return problems
 }
 
+// ruleProductionImportsNoTestkit is rule 7: a file of the package imports
+// nothing under internal/testkit. That tree holds test support only (the module
+// test host coretest and the database helper testpg), so a _test.go file may
+// import it and the package's other files may not: production code never
+// reaches a test helper. A package inside the tree is test support itself and
+// may import its siblings.
+func ruleProductionImportsNoTestkit(modulePath string, packages []listedPackage) []string {
+	var problems []string
+	for _, p := range packages {
+		rel, _ := relImport(modulePath, p.ImportPath)
+		if isUnder(rel, testkitDir) {
+			continue
+		}
+		for _, imp := range p.Imports {
+			target, internal := relImport(modulePath, imp)
+			if internal && isUnder(target, testkitDir) {
+				problems = append(problems, fmt.Sprintf("rule 7: %s imports %s", p.ImportPath, imp))
+			}
+		}
+	}
+	return problems
+}
+
 // allProblems applies every rule to the listing.
 func allProblems(t *testing.T, packages []listedPackage) []string {
 	t.Helper()
@@ -835,6 +871,7 @@ func allProblems(t *testing.T, packages []listedPackage) []string {
 	problems = append(problems, ruleModulePathLeaks(modulePath, packages)...)
 	problems = append(problems, ruleCoreSubpackagesNotRoot(modulePath, packages)...)
 	problems = append(problems, ruleNoForeignTables(packages)...)
+	problems = append(problems, ruleProductionImportsNoTestkit(modulePath, packages)...)
 	sort.Strings(problems)
 	return problems
 }
@@ -1030,20 +1067,59 @@ func TestBoundaryRulesCatchViolations(t *testing.T) {
 			want: "rule 5",
 		},
 		{
-			name: "rule 5 the exemption does not cover a coretest subpackage",
+			name: "rule 5 a nested core subpackage imports the root",
 			files: map[string]string{
-				"internal/platform/core/core.go":             "package core\n",
-				"internal/platform/core/coretest/sub/sub.go": "package sub\n\nimport _ \"example.com/boundary/internal/platform/core\"\n",
+				"internal/platform/core/core.go":         "package core\n",
+				"internal/platform/core/sub/nested/x.go": "package nested\n\nimport _ \"example.com/boundary/internal/platform/core\"\n",
 			},
 			want: "rule 5",
 		},
 		{
-			name: "rule 5 the exemption does not cover a coretest-prefixed sibling",
+			name: "rule 7 a production file imports the test kit",
 			files: map[string]string{
 				"internal/platform/core/core.go":        "package core\n",
-				"internal/platform/core/coretestx/x.go": "package coretestx\n\nimport _ \"example.com/boundary/internal/platform/core\"\n",
+				"internal/testkit/coretest/coretest.go": "package coretest\n",
+				"cmd/worker/main.go":                    "package main\n\nimport _ \"example.com/boundary/internal/testkit/coretest\"\n\nfunc main() {}\n",
 			},
-			want: "rule 5",
+			want: "rule 7",
+		},
+		{
+			name: "rule 7 a test file imports the test kit",
+			files: map[string]string{
+				"internal/platform/a/a.go":              "package a\n",
+				"internal/platform/a/a_test.go":         "package a\n\nimport _ \"example.com/boundary/internal/testkit/coretest\"\n",
+				"internal/testkit/coretest/coretest.go": "package coretest\n",
+			},
+			want: "",
+		},
+		{
+			name: "rule 1 and rule 2 allow a test file that imports the test kit",
+			files: map[string]string{
+				"internal/platform/core/core.go":        "package core\n",
+				"internal/platform/core/core_test.go":   "package core_test\n\nimport _ \"example.com/boundary/internal/testkit/coretest\"\n",
+				"internal/platform/a/a.go":              "package a\n",
+				"internal/platform/a/helpers_test.go":   "package a_test\n\nimport _ \"example.com/boundary/internal/testkit/coretest\"\n",
+				"internal/testkit/coretest/coretest.go": "package coretest\n",
+			},
+			want: "",
+		},
+		{
+			name: "rule 7 a test kit package imports its sibling",
+			files: map[string]string{
+				"internal/platform/core/core.go":        "package core\n",
+				"internal/testkit/testpg/testpg.go":     "package testpg\n",
+				"internal/testkit/coretest/coretest.go": "package coretest\n\nimport _ \"example.com/boundary/internal/testkit/testpg\"\n",
+			},
+			want: "",
+		},
+		{
+			name: "rule 7 a test kit package imports a module",
+			files: map[string]string{
+				"internal/platform/core/core.go":         "package core\n",
+				"internal/platform/identity/identity.go": "package identity\n",
+				"internal/testkit/coretest/coretest.go":  "package coretest\n\nimport _ \"example.com/boundary/internal/platform/identity\"\n",
+			},
+			want: "",
 		},
 		{
 			name: "rule 2 tenancy imports identity",
