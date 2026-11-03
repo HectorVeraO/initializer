@@ -254,6 +254,7 @@ Go core ports (`go-srv/internal/platform/core/`):
 | `accounts.Directory` | `Get`, `ByEmail` | `accounts.NoDirectory` |
 | `accounts.Provisioner` | `Provision`, `GrantsOperator` | `accounts.NoProvisioner` |
 | `featureflag.Evaluator` | `Enabled`, `Snapshot` | `featureflag.Disabled{}` |
+| `parameter.Reader` | `Get` | `parameter.NoReader{}` |
 
 `access.Policy.TenantlessOperator` lets a platform operator with no active tenant pass a `MinRole` route; a session with an active tenant is still held to `MinRole`, and an API key never passes it. Scope levels of an API key scope: `access.ScopeTenant` (only a tenant-bound key may hold it) and `access.ScopeAny`.
 

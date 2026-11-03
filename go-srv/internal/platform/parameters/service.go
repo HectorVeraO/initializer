@@ -85,12 +85,19 @@ func buildView(d definition, override json.RawMessage) View {
 
 // tenantArg returns the active tenant as UUID text, or nil when there is none.
 func tenantArg(p reqctx.Principal) (*string, error) {
-	if p.TenantID == nil {
+	return tenantText(p.TenantID)
+}
+
+// tenantText returns tenant as canonical UUID text, or nil when tenant is nil.
+// The HTTP methods and the parameter reader share it, so neither binds an empty
+// string to a $n::uuid argument.
+func tenantText(tenant *reqctx.TenantID) (*string, error) {
+	if tenant == nil {
 		return nil, nil
 	}
-	canonical, ok := api.ParseUUID(string(*p.TenantID))
+	canonical, ok := api.ParseUUID(string(*tenant))
 	if !ok {
-		return nil, errors.New("parameters: the principal tenant id is not a UUID")
+		return nil, errors.New("parameters: the active tenant id is not a UUID")
 	}
 	return &canonical, nil
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/featureflag"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/internal/testpg"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/parameter"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/telemetry"
 )
@@ -50,6 +51,11 @@ type Options struct {
 	TenantAccess       access.TenantAccess
 	AccountDirectory   accounts.Directory
 	AccountProvisioner accounts.Provisioner
+	// Parameters is a fake parameter reader; nil falls back to
+	// parameter.NoReader{}, which answers not found for every key. No fake ships
+	// here: a vertical that needs a value writes its own reader in its own
+	// _test.go.
+	Parameters parameter.Reader
 	// Logger, when set, receives every record (wrapped by telemetry.NewLogHandler, so
 	// trace_id, span_id, tenant_id and actor_id are attached); nil discards logs.
 	Logger *slog.Logger
@@ -86,6 +92,7 @@ func New(t testing.TB, modules []core.Module, opts Options) http.Handler {
 		TenantAccess:       opts.TenantAccess,
 		AccountDirectory:   opts.AccountDirectory,
 		AccountProvisioner: opts.AccountProvisioner,
+		Parameters:         opts.Parameters,
 	}, modules)
 	if err != nil {
 		t.Fatalf("coretest: Build: %v", err)

@@ -30,6 +30,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/coretest"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/health"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/internal/testpg"
+	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/parameter"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 )
 
@@ -436,7 +437,7 @@ func (tenantDirectory) Tenant(context.Context, reqctx.TenantID) (access.TenantRe
 }
 
 func TestHostDefaultsWhenNoModuleProvidesPorts(t *testing.T) {
-	var sessions, keys, tenants, flags, tenantAccess, accountDir, provisioner bool
+	var sessions, keys, tenants, flags, tenantAccess, accountDir, provisioner, parameters bool
 	module := mounting("defaults", func(h *core.Host) {
 		tenantAccess = h.TenantAccess() == access.NoTenantAccess
 		accountDir = h.AccountDirectory() == accounts.NoDirectory
@@ -445,12 +446,13 @@ func TestHostDefaultsWhenNoModuleProvidesPorts(t *testing.T) {
 		keys = h.APIKeyResolver() == access.NoAPIKeys
 		tenants = h.TenantDirectory() == access.NoTenants
 		flags = !h.FlagEvaluator().Enabled(context.Background(), "any")
+		parameters = h.Parameters() == parameter.NoReader{}
 	})
 
 	startApp(t, core.Options{}, module)
 
-	if !sessions || !keys || !tenants || !flags {
-		t.Fatalf("defaults: sessions=%v keys=%v tenants=%v flags=%v", sessions, keys, tenants, flags)
+	if !sessions || !keys || !tenants || !flags || !parameters {
+		t.Fatalf("defaults: sessions=%v keys=%v tenants=%v flags=%v parameters=%v", sessions, keys, tenants, flags, parameters)
 	}
 	if !tenantAccess || !accountDir || !provisioner {
 		t.Fatalf("defaults: tenantAccess=%v accountDir=%v provisioner=%v", tenantAccess, accountDir, provisioner)
@@ -484,6 +486,85 @@ func TestProvidedAccessPortsReachTheHostInMount(t *testing.T) {
 	if gotDirectory != accounts.Directory(accountBook) || gotProvisioner != accounts.Provisioner(accountBook) {
 		t.Fatal("Host account ports are not the provided ports")
 	}
+}
+
+// fixedReader is a parameter.Reader fake: the keys it holds are numbers, every
+// other key is not found.
+type fixedReader struct {
+	values map[string]string
+}
+
+func (f *fixedReader) Get(_ context.Context, key string) (parameter.Value, bool, error) {
+	raw, ok := f.values[key]
+	if !ok {
+		return parameter.Value{}, false, nil
+	}
+	value, err := parameter.NewValue(parameter.TypeNumber, json.RawMessage(raw))
+	if err != nil {
+		return parameter.Value{}, false, err
+	}
+	return value, true, nil
+}
+
+func TestProvidedParameterReaderReachesTheHostInMount(t *testing.T) {
+	reader := &fixedReader{values: map[string]string{"export.max_rows": "50"}}
+	var got parameter.Reader
+	var number float64
+	var found bool
+	provider := core.Module{ID: "provider", Provide: func(_ context.Context, b *core.Builder) error {
+		return b.ProvideParameterReader(reader)
+	}}
+	consumer := mounting("consumer", func(h *core.Host) {
+		got = h.Parameters()
+		value, ok, err := got.Get(context.Background(), "export.max_rows")
+		if err != nil || !ok {
+			t.Fatalf("Get: %v %v", ok, err)
+		}
+		number, err = value.Number()
+		if err != nil {
+			t.Fatalf("Number: %v", err)
+		}
+		found = true
+	})
+
+	startApp(t, core.Options{}, provider, consumer)
+
+	if got != parameter.Reader(reader) {
+		t.Fatal("Host.Parameters is not the provided port")
+	}
+	if !found || number != 50 {
+		t.Fatalf("parameter = %v (found %v), want 50", number, found)
+	}
+}
+
+func TestParameterReaderIsProvidedOnce(t *testing.T) {
+	reader := &fixedReader{}
+	provider := func(id string) core.Module {
+		return core.Module{ID: id, Provide: func(_ context.Context, b *core.Builder) error {
+			return b.ProvideParameterReader(reader)
+		}}
+	}
+	t.Run("two modules", func(t *testing.T) {
+		expectBuildError(t, core.Options{}, "parameter reader is already provided", provider("one"), provider("two"))
+	})
+	t.Run("pre-provided by options", func(t *testing.T) {
+		expectBuildError(t, core.Options{Parameters: reader}, "parameter reader is already provided", provider("late"))
+	})
+	t.Run("nil port", func(t *testing.T) {
+		module := core.Module{ID: "nilport", Provide: func(_ context.Context, b *core.Builder) error {
+			return b.ProvideParameterReader(nil)
+		}}
+		expectBuildError(t, core.Options{}, "parameter reader is nil", module)
+	})
+	t.Run("outside phase one", func(t *testing.T) {
+		var builder *core.Builder
+		module := core.Module{
+			ID:      "late",
+			Provide: func(_ context.Context, b *core.Builder) error { builder = b; return nil },
+			Mount:   func(context.Context, *core.Host) error { return builder.ProvideParameterReader(reader) },
+		}
+		expectBuildError(t, core.Options{}, "parameter reader provided in Mount", module)
+	})
 }
 
 func TestPortsAreProvidedOnce(t *testing.T) {
