@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
@@ -15,12 +16,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// holdThenRelease keeps a backend attached to its database for six seconds and
-// then terminates it. The first plain drop attempt answers 55006 after its
-// five-second wait for the backend to leave, and the retry then finds the
-// database free. The delay runs on the server, so the test holds nothing.
-const holdThenRelease = `SELECT pg_terminate_backend(pg_backend_pid()) FROM (SELECT pg_sleep(6)) AS hold`
 
 // dropTestDatabase is the server named by APP_TEST_DATABASE_URL plus the admin
 // role's connection, which the drop tests share.
@@ -130,6 +125,18 @@ func (d dropTestDatabase) loginRole(t *testing.T) (string, string) {
 	return role, password
 }
 
+// grantConnect lets role connect to the database, so a case never depends on the
+// template's own ACL; it skips the test when the admin role may not grant it.
+func (d dropTestDatabase) grantConnect(t *testing.T, database, role string) {
+	t.Helper()
+	statement := "GRANT CONNECT ON DATABASE " + pgx.Identifier{database}.Sanitize() +
+		" TO " + pgx.Identifier{role}.Sanitize()
+	_, err := d.admin.Exec(d.ctx, statement)
+	if err != nil {
+		t.Skipf("the admin role cannot grant CONNECT on its test database (%v); the case needs a connecting role", err)
+	}
+}
+
 // urlFor returns the admin URL with the credentials of role and a database.
 func (d dropTestDatabase) urlFor(t *testing.T, role, password, database string) string {
 	t.Helper()
@@ -139,18 +146,6 @@ func (d dropTestDatabase) urlFor(t *testing.T, role, password, database string) 
 	}
 	parsed.User = url.UserPassword(role, password)
 	parsed.Path = "/" + database
-	return parsed.String()
-}
-
-// urlRole returns the admin URL with the credentials of role and the database
-// of the admin URL.
-func (d dropTestDatabase) urlRole(t *testing.T, role, password string) string {
-	t.Helper()
-	parsed, err := url.Parse(d.url)
-	if err != nil {
-		t.Fatalf("testpg: %s is not a URL", EnvURL)
-	}
-	parsed.User = url.UserPassword(role, password)
 	return parsed.String()
 }
 
@@ -208,6 +203,7 @@ func TestDropForcesThroughWhenAnotherRoleHoldsABackendItCanSignal(t *testing.T) 
 	}
 	role, password := d.loginRole(t)
 	name := d.scratch(t, "it_dropforce", "")
+	d.grantConnect(t, name, role)
 	quoted := pgx.Identifier{name}.Sanitize()
 	foreign := d.connect(t, d.urlFor(t, role, password, name))
 	d.hold(t, foreign)
@@ -234,18 +230,22 @@ func TestDropNamesTheAttachedRoleWhenItCannotSignalIt(t *testing.T) {
 		t.Skip("the admin role is not a superuser; it could not clean up a database another role owns")
 	}
 	holderRole := d.role(t)
-	dropperRole, password := d.loginRole(t)
-	name := d.scratch(t, "it_dropsignal", dropperRole)
-	quoted := pgx.Identifier{name}.Sanitize()
-	holder := d.connect(t, withDatabase(t, d.url, name))
+	dropperRole, dropperPassword := d.loginRole(t)
+	target := d.scratch(t, "it_dropsignal", dropperRole)
+	// The dropper may not connect to the admin database: a role that owns its
+	// own database is a role that may connect to it, so it works from there.
+	home := d.scratch(t, "it_drophome", dropperRole)
+	d.grantConnect(t, target, holderRole)
+	quoted := pgx.Identifier{target}.Sanitize()
+	holder := d.connect(t, withDatabase(t, d.url, target))
 	d.hold(t, holder)
-	dropper := d.connect(t, d.urlRole(t, dropperRole, password))
+	dropper := d.connect(t, d.urlFor(t, dropperRole, dropperPassword, home))
 
-	err := deleteDatabase(d.ctx, dropper, quoted, name)
+	err := deleteDatabase(d.ctx, dropper, quoted, target)
 
 	if err == nil {
 		t.Fatalf("testpg: drop of %s succeeded although %s owns it and may not signal %s's backend",
-			name, dropperRole, holderRole)
+			target, dropperRole, holderRole)
 	}
 	if !strings.Contains(err.Error(), holderRole) {
 		t.Errorf("testpg: drop failure does not name the attached role %s: %v", holderRole, err)
@@ -269,33 +269,68 @@ func TestDropRetriesOnceTheDatabaseIsFree(t *testing.T) {
 	}
 	dropperRole, dropperPassword := d.loginRole(t)
 	holderRole, holderPassword := d.loginRole(t)
-	name := d.scratch(t, "it_dropretry", dropperRole)
-	quoted := pgx.Identifier{name}.Sanitize()
-	foreign := d.connect(t, d.urlFor(t, holderRole, holderPassword, name))
+	target := d.scratch(t, "it_dropretry", dropperRole)
+	// A role may connect to the database it owns, and the dropper may not connect
+	// to the admin database, so it drops from its own home database.
+	home := d.scratch(t, "it_drophome", dropperRole)
+	d.grantConnect(t, target, holderRole)
+	quoted := pgx.Identifier{target}.Sanitize()
+	holder := d.connect(t, d.urlFor(t, holderRole, holderPassword, target))
+	d.hold(t, holder)
+	dropper := d.connect(t, d.urlFor(t, dropperRole, dropperPassword, home))
 
-	release := make(chan struct{})
+	dropped := make(chan error, 1)
 	go func() {
-		defer close(release)
-		// The backend dies with the connection, which is the point.
-		_, _ = foreign.Exec(d.ctx, holdThenRelease)
+		dropped <- deleteDatabase(d.ctx, dropper, quoted, target)
 	}()
-	defer func() {
-		<-release
-		_ = foreign.Close(d.ctx)
-	}()
-	dropper := d.connect(t, d.urlRole(t, dropperRole, dropperPassword))
+	// The release is keyed to the end of the first attempt, which PostgreSQL
+	// marks by answering 55006 after its own wait for the attached backends. A
+	// fixed delay would have to sit after that wait and before two of them run
+	// out: with the wait measured at 5.006 s here, about 3.2 s in one suite run
+	// and about 2.9 s in CI, that leaves a sliver under a second, narrower than
+	// the spread itself.
+	waitErr := d.waitForFirstAttempt(t, dropperRole)
+	firstAttemptLeftIt := d.exists(t, target)
+	_ = holder.Close(d.ctx)
+	err := <-dropped
 
-	started := time.Now()
-	err := deleteDatabase(d.ctx, dropper, quoted, name)
-	elapsed := time.Since(started)
-
+	if waitErr != nil {
+		t.Fatalf("testpg: %v", waitErr)
+	}
+	if !firstAttemptLeftIt {
+		t.Fatalf("testpg: the first attempt dropped %s; the case never exercised the retry", target)
+	}
 	if err != nil {
-		t.Fatalf("testpg: drop of %s failed once the database was free: %v", name, err)
+		t.Fatalf("testpg: drop of %s failed once the database was free: %v", target, err)
 	}
-	if d.exists(t, name) {
-		t.Errorf("testpg: database %s survived the drop", name)
+	if d.exists(t, target) {
+		t.Errorf("testpg: database %s survived the drop", target)
 	}
-	if elapsed < 5*time.Second {
-		t.Errorf("testpg: the drop returned after %v; no attempt can have answered 55006", elapsed)
+}
+
+// waitForFirstAttempt waits until role has run and finished one plain DROP
+// DATABASE, the moment PostgreSQL has answered 55006 for the attached backend.
+func (d dropTestDatabase) waitForFirstAttempt(t *testing.T, role string) error {
+	t.Helper()
+	deadline := time.Now().Add(adminTimeout)
+	started := false
+	for time.Now().Before(deadline) {
+		var running bool
+		err := d.admin.QueryRow(d.ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+WHERE usename = $1 AND state = 'active' AND query LIKE 'DROP DATABASE%')`, role).Scan(&running)
+		if err != nil {
+			return fmt.Errorf("read pg_stat_activity: %w", err)
+		}
+		if running {
+			started = true
+		}
+		if started && !running {
+			return nil
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
+	if !started {
+		return fmt.Errorf("the dropping role never ran a plain DROP DATABASE")
+	}
+	return fmt.Errorf("the first DROP DATABASE did not end within %v", adminTimeout)
 }
