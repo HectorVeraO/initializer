@@ -139,7 +139,7 @@ func readCoreConfig(r *config.Reader, needsDatabaseURL bool) coreConfig {
 	cc := coreConfig{
 		addr:            r.String("GO_SRV_ADDR", defaultAddr),
 		serviceName:     r.String("OTEL_SERVICE_NAME", defaultService),
-		maxConns:        r.Int("APP_DB_MAX_CONNS", 10, 1, 200),
+		maxConns:        r.Int("APP_DB_MAX_CONNS", 10, 2, 200),
 		shutdownTimeout: r.Duration("APP_SHUTDOWN_TIMEOUT", 10*time.Second, time.Second, 120*time.Second),
 	}
 	cc.publicURL = readPublicURL(r)

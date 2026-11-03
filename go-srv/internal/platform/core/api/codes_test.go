@@ -1,10 +1,12 @@
 package api_test
 
 import (
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -112,5 +114,93 @@ func TestNoRetiredCodeAppearsUnderCore(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestValidateCodesPassesACleanProductList(t *testing.T) {
+	product := []api.CodeInfo{
+		{Code: "PRODUCT_ARCHIVED", Status: http.StatusConflict},
+		{Code: "PRODUCT_SLUG_TAKEN", Status: http.StatusConflict},
+		{Code: "PRODUCT_NAME_INVALID", Status: http.StatusUnprocessableEntity, Issue: true},
+	}
+	problems := api.ValidateCodes(product)
+	if problems == nil {
+		t.Fatal("ValidateCodes returned nil, want an empty slice")
+	}
+	if len(problems) != 0 {
+		t.Fatalf("ValidateCodes reported %v, want no problem", problems)
+	}
+}
+
+func TestValidateCodesReportsEveryProblemAtOnce(t *testing.T) {
+	input := []api.CodeInfo{
+		{Code: "PRODUCT_ARCHIVED", Status: http.StatusConflict},
+		{Code: "SESSION_INVALID", Status: http.StatusUnauthorized},
+		{Code: "PRODUCT_ARCHIVED", Status: http.StatusUnprocessableEntity},
+		{Code: "PRODUCT_archived", Status: http.StatusConflict},
+	}
+	problems := api.ValidateCodes(input)
+	want := []string{
+		"SESSION_INVALID: already in the registry",
+		"PRODUCT_ARCHIVED: duplicated in the input",
+		"PRODUCT_archived: code is not SCREAMING_SNAKE",
+	}
+	slices.Sort(problems)
+	slices.Sort(want)
+	if !slices.Equal(problems, want) {
+		t.Fatalf("ValidateCodes reported %v, want %v", problems, want)
+	}
+}
+
+func TestValidateCodesReportsTwoProblemsForOneEntry(t *testing.T) {
+	first := api.CodeInfo{Code: api.CodeSessionInvalid, Status: http.StatusUnauthorized}
+	repeated := api.CodeInfo{Code: api.CodeSessionInvalid, Status: http.StatusForbidden}
+	input := []api.CodeInfo{
+		{Code: "PRODUCT_SLUG_TAKEN", Status: http.StatusConflict},
+		first,
+		repeated,
+	}
+	counted := map[string]int{}
+	for _, problem := range api.ValidateCodes(input) {
+		counted[problem]++
+	}
+	want := map[string]int{
+		"SESSION_INVALID: already in the registry": 2,
+		"SESSION_INVALID: duplicated in the input": 1,
+	}
+	if !maps.Equal(counted, want) {
+		t.Fatalf("ValidateCodes counted %v, want %v", counted, want)
+	}
+}
+
+func TestValidateCodesReportsOneCollidingCode(t *testing.T) {
+	problems := api.ValidateCodes([]api.CodeInfo{{Code: api.CodeTenantMismatch}})
+	if len(problems) != 1 {
+		t.Fatalf("ValidateCodes reported %v, want one problem", problems)
+	}
+	if got := problems[0]; got != "TENANT_MISMATCH: already in the registry" {
+		t.Errorf("problem = %q", got)
+	}
+}
+
+func TestValidateCodesReportsOneDuplicate(t *testing.T) {
+	first := api.CodeInfo{Code: "PRODUCT_SLUG_TAKEN", Status: http.StatusConflict}
+	repeated := api.CodeInfo{Code: "PRODUCT_SLUG_TAKEN", Status: http.StatusUnprocessableEntity, Issue: true}
+	problems := api.ValidateCodes([]api.CodeInfo{first, repeated})
+	if len(problems) != 1 {
+		t.Fatalf("ValidateCodes reported %v, want one problem", problems)
+	}
+	if got := problems[0]; got != "PRODUCT_SLUG_TAKEN: duplicated in the input" {
+		t.Errorf("problem = %q", got)
+	}
+}
+
+func TestValidateCodesReportsOneMalformedCode(t *testing.T) {
+	problems := api.ValidateCodes([]api.CodeInfo{{Code: "PRODUCT SLUG"}})
+	if len(problems) != 1 {
+		t.Fatalf("ValidateCodes reported %v, want one problem", problems)
+	}
+	if got := problems[0]; got != "PRODUCT SLUG: code is not SCREAMING_SNAKE" {
+		t.Errorf("problem = %q", got)
 	}
 }

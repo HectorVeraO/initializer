@@ -49,7 +49,7 @@ Every /api/v1 response body is one JSON object:
 - Error codes are SCREAMING_SNAKE constants declared in the module that raises them (`TENANT_MISMATCH`, `LAST_TENANT_ADMIN`, `SYSTEM_PARAMETER_PROTECTED`). A code is part of the contract: renaming one is a breaking change.
 - Validation is accumulated: a `POST`, `PUT` or `PATCH` with invalid data collects every problem and answers `422` with all of them in `error.issues[]` (`{ "field": "<json path>", "code": "<CODE>", "message": "<text>" }`). Never stop at the first invalid field.
 - Status mapping: `401` credentials missing or rejected, `403` authenticated but not allowed (with its code), `404` not found or not visible to the active tenant, `409` state conflict, `422` validation.
-- The registry of codes lives in `internal/platform/core/api/codes.go`; add a code there with its contract change. Body decoding answers `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE` and `422` with every issue (`api.DecodeBody`).
+- The registry of codes lives in `internal/platform/core/api/codes.go` and holds core and catalog module codes only; a product vertical keeps its own codes in its own `errors.go` and never extends that registry. Add a core or module code there with its contract change. Body decoding answers `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE` and `422` with every issue (`api.DecodeBody`).
 - Never return an internal error message, SQL error or stack trace in `error.message`. Log it with the trace id; answer a generic `500`.
 
 ## Tenant scoping

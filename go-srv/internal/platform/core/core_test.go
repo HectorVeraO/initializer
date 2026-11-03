@@ -246,6 +246,70 @@ func TestBuildReportsEveryConfigProblemOnceWithoutValues(t *testing.T) {
 	}
 }
 
+func TestBuildRejectsDBMaxConnsBelowTwo(t *testing.T) {
+	logger, sink := newLogger()
+	_, err := core.Build(context.Background(), core.Options{
+		Logger: logger,
+		Config: config.MapSource(map[string]string{
+			"APP_PUBLIC_BASE_URL": publicBaseURL,
+			"APP_DATABASE_URL":    "postgres://user:change-me@127.0.0.1:1/x?sslmode=disable",
+			"APP_DB_MAX_CONNS":    "1",
+		}),
+	}, nil)
+
+	if err == nil || !strings.Contains(err.Error(), "APP_DB_MAX_CONNS") {
+		t.Fatalf("err = %v, want an APP_DB_MAX_CONNS problem", err)
+	}
+	events := sink.find(t, "config_invalid")
+	if len(events) != 1 {
+		t.Fatalf("config_invalid logged %d times, want 1", len(events))
+	}
+	problems, _ := events[0]["problems"].([]any)
+	if len(problems) != 1 {
+		t.Fatalf("problems = %v, want only the APP_DB_MAX_CONNS problem", problems)
+	}
+}
+
+func TestBuildAcceptsDBMaxConnsFloor(t *testing.T) {
+	// Config stage first: the floor value must pass validation even when the
+	// database is unreachable, so a raised floor fails without a database too.
+	logger, sink := newLogger()
+	_, err := core.Build(context.Background(), core.Options{
+		Logger: logger,
+		Config: config.MapSource(map[string]string{
+			"APP_PUBLIC_BASE_URL": publicBaseURL,
+			"APP_DATABASE_URL":    "postgres://user:change-me@127.0.0.1:1/x?sslmode=disable",
+			"APP_DB_MAX_CONNS":    "2",
+		}),
+	}, nil)
+	if err == nil || strings.Contains(err.Error(), "APP_DB_MAX_CONNS") {
+		t.Fatalf("err = %v, want the database failure after config accepted 2", err)
+	}
+	if events := sink.find(t, "config_invalid"); len(events) != 0 {
+		t.Fatalf("config_invalid logged for APP_DB_MAX_CONNS=2: %v", events)
+	}
+
+	t.Run("builds over a real database", func(t *testing.T) {
+		database := testpg.New(t, "coreconns")
+		logger, sink := newLogger()
+		app, err := core.Build(context.Background(), core.Options{
+			Logger: logger,
+			Config: config.MapSource(map[string]string{
+				"APP_PUBLIC_BASE_URL": publicBaseURL,
+				"APP_DATABASE_URL":    database.URL,
+				"APP_DB_MAX_CONNS":    "2",
+			}),
+		}, nil)
+		if err != nil {
+			t.Fatalf("Build rejected APP_DB_MAX_CONNS=2: %v\nlogs: %s", err, sink.text())
+		}
+		defer func() { _ = app.Close(context.Background()) }()
+		if events := sink.find(t, "config_invalid"); len(events) != 0 {
+			t.Fatalf("config_invalid logged for APP_DB_MAX_CONNS=2: %v", events)
+		}
+	})
+}
+
 func TestBuildRejectsPublicBaseURLWithPath(t *testing.T) {
 	logger, _ := newLogger()
 	source := config.MapSource(map[string]string{

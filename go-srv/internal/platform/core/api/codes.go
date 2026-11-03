@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+	"regexp"
+)
 
 // Top-level error codes raised by core. Module-raised codes keep their
 // constants in their own modules and appear only in Registry.
@@ -63,8 +67,14 @@ const (
 	raisedByAPIKeys    = "api-keys"
 )
 
-// Registry returns a fresh copy of the authoritative table of every error and
-// issue code, each once. A code is contract: renaming one is a breaking change.
+// codeShape is the SCREAMING_SNAKE rule every registered code satisfies.
+var codeShape = regexp.MustCompile(`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`)
+
+// Registry returns a fresh copy of the authoritative table of the core and
+// catalog module error and issue codes, each once. A product vertical keeps
+// its own codes in its own errors.go and never adds them here; Fail never
+// consults the registry. A code is contract: renaming one is a breaking
+// change.
 func Registry() []CodeInfo {
 	return []CodeInfo{
 		{CodeSessionInvalid, http.StatusUnauthorized, false, raisedByCore},
@@ -121,4 +131,34 @@ func Registry() []CodeInfo {
 		{"PARAMETER_CONSTRAINT_INVALID", http.StatusUnprocessableEntity, true, raisedByParameters},
 		{"PARAMETER_FIELD_IMMUTABLE", http.StatusUnprocessableEntity, true, raisedByParameters},
 	}
+}
+
+// ValidateCodes reports every problem with codes at once, so a product
+// vertical's errors_test.go can prove its own codes never collide with the
+// generator-owned registry. For each entry it checks that Code is
+// SCREAMING_SNAKE, the shape Registry enforces; that Code does not repeat an
+// earlier entry of codes; and that Registry does not already hold it. The
+// result is empty, never nil, when every code passes. Nothing in production
+// calls it.
+func ValidateCodes(codes []CodeInfo) []string {
+	registered := make(map[Code]struct{})
+	for _, info := range Registry() {
+		registered[info.Code] = struct{}{}
+	}
+	problems := []string{}
+	seen := make(map[Code]struct{}, len(codes))
+	for _, info := range codes {
+		code := info.Code
+		if !codeShape.MatchString(string(code)) {
+			problems = append(problems, fmt.Sprintf("%s: code is not SCREAMING_SNAKE", code))
+		}
+		if _, repeated := seen[code]; repeated {
+			problems = append(problems, fmt.Sprintf("%s: duplicated in the input", code))
+		}
+		if _, taken := registered[code]; taken {
+			problems = append(problems, fmt.Sprintf("%s: already in the registry", code))
+		}
+		seen[code] = struct{}{}
+	}
+	return problems
 }
