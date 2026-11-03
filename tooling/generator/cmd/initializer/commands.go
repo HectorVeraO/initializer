@@ -44,7 +44,7 @@ type Example struct{ Comment, Line string }
 // commandTable returns the command table. A function, not a variable: the
 // help command reads the table it belongs to.
 func commandTable() []*Command {
-	return []*Command{generateCommand(), verifyCommand(), moduleLsCommand(), stackLsCommand(), catalogBuildCommand(), versionCommand(), helpCommand()}
+	return []*Command{generateCommand(), upgradeCommand(), verifyCommand(), moduleLsCommand(), stackLsCommand(), catalogBuildCommand(), versionCommand(), helpCommand()}
 }
 
 type generateOptions struct {

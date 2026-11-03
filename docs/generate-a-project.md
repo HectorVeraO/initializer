@@ -21,6 +21,8 @@ _.path = ["<clone>/tooling/generator/bin"]
 
 The binary finds its sources by walking up from its own location, so it needs nothing else. After `git pull`, rebuild with `mise run cli`; without mise, run `go -C tooling/generator build -o bin/ ./cmd/initializer`. When the sources changed since the build, every command prints a `GENERATOR_STALE` warning on stderr with that hint.
 
+Every command that resolves the sources, `generate`, `upgrade`, `verify`, `module ls` and `stack ls`, takes two flags to say where they are: `--root DIR` names the checkout (default: `INITIALIZER_ROOT`, else the clone above the working directory, else the clone above the binary) and `--catalog FILE` uses a catalog file instead of building one from the checkout.
+
 ## 2. Discover
 
 ```bash
@@ -329,7 +331,7 @@ acme-backend-web          ng-web   0       acme-backend-srv-second              
 810 files
 ```
 
-The command also prints `note: go modules derived from example.com/acme/backend; pass go-module= per component to change them` on stderr (section 10). Without `--dry-run` the command writes the project (810 files) and `initializer verify acme-backend` answers `No differences.`
+The command also prints `note: go modules derived from example.com/acme/backend; pass go-module= per component to change them` on stderr (section 11). Without `--dry-run` the command writes the project (810 files) and `initializer verify acme-backend` answers `No differences.`
 
 ### One Postgres server for all backends
 
@@ -421,11 +423,59 @@ No differences.
 go -C acme/acme-srv build ./...
 ```
 
-## 8. Run
+## 8. Upgrade a project
+
+A generated project takes the files the catalog now delivers with one command, without regenerating it into an empty folder:
+
+```bash
+initializer upgrade acme
+```
+
+```text
+Project acme in ./acme
+unchanged        README.md
+unchanged        acme-srv/go.mod
+...
+skipped-modified acme-srv/internal/platform/core/core.go
+...
+1 added, 2 upgraded, 544 unchanged, 1 skipped-modified, 2 skipped-seed.
+1 file skipped as modified; pass --force to replace it.
+```
+
+`DIR` defaults to the working directory. The command reads `initializer.selection.json` and `initializer.lock.json`, rebuilds the plan from the current catalog with the recorded selection, and applies the difference. Every delivered file is reported under one status:
+
+| Status | Meaning |
+|---|---|
+| `added` | The plan delivers it and it was not on disk; written. |
+| `upgraded` | The bytes on disk were the ones the lock recorded, so it was replaced with the new content. |
+| `unchanged` | It already holds the planned bytes; nothing written. |
+| `skipped-modified` | It differs from the lock's hash, or the lock records it and the project deleted it: left alone. |
+| `skipped-seed` | A seed file that differs from what generation delivers, or is missing; seeds are never written. |
+| `skipped-not-file` | A symlink, a folder or another non-regular file sits where the plan delivers a file, or the folder on the way is not a folder of the project; nothing was written. |
+
+The lock is the only record of which files the project has not edited, and it also tells a deleted file from one the plan never delivered. A file the lock does not list is either new to the plan or a seed: a new one is written as `added`; one that exists with another content is treated as edited. Seeds (`cmd/server/product.go`, `src/app/product.modules.ts`) are delivered at generation and never recorded, so the project owns them.
+
+The lock is rewritten from the new plan, keeping the recorded selection. When nothing was skipped, a second run reports every file `unchanged` and writes nothing; a file skipped as modified is reported again, with exit 1, on every run until `--force` replaces it. Files the plan no longer delivers are left in place and listed after the counts.
+
+A delivered path is never written through a symlink or over anything but a regular file, whatever `--force` says: `--force` only widens which regular files are replaced.
+
+The command refuses and writes nothing when the recorded selection no longer resolves against the catalog, for example when it names a module the catalog dropped (`MODULE_UNKNOWN`, exit 1).
+
+| Flag | Does |
+|---|---|
+| `--dry-run` | Prints the same report and writes nothing. |
+| `--force` | Replaces the edited files and restores the deleted ones too. |
+| `--root DIR`, `--catalog FILE` | Where the sources and the catalog come from (section 1). |
+
+The exit code is 0 when every file applied, 1 when a file was left in place (an edited or deleted one, a non-regular target, also in a dry run), and 3 when the project's record or a delivered file cannot be read. `--force` is what a script uses when it owns the project.
+
+Out of scope: a three-way merge of an edited file, renaming a component, changing the selection, and deleting files. To change the selection, generate the project into a new folder.
+
+## 9. Run
 
 Running a generated project (database, Kratos, console) is described in its own `README.md`, section `## Run`: `mise trust`, `mise install`, `mise run up`.
 
-## 9. Try many configurations
+## 10. Try many configurations
 
 `tooling/generator/testdata/ci/*.json` holds the selections CI covers. Generate and verify each into its own folder:
 
@@ -441,7 +491,7 @@ done
 
 It prints nothing when every selection passes; each log is `try/<name>.log`.
 
-## 10. Output and errors
+## 11. Output and errors
 
 - `--format json` prints one JSON document: on stdout for exit 0 and 1, on stderr for exit 2 and 3 (stdout stays empty).
 - `--log json` writes structured log events to stderr.
@@ -450,10 +500,10 @@ It prints nothing when every selection passes; each log is `try/<name>.log`.
 
 | Exit | Meaning |
 |---|---|
-| 0 | Success: results, help, `version`, `verify` with no differences |
-| 1 | The values are wrong: `SELECTION_INVALID`, `NAME_*`, `COMPONENT_*`, `MODULE_UNKNOWN`, `OUTPUT_NOT_EMPTY`, `verify` differences |
+| 0 | Success: results, help, `version`, `verify` with no differences, `upgrade` with every file applied |
+| 1 | The values are wrong, or work is left: `SELECTION_INVALID`, `NAME_*`, `COMPONENT_*`, `MODULE_UNKNOWN`, `OUTPUT_NOT_EMPTY`, `verify` differences, `upgrade` files left in place |
 | 2 | Change the command or the environment: command-line problems, `SOURCE_ROOT_NOT_FOUND`, `SOURCE_ROOT_INVALID`, `INPUT_FORMAT_UNKNOWN` |
-| 3 | I/O or internal failure: `INPUT_UNREADABLE`, `OUTPUT_UNWRITABLE`, `VERIFY_UNREADABLE` |
+| 3 | I/O or internal failure: `INPUT_UNREADABLE`, `OUTPUT_UNWRITABLE`, `VERIFY_UNREADABLE`, `UPGRADE_UNREADABLE` |
 
 Codes a person meets:
 
@@ -474,6 +524,7 @@ Codes a person meets:
 | `NAME_RESERVED` | A component name equals a folder of the project (for example `specs`), or, with identity, the project name is `kratos` (also `--db-name` and `--db-user` in a single-component project), the fixed Kratos name; choose another. |
 | `COMPONENT_MERGE_AMBIGUOUS` | A `--component` flag names no component of the file; edit the file. |
 | `SOURCE_ROOT_NOT_FOUND` | No clone found from the working directory or the binary; run inside a clone, pass `--root <clone>`, or set `INITIALIZER_ROOT`. |
+| `UPGRADE_UNREADABLE` | `initializer.selection.json` or `initializer.lock.json` is missing or unreadable in `DIR`; run the command in a generated project. |
 | `REQUIRES_STACK_MISMATCH` | A catalog build error: a module names different required modules in its two stacks. |
 | `GENERATOR_STALE` | A warning: the sources changed since the build; run `mise run cli`. |
 

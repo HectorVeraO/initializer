@@ -55,6 +55,9 @@ type File struct {
 	// Path is the project-relative slash path.
 	Path string
 	Data []byte
+	// Seed is true for a delivered file the project owns: it is written on
+	// generation and never recorded in the lock, so an upgrade leaves it alone.
+	Seed bool
 }
 
 // Project is the whole generated tree in write order: paths ascending, with
@@ -121,6 +124,8 @@ type builder struct {
 	// the first Go component's, else the selection's.
 	firstTarget string
 	files       map[string][]byte
+	// seeds holds the project paths of the delivered seed files.
+	seeds map[string]bool
 	// roots holds the project path of every composition root of the plan.
 	roots map[string]bool
 	// projectOwner maps a delivered project-scope path to the module that
@@ -177,6 +182,7 @@ func Build(opts BuildOptions) (Project, error) {
 		project:      selection.Project.Name,
 		firstTarget:  firstTarget,
 		files:        map[string][]byte{},
+		seeds:        map[string]bool{},
 		roots:        roots,
 		projectOwner: map[string]projectDelivery{},
 		rules:        nameRules(opts.Plan),
@@ -368,6 +374,9 @@ func (b *builder) copyFile(component *plan.ComponentPlan, owner string, perCompo
 	}
 	if err := b.add(dest, transformed); err != nil {
 		return lockfile.File{}, false, err
+	}
+	if file.Seed {
+		b.seeds[dest] = true
 	}
 	if isProject {
 		b.projectOwner[dest] = projectDelivery{key: ownerKey, component: componentName}
@@ -906,7 +915,7 @@ func (b *builder) assemble(lock []byte) (Project, error) {
 	sort.Strings(paths)
 	files := make([]File, 0, len(paths)+1)
 	for _, p := range paths {
-		files = append(files, File{Path: p, Data: b.files[p]})
+		files = append(files, File{Path: p, Data: b.files[p], Seed: b.seeds[p]})
 	}
 	files = append(files, File{Path: lockfile.Name, Data: lock})
 	if err := b.scanSourceLeak(files); err != nil {

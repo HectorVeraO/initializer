@@ -189,12 +189,14 @@ func TestExitThreeDocumentsCarryTheirCode(t *testing.T) {
 	cases := map[string]struct {
 		args []string
 		code string
+		hint string
 	}{
-		"file list":     {[]string{"catalog", "build", "--root", root, "--files", filepath.Join(t.TempDir(), "none"), "--out", "o"}, "INPUT_UNREADABLE"},
-		"catalog":       {[]string{"generate", "o", "--root", e.root, "--catalog", filepath.Join(t.TempDir(), "none"), "-f", writeSelection(t, validSelection)}, "CATALOG_UNREADABLE"},
-		"verify":        {[]string{"verify", t.TempDir()}, "VERIFY_UNREADABLE"},
-		"project write": {[]string{"generate", filepath.Join(blocker, "proj"), "--root", e.root, "--catalog", e.catalog, "-f", writeSelection(t, validSelection)}, "OUTPUT_UNWRITABLE"},
-		"catalog write": {[]string{"catalog", "build", "--root", root, "--files", writeFileList(t), "--out", filepath.Join(blocker, "c.json")}, "OUTPUT_UNWRITABLE"},
+		"file list":     {[]string{"catalog", "build", "--root", root, "--files", filepath.Join(t.TempDir(), "none"), "--out", "o"}, "INPUT_UNREADABLE", ""},
+		"catalog":       {[]string{"generate", "o", "--root", e.root, "--catalog", filepath.Join(t.TempDir(), "none"), "-f", writeSelection(t, validSelection)}, "CATALOG_UNREADABLE", ""},
+		"verify":        {[]string{"verify", t.TempDir()}, "VERIFY_UNREADABLE", ""},
+		"upgrade":       {[]string{"upgrade", t.TempDir()}, "UPGRADE_UNREADABLE", upgradeUnreadableHint},
+		"project write": {[]string{"generate", filepath.Join(blocker, "proj"), "--root", e.root, "--catalog", e.catalog, "-f", writeSelection(t, validSelection)}, "OUTPUT_UNWRITABLE", ""},
+		"catalog write": {[]string{"catalog", "build", "--root", root, "--files", writeFileList(t), "--out", filepath.Join(blocker, "c.json")}, "OUTPUT_UNWRITABLE", ""},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -205,16 +207,22 @@ func TestExitThreeDocumentsCarryTheirCode(t *testing.T) {
 			var doc struct {
 				Schema int
 				OK     bool
-				Error  struct{ Code, Message string }
+				Error  struct{ Code, Message, Hint string }
 			}
 			decodeDocument(t, lastLines(stderr), &doc)
 			if doc.Schema != 1 || doc.OK || doc.Error.Code != tc.code || doc.Error.Message == "" {
 				t.Fatalf("doc = %+v", doc)
 			}
+			if tc.hint != "" && doc.Error.Hint != tc.hint {
+				t.Fatalf("hint = %q, want %q", doc.Error.Hint, tc.hint)
+			}
 			_, _, text := execute(t, tc.args...)
 			text = withoutSources(text)
 			if !strings.HasPrefix(text, "error: ") || !strings.Contains(text, "["+tc.code+"]\n") {
 				t.Fatalf("text = %q", text)
+			}
+			if tc.hint != "" && !strings.Contains(text, "  hint: "+tc.hint+"\n") {
+				t.Fatalf("text = %q does not carry the hint", text)
 			}
 		})
 	}

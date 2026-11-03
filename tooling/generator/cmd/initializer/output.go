@@ -13,6 +13,7 @@ import (
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/emit"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/issue"
 	"github.com/HectorVeraO/initializer/tooling/generator/internal/manifest"
+	"github.com/HectorVeraO/initializer/tooling/generator/internal/upgrade"
 )
 
 // Result formats of --format.
@@ -31,6 +32,7 @@ const (
 	codeCatalogUnreadable = "CATALOG_UNREADABLE"
 	codeOutputUnwritable  = "OUTPUT_UNWRITABLE"
 	codeVerifyUnreadable  = "VERIFY_UNREADABLE"
+	codeUpgradeUnreadable = "UPGRADE_UNREADABLE"
 	codeInternalError     = "INTERNAL_ERROR"
 )
 
@@ -507,4 +509,130 @@ func writeCatalogBuilt(ctx *Context, out, sha256 string, ref sourceRef) int {
 		return emitDocument(ctx, ctx.Stdout, doc, exitOK)
 	}
 	return emitText(ctx, fmt.Sprintf("Catalog written to %s (sha256 %s).\n", slashed, sha256[:12]))
+}
+
+// upgradeResult is what a successful upgrade prints.
+type upgradeResult struct {
+	project string
+	// path is the DIR argument as typed.
+	path    string
+	dryRun  bool
+	result  upgrade.Result
+	source  sourceRef
+	catalog catalogRef
+}
+
+// upgradeCounts is the counts member of the upgrade document.
+type upgradeCounts struct {
+	Added           int `json:"added"`
+	Upgraded        int `json:"upgraded"`
+	Unchanged       int `json:"unchanged"`
+	SkippedModified int `json:"skippedModified"`
+	SkippedSeed     int `json:"skippedSeed"`
+	SkippedNotFile  int `json:"skippedNotFile"`
+}
+
+// counts returns how many files carry each status.
+func (r upgradeResult) counts() upgradeCounts {
+	return upgradeCounts{
+		Added:           r.result.Count(upgrade.Added),
+		Upgraded:        r.result.Count(upgrade.Upgraded),
+		Unchanged:       r.result.Count(upgrade.Unchanged),
+		SkippedModified: r.result.Count(upgrade.SkippedModified),
+		SkippedSeed:     r.result.Count(upgrade.SkippedSeed),
+		SkippedNotFile:  r.result.Count(upgrade.SkippedNotFile),
+	}
+}
+
+// writeUpgrade prints the result of upgrade and returns the exit code: 0 when
+// every file applied, 1 when a file was left in place.
+func writeUpgrade(ctx *Context, result upgradeResult) int {
+	code := exitOK
+	if result.result.Skipped() {
+		code = exitIssues
+		ctx.Logger.Warn("upgrade_skipped",
+			slog.Int("skipped_modified_count", result.counts().SkippedModified),
+			slog.Int("skipped_not_file_count", result.counts().SkippedNotFile))
+	}
+	if ctx.isJSON() {
+		doc := struct {
+			Schema   int               `json:"schema"`
+			OK       bool              `json:"ok"`
+			Project  string            `json:"project"`
+			Path     string            `json:"path"`
+			DryRun   bool              `json:"dryRun"`
+			Files    []upgrade.Outcome `json:"files"`
+			Counts   upgradeCounts     `json:"counts"`
+			Written  int               `json:"written"`
+			Stale    []string          `json:"stale"`
+			Source   sourceRef         `json:"source"`
+			Catalog  catalogRef        `json:"catalog"`
+			Notes    []string          `json:"notes"`
+			Warnings []Warning         `json:"warnings"`
+		}{documentSchema, code == exitOK, result.project, filepath.ToSlash(result.path), result.dryRun,
+			list(result.result.Files), result.counts(), len(result.result.Written), list(result.result.Stale),
+			result.source, result.catalog, list(ctx.Notes), ctx.warnings()}
+		return emitDocument(ctx, ctx.Stdout, doc, code)
+	}
+	var text strings.Builder
+	fmt.Fprintf(&text, "Project %s in %s", result.project, displayPath(result.path))
+	if result.dryRun {
+		text.WriteString(" (dry run, nothing written)")
+	}
+	text.WriteString("\n")
+	for _, file := range result.result.Files {
+		fmt.Fprintf(&text, "%-16s %s\n", file.Status, file.Path)
+	}
+	text.WriteString(upgradeSummary(result.counts()))
+	text.WriteString("\n")
+	if skipped := result.counts().SkippedModified; skipped > 0 {
+		fmt.Fprintf(&text, "%d %s skipped as modified; pass --force to replace %s.\n",
+			skipped, plural(skipped, "file"), pronoun(skipped))
+	}
+	if skipped := result.counts().SkippedNotFile; skipped > 0 {
+		fmt.Fprintf(&text, "%d %s skipped because a symlink or another non-regular file is in the way; move it away and run again.\n",
+			skipped, plural(skipped, "file"))
+	}
+	if len(result.result.Stale) > 0 {
+		fmt.Fprintf(&text, "%d %s no longer delivered, left in place: %s\n",
+			len(result.result.Stale), plural(len(result.result.Stale), "file"), strings.Join(result.result.Stale, ", "))
+	}
+	if emitText(ctx, text.String()) != exitOK {
+		return exitInternal
+	}
+	return code
+}
+
+// upgradeSummary renders the counts line: only the statuses that occurred, in
+// the report order.
+func upgradeSummary(counts upgradeCounts) string {
+	values := []struct {
+		count  int
+		suffix string
+	}{
+		{counts.Added, "added"},
+		{counts.Upgraded, "upgraded"},
+		{counts.Unchanged, "unchanged"},
+		{counts.SkippedModified, "skipped-modified"},
+		{counts.SkippedSeed, "skipped-seed"},
+		{counts.SkippedNotFile, "skipped-not-file"},
+	}
+	var parts []string
+	for _, value := range values {
+		if value.count > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", value.count, value.suffix))
+		}
+	}
+	if len(parts) == 0 {
+		return "no files"
+	}
+	return strings.Join(parts, ", ") + "."
+}
+
+// pronoun returns "it" for one file and "them" for several.
+func pronoun(count int) string {
+	if count == 1 {
+		return "it"
+	}
+	return "them"
 }
