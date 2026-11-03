@@ -1,19 +1,37 @@
-# go-srv -- Architecture and module layout
+# Architecture and module layout
 
-Read before adding or changing a module, route, handler or error response. Canonical examples: `go-srv/internal/platform/core/health` (mounting, handler, black-box test) and `go-srv/internal/testkit/coretest` (a module under test).
+Read before adding or changing a module, route, handler or error response. Canonical examples:
+`go-srv/internal/platform/core/health` (mounting, handler, black-box test) and
+`go-srv/internal/testkit/coretest` (a module under test). A product vertical, the code this project
+writes itself, is `go-srv/internal/<vertical>/`: `cookbooks/new-domain-module.md`.
 
 ## Layout
 
 | Path | Holds |
 |---|---|
 | `cmd/server/main.go` | Fixed: `os.Exit(core.Main(installedModules()))`. `cmd/server/modules.go` is generated and lists the installed modules. No business logic. |
+| `cmd/server/product.go` | Project-owned: `productModules()` lists the verticals; `modules.go` appends them. |
+| `internal/<vertical>/` | A product vertical: its module, migrations, handlers, service, store and codes. |
 | `internal/platform/core/` | The always-installed foundation: module seam (`Module`, `Builder`, `Host`, `Build`, `Run`), request chain, `api`, `access`, `reqctx`, `featureflag`, `parameter`, `config`, `telemetry`, `db`, `migrate`, `health`, `clock`. |
 | `internal/testkit/` | Test support, outside the platform tree: `coretest` (the module test host) and `testpg` (the throwaway database helper). Only `_test.go` files import it. |
 | `internal/platform/<module>/` | One package tree per catalog module (`identity`, `tenancy`, `apikeys`, `parameters`, `featureflags`). |
-| `specs/<module>/openapi.yaml` (repo root) | The module's HTTP contract. The Go code implements it; it never defines it. |
+| `specs/<module>/openapi.yaml` | The module's HTTP contract, in the project's `specs/` folder. The Go code implements it; it never defines it. |
 
-- Import rules, enforced by `internal/platform/core/boundary_test.go`: a package under `core/` imports no other `internal/platform/<x>`; a module imports from this Go module only `core/...` and its own subtree; `cmd/server` imports only `core` and the module root packages named in `modules.go`; core subpackages never import the `core` root; the Go module path appears only in `go.mod` and import specs, in an import group of its own; no Go file of a module names a table whose prefix another module claims (rule 6); no file of the package imports `internal/testkit/...`, a `_test.go` file may (rule 7).
-- Ports are declared in core only: `access.SessionResolver`, `access.APIKeyResolver`, `access.TenantAccess`, `access.TenantDirectory`, `accounts.Directory`, `accounts.Provisioner`, `featureflag.Evaluator`, `parameter.Reader`. A module publishes one with `Builder.Provide*` in `Provide`, once, and reads it from `Host` in `Mount`, `Start` or a handler. Each has a fail-closed default (`access.NoTenantAccess`, `accounts.NoDirectory`, `featureflag.Disabled{}`, `parameter.NoReader{}`, ...); a module never branches on which other modules are installed. Full list: `.claude/references/architecture.md` -> "Modules and core ports".
+- Import rules, enforced by `internal/platform/core/boundary_test.go`: a package under `core/`
+  imports no other `internal/platform/<x>` and no vertical; a module imports from this Go module
+  only `core/...` and its own subtree; a vertical imports only non-internal `core/...` packages and
+  its own subtree, so no platform module and no sibling vertical; `cmd/server` imports, in
+  `product.go`, only the core root and the vertical roots, and in every other file only the core
+  root and the module root packages named in `modules.go`; core subpackages never import the `core`
+  root; the Go module path appears only in `go.mod` and import specs, in an import group of its own;
+  no Go file of a module or vertical names a table whose prefix another owner claims (rule 6); no
+  file of the package imports `internal/testkit/...`, a `_test.go` file may (rule 7).
+- Ports are declared in core only: `access.SessionResolver`, `access.APIKeyResolver`,
+  `access.TenantAccess`, `access.TenantDirectory`, `accounts.Directory`, `accounts.Provisioner`,
+  `featureflag.Evaluator`, `parameter.Reader`. A module publishes one with `Builder.Provide*` in
+  `Provide`, once, and reads it from `Host` in `Mount`, `Start` or a handler. Each has a fail-closed
+  default (`access.NoTenantAccess`, `accounts.NoDirectory`, `featureflag.Disabled{}`,
+  `parameter.NoReader{}`, ...); a module never branches on which other modules are installed.
 - One module owns its routes, its handlers, its persistence prefix and its tests. Nothing outside the module reads its tables.
 - Modules talk to each other only through core ports, never through another module's package or tables; a column that holds another module's id has no foreign key. Account data reaches tenancy through `accounts.Directory` and `accounts.Provisioner`; tenant data reaches identity and api-keys through `access.TenantAccess` and `access.TenantDirectory`.
 - api-keys is a credential module: a key holds only scopes other modules register through `access.ScopeRegistry`. Without tenancy a key can hold only scopes of level `any`, which other modules register; `authorizeKey` answers `ACTIVE_TENANT_REQUIRED` before `INSUFFICIENT_SCOPE`.
@@ -23,8 +41,8 @@ Read before adding or changing a module, route, handler or error response. Canon
 
 ## Routing
 
-- Stdlib `net/http` `ServeMux` method patterns, registered only through `Host.Handle(pattern, policy, handler)` in a module's `Mount`: `h.Handle("GET /api/v1/parameters", auth.Policy{Kind: auth.KindSession}, handler)`. Every `/api/v1/` pattern carries a method; `/health/` belongs to core.
-- Each module exposes `Module() core.Module` (no package-level registry), listed in `cmd/server/modules.go`. `Register(mux, ...)` no longer exists; the policy replaces hand-written auth checks. `core/health` is mounted by core itself.
+- Stdlib `net/http` `ServeMux` method patterns, registered only through `Host.Handle(pattern, policy, handler)` in a module's `Mount`: `h.Handle("GET /api/v1/parameters", access.Policy{Kind: access.KindSession}, handler)`. Every `/api/v1/` pattern carries a method; `/health/` belongs to core.
+- Each module exposes `Module() core.Module` (no package-level registry). `cmd/server/modules.go` lists the catalog modules and is generated; `cmd/server/product.go` lists the project's verticals and is project-owned. `Register(mux, ...)` no longer exists; the policy replaces hand-written auth checks. `core/health` is mounted by core itself.
 - Path parameters come from `r.PathValue("id")`; validate them before use.
 - Versioned API routes start with the path prefix /api/v1; probes start with /health.
 
@@ -41,7 +59,7 @@ Every /api/v1 response body is one JSON object:
 ```
 
 - Success: `data` set, `error` null. Failure: `data` null, `error` set as `{ "code": "<CODE>", "message": "<text>", "issues": [] }`.
-- `meta.traceId` equals the `X-Trace-Id` response header (see `cookbooks/testing-tck.md` and root `AGENTS.md` "Platform rules").
+- `meta.traceId` equals the `X-Trace-Id` response header (see `cookbooks/testing-tck.md`).
 - `meta.timestamp` is RFC 3339 UTC ending in `Z`.
 - Probes (/health/*) do not use the envelope.
 
@@ -63,8 +81,9 @@ Every /api/v1 response body is one JSON object:
 ## Implementation checklist
 
 - [ ] The contract change is in `specs/<module>/openapi.yaml` first, in the same PR.
-- [ ] Routes are registered through `Host.Handle` with an `auth.Policy` and use method patterns.
+- [ ] Routes are registered through `Host.Handle` with an `access.Policy` and use method patterns.
 - [ ] Every /api/v1 response uses the envelope; validation errors are accumulated `422`.
 - [ ] Every `:id` access is scoped to the active tenant (`404` across tenants).
-- [ ] Tables use the module prefix (`cookbooks/data-migrations.md`).
+- [ ] Tables use the owner's prefix (`cookbooks/data-migrations.md`).
 - [ ] Tests cover the behavior through HTTP (`cookbooks/testing-tck.md`).
+- [ ] A vertical is registered in `cmd/server/product.go` only (`cookbooks/new-domain-module.md`).

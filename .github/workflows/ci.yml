@@ -186,7 +186,7 @@ jobs:
           while IFS= read -r file; do
             path="${file#"${ref}/"}"
             case "${path}" in
-              README.md|initializer.selection.json|initializer.lock.json|flags.yaml) continue ;;
+              README.md|initializer.selection.json|initializer.lock.json|flags.yaml|go-srv/AGENTS.md) continue ;;
             esac
             compared=$((compared + 1))
             expected="${GITHUB_WORKSPACE}/${path}"

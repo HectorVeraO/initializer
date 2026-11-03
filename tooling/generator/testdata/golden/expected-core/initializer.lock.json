@@ -126,6 +126,10 @@
       "sha256": "5485073c0c1242bbc779d014e51ba1d09899545e6530fba4220bd594305c25e3"
     },
     {
+      "path": "acme-backend-srv/AGENTS.md",
+      "sha256": "ce8368ae57dd0d267ebdefbb853a6dde81ba4c76879fe7e022b35cc494fbfd23"
+    },
+    {
       "path": "acme-backend-srv/cmd/server/modules.go",
       "sha256": "f9b613f46a702dd64bc7580abb8cecb1209ea30d8ed640859e4af0a5251f5f47"
     },

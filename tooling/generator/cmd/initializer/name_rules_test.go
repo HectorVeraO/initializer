@@ -89,6 +89,8 @@ func TestGenerateRenamesTheComposeProjectAndInfrastructure(t *testing.T) {
 // excludedFromRoundtrip lists the delivered files that differ from the repo by design.
 var excludedFromRoundtrip = map[string]bool{
 	"README.md": true, "initializer.selection.json": true, "initializer.lock.json": true, "flags.yaml": true,
+	// The component AGENTS.md is rendered per project; the repo keeps its own index under the same path.
+	"go-srv/AGENTS.md": true,
 }
 
 func TestGenerateFromTheReferenceFileReproducesTheRepo(t *testing.T) {
@@ -100,6 +102,7 @@ func TestGenerateFromTheReferenceFileReproducesTheRepo(t *testing.T) {
 		t.Fatalf("generate exit %d: %s", code, stderr)
 	}
 	compared := 0
+	delivered := map[string]bool{}
 	err := filepath.WalkDir(out, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
@@ -109,10 +112,11 @@ func TestGenerateFromTheReferenceFileReproducesTheRepo(t *testing.T) {
 			return err
 		}
 		slash := filepath.ToSlash(relative)
+		delivered[slash] = true
 		if excludedFromRoundtrip[slash] {
 			return nil
 		}
-		delivered, err := os.ReadFile(path)
+		body, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
@@ -125,7 +129,7 @@ func TestGenerateFromTheReferenceFileReproducesTheRepo(t *testing.T) {
 			// The delivered compose project is "<project>-<band>"; the repo copy keeps the bare name.
 			source = bytes.Replace(source, []byte("name: initializer\n"), []byte("name: initializer-101\n"), 1)
 		}
-		if !bytes.Equal(delivered, source) {
+		if !bytes.Equal(body, source) {
 			t.Errorf("%s differs from the repo copy", slash)
 		}
 		compared++
@@ -136,6 +140,20 @@ func TestGenerateFromTheReferenceFileReproducesTheRepo(t *testing.T) {
 	}
 	if compared == 0 {
 		t.Fatal("no delivered file was compared")
+	}
+	// The cookbooks are the instructions a project reads, so their delivery is
+	// pinned: a manifest entry that stops matching delivers nothing and says so
+	// only here.
+	for _, want := range []string{
+		"go-srv/cookbooks/architecture.md",
+		"go-srv/cookbooks/data-migrations.md",
+		"go-srv/cookbooks/new-domain-module.md",
+		"go-srv/cookbooks/testing-tck.md",
+		"specs/cookbooks/new-module-contract.md",
+	} {
+		if !delivered[want] {
+			t.Errorf("%s was not delivered", want)
+		}
 	}
 }
 

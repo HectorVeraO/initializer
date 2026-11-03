@@ -1,2 +1,2 @@
-# Feature flag manifest
+# Feature flag manifest. Rules and shape: cookbooks/tbd-feature-flags.md in the backend component.
 flags: []

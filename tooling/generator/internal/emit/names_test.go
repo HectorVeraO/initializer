@@ -1,6 +1,7 @@
 package emit_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,5 +102,62 @@ func TestRuleWithTheReferenceValueLeavesTheCopyUnchanged(t *testing.T) {
 	}
 	if got := projectFile(t, same, ".deploy/local/docker-compose.yml"); got != string(source) {
 		t.Fatalf("generating at the reference name changed the compose file:\n%s", got)
+	}
+}
+
+// A cookbook delivered with a component keeps no reference path: its name rule
+// rewrites the component folder, so the document names a folder the project has.
+func TestAComponentCookbookIsDeliveredRenamedWithTheComponent(t *testing.T) {
+	note := "# Cookbook notes\n\nThe framework code lives in go-srv/internal/platform.\n"
+	repo := fixture.Load(t)
+	root := t.TempDir()
+	copyTree(t, repo.Root, root)
+	if err := os.WriteFile(filepath.Join(root, "go-srv", "cookbooks", "notes.md"), []byte(note), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(root, filepath.FromSlash(coreManifestPath))
+	manifestText, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := `{"path": "go-srv/cookbooks/notes.md", "text": "%{component.go-srv}/internal"}`
+	changed := strings.Replace(string(manifestText), `"names": [`+projectRuleJSON+`]`, `"names": [`+projectRuleJSON+`, `+rule+`]`, 1)
+	if changed == string(manifestText) {
+		t.Fatal("the core manifest rule was not found")
+	}
+	if err := os.WriteFile(manifestPath, []byte(changed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The fixture excludes the repository's own cookbooks; this test delivers the note it owns.
+	edited, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited = bytes.Replace(edited, []byte(`"exclude": ["go-srv/AGENTS.md", "go-srv/cookbooks/"]`), []byte(`"exclude": ["go-srv/AGENTS.md"]`), 1)
+	if err := os.WriteFile(manifestPath, edited, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	list, err := os.ReadFile(filepath.Join(fixture.Dir(t), "files.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, issues, err := catalog.Build(catalog.BuildOptions{Root: os.DirFS(root), Files: strings.Fields(string(list)), Generator: generator.Version})
+	if err != nil || len(issues) > 0 {
+		t.Fatalf("catalog build: %v %v", err, issues)
+	}
+	encoded, err := catalog.Encode(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := build(t, os.DirFS(root), built, encoded, selection(targetModule))
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	got := projectFile(t, project, "acme-backend-srv/cookbooks/notes.md")
+	if !strings.Contains(got, "acme-backend-srv/internal/platform") {
+		t.Errorf("the cookbook was not renamed with the component:\n%s", got)
+	}
+	if strings.Contains(got, "go-srv/") {
+		t.Errorf("the cookbook names a folder the project does not have:\n%s", got)
 	}
 }

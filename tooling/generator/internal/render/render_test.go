@@ -385,3 +385,72 @@ func TestReadmeWithoutComponentsRendersTheSingleText(t *testing.T) {
 		t.Error("an empty Components list changed the single README")
 	}
 }
+
+func TestAgentsMDGoldens(t *testing.T) {
+	cases := []struct {
+		golden string
+		in     render.AgentsInput
+	}{
+		{"AGENTS.modules.md.golden", render.AgentsInput{
+			Component: "acme-srv",
+			Modules:   []string{"identity", "parameters"},
+			Cookbooks: []string{"architecture.md", "data-migrations.md", "new-domain-module.md", "testing-tck.md"},
+		}},
+		{"AGENTS.flags.md.golden", render.AgentsInput{
+			Component: "acme-srv",
+			Modules:   []string{"feature-flags", "identity"},
+			Cookbooks: []string{"architecture.md", "data-migrations.md", "new-domain-module.md", "tbd-feature-flags.md", "testing-tck.md"},
+			Flags:     true,
+		}},
+		{"AGENTS.core-only.md.golden", render.AgentsInput{
+			Component: "acme-srv",
+			Cookbooks: []string{"architecture.md", "data-migrations.md", "new-domain-module.md", "testing-tck.md"},
+		}},
+		{"AGENTS.multi.md.golden", render.AgentsInput{
+			Component: "acme-srv-second",
+			Modules:   []string{"identity"},
+			Cookbooks: []string{"architecture.md", "data-migrations.md", "new-domain-module.md", "testing-tck.md"},
+			Multi:     true,
+		}},
+		{"AGENTS.no-cookbooks.md.golden", render.AgentsInput{Component: "acme-srv"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.golden, func(t *testing.T) {
+			got, err := render.AgentsMD(tc.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertGolden(t, tc.golden, got)
+			if !bytes.HasSuffix(got, []byte("\n")) || bytes.HasSuffix(got, []byte("\n\n")) {
+				t.Fatal("AGENTS.md must end with exactly one newline")
+			}
+			text := string(got)
+			for _, banned := range []string{"go-srv/", "mise ", "1010", "1012", "1013"} {
+				if strings.Contains(text, banned) {
+					t.Errorf("AGENTS.md holds %q, which no project shares:\n%s", banned, text)
+				}
+			}
+			if !strings.Contains(text, "# AGENTS.md - "+tc.in.Component) {
+				t.Errorf("AGENTS.md does not name the component:\n%s", text)
+			}
+		})
+	}
+}
+
+func TestAgentsMDRefusesBadInput(t *testing.T) {
+	cookbooks := []string{"architecture.md"}
+	cases := map[string]render.AgentsInput{
+		"empty component": {},
+		"uppercase":       {Component: "Acme-Srv", Cookbooks: cookbooks},
+		"newline":         {Component: "acme\n# injected", Cookbooks: cookbooks},
+		"bad module id":   {Component: "acme-srv", Modules: []string{"Feature Flags"}, Cookbooks: cookbooks},
+		"bad cookbook":    {Component: "acme-srv", Cookbooks: []string{"../notes.md"}},
+	}
+	for name, in := range cases {
+		t.Run(name, func(t *testing.T) {
+			if out, err := render.AgentsMD(in); err == nil {
+				t.Fatalf("want an error, got:\n%s", out)
+			}
+		})
+	}
+}
