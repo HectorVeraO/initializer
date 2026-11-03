@@ -50,7 +50,7 @@ func TestOpenParseErrorHidesPassword(t *testing.T) {
 }
 
 func TestOpenRejectsBadMaxConns(t *testing.T) {
-	for _, n := range []int{0, -1, math.MaxInt32 + 1} {
+	for _, n := range []int{0, 1, -1, math.MaxInt32 + 1} {
 		if _, err := db.Open(context.Background(), secret(t, "postgres://u@h/d"), n); err == nil {
 			t.Fatalf("maxConns %d accepted", n)
 		}
