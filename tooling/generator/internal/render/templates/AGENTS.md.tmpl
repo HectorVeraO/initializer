@@ -14,7 +14,7 @@ messages are in English.
 | `internal/platform/core/` | The foundation: module seam, request chain, `api`, `access`, `reqctx`, `featureflag`, `parameter`, `config`, `telemetry`, `db`, `migrate`, `health`, `clock`. |
 | `internal/platform/<module>/` | One catalog module{{if .Modules}} ({{join .Modules ", "}}){{end}}. Copy-and-own: the project may edit it, and a module path never moves. |
 | `internal/<vertical>/` | A product vertical: its module, `migrations/`, handlers, service, store and codes. |
-| `internal/testkit/` | `coretest` and `testpg`. Only a `_test.go` file imports it. |
+| `internal/testkit/` | `testcore` and `testpg`. Only a `_test.go` file imports it. |
 {{if .Cookbooks}}| `cookbooks/` | The patterns: {{join .Cookbooks ", "}}. Read the one for the task at hand. |
 {{end}}
 ## Commands

@@ -1,4 +1,4 @@
-package coretest_test
+package testcore_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/accounts"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 const (
@@ -37,14 +37,14 @@ func requireRejection(t *testing.T, err error, code api.Code) {
 
 func TestTenantBookGrantChecksInOrder(t *testing.T) {
 	ctx := context.Background()
-	book := coretest.NewTenantBook(
+	book := testcore.NewTenantBook(
 		tenantRef(tenantAlpha, "alpha", access.TenantActive),
 		tenantRef(tenantBeta, "beta", access.TenantSuspended),
 		tenantRef(tenantGamma, "gamma", access.TenantActive),
 	)
-	book.AddMember(coretest.Member{ID: "m-1", Account: accountOne, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "active"})
-	book.AddMember(coretest.Member{ID: "m-2", Account: accountOne, Tenant: tenantBeta, Role: reqctx.RoleMember, Status: "revoked"})
-	book.AddMember(coretest.Member{ID: "m-3", Account: accountOne, Tenant: tenantGamma, Role: reqctx.RoleViewer, Status: "revoked"})
+	book.AddMember(testcore.Member{ID: "m-1", Account: accountOne, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "active"})
+	book.AddMember(testcore.Member{ID: "m-2", Account: accountOne, Tenant: tenantBeta, Role: reqctx.RoleMember, Status: "revoked"})
+	book.AddMember(testcore.Member{ID: "m-3", Account: accountOne, Tenant: tenantGamma, Role: reqctx.RoleViewer, Status: "revoked"})
 
 	grant, err := book.Grant(ctx, accountOne, tenantAlpha)
 	if err != nil || grant.Role != reqctx.RoleAdmin || grant.Tenant.Slug != "alpha" {
@@ -73,14 +73,14 @@ func TestTenantBookGrantChecksInOrder(t *testing.T) {
 
 func TestTenantBookSelectPrefersRememberedThenOldest(t *testing.T) {
 	ctx := context.Background()
-	book := coretest.NewTenantBook(
+	book := testcore.NewTenantBook(
 		tenantRef(tenantAlpha, "alpha", access.TenantActive),
 		tenantRef(tenantBeta, "beta", access.TenantActive),
 		tenantRef(tenantGamma, "gamma", access.TenantActive),
 	)
-	book.AddMember(coretest.Member{ID: "m-1", Account: accountOne, Tenant: tenantGamma, Role: reqctx.RoleViewer, Status: "revoked"})
-	book.AddMember(coretest.Member{ID: "m-2", Account: accountOne, Tenant: tenantBeta, Role: reqctx.RoleMember, Status: "active"})
-	book.AddMember(coretest.Member{ID: "m-3", Account: accountOne, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "active"})
+	book.AddMember(testcore.Member{ID: "m-1", Account: accountOne, Tenant: tenantGamma, Role: reqctx.RoleViewer, Status: "revoked"})
+	book.AddMember(testcore.Member{ID: "m-2", Account: accountOne, Tenant: tenantBeta, Role: reqctx.RoleMember, Status: "active"})
+	book.AddMember(testcore.Member{ID: "m-3", Account: accountOne, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "active"})
 
 	oldest, err := book.Select(ctx, accountOne)
 	if err != nil || oldest == nil || oldest.Tenant.ID != tenantBeta {
@@ -110,7 +110,7 @@ func TestTenantBookSelectPrefersRememberedThenOldest(t *testing.T) {
 }
 
 func TestTenantBookRememberRejectsNonUUIDs(t *testing.T) {
-	book := coretest.NewTenantBook(tenantRef(tenantAlpha, "alpha", access.TenantActive))
+	book := testcore.NewTenantBook(tenantRef(tenantAlpha, "alpha", access.TenantActive))
 	err := book.Remember(context.Background(), accountOne, "not-a-uuid")
 	var apiErr *api.Error
 	if err == nil || errors.As(err, &apiErr) {
@@ -124,15 +124,15 @@ func TestTenantBookRememberRejectsNonUUIDs(t *testing.T) {
 
 func TestTenantBookMembershipsAreActiveOnlyAndSlugOrdered(t *testing.T) {
 	ctx := context.Background()
-	book := coretest.NewTenantBook(
+	book := testcore.NewTenantBook(
 		tenantRef(tenantAlpha, "alpha", access.TenantActive),
 		tenantRef(tenantBeta, "beta", access.TenantSuspended),
 		tenantRef(tenantGamma, "gamma", access.TenantActive),
 	)
-	book.AddMember(coretest.Member{ID: "m-1", Account: accountOne, Tenant: tenantGamma, Role: reqctx.RoleViewer, Status: "active"})
-	book.AddMember(coretest.Member{ID: "m-2", Account: accountOne, Tenant: tenantBeta, Role: reqctx.RoleMember, Status: "active"})
-	book.AddMember(coretest.Member{ID: "m-3", Account: accountOne, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "revoked"})
-	book.AddMember(coretest.Member{ID: "m-4", Account: accountTwo, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "active"})
+	book.AddMember(testcore.Member{ID: "m-1", Account: accountOne, Tenant: tenantGamma, Role: reqctx.RoleViewer, Status: "active"})
+	book.AddMember(testcore.Member{ID: "m-2", Account: accountOne, Tenant: tenantBeta, Role: reqctx.RoleMember, Status: "active"})
+	book.AddMember(testcore.Member{ID: "m-3", Account: accountOne, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "revoked"})
+	book.AddMember(testcore.Member{ID: "m-4", Account: accountTwo, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "active"})
 
 	list, err := book.Memberships(ctx, accountOne)
 	if err != nil {
@@ -155,7 +155,7 @@ func TestTenantBookMembershipsAreActiveOnlyAndSlugOrdered(t *testing.T) {
 
 func TestTenantBookDirectory(t *testing.T) {
 	ctx := context.Background()
-	book := coretest.NewTenantBook(tenantRef(tenantBeta, "beta", access.TenantSuspended))
+	book := testcore.NewTenantBook(tenantRef(tenantBeta, "beta", access.TenantSuspended))
 
 	ref, found, err := book.Tenant(ctx, tenantBeta)
 	if err != nil || !found || ref.Slug != "beta" || ref.Status != access.TenantSuspended {
@@ -178,9 +178,9 @@ func TestTenantBookDirectory(t *testing.T) {
 }
 
 func TestTenantBookPanicsOnUnknownTenants(t *testing.T) {
-	book := coretest.NewTenantBook()
+	book := testcore.NewTenantBook()
 	for name, call := range map[string]func(){
-		"AddMember":       func() { book.AddMember(coretest.Member{ID: "m-1", Account: accountOne, Tenant: tenantAlpha}) },
+		"AddMember":       func() { book.AddMember(testcore.Member{ID: "m-1", Account: accountOne, Tenant: tenantAlpha}) },
 		"SetTenantStatus": func() { book.SetTenantStatus(tenantAlpha, access.TenantSuspended) },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -196,8 +196,8 @@ func TestTenantBookPanicsOnUnknownTenants(t *testing.T) {
 
 func TestTenantBookIsSafeForConcurrentUse(t *testing.T) {
 	ctx := context.Background()
-	book := coretest.NewTenantBook(tenantRef(tenantAlpha, "alpha", access.TenantActive))
-	book.AddMember(coretest.Member{ID: "m-1", Account: accountOne, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "active"})
+	book := testcore.NewTenantBook(tenantRef(tenantAlpha, "alpha", access.TenantActive))
+	book.AddMember(testcore.Member{ID: "m-1", Account: accountOne, Tenant: tenantAlpha, Role: reqctx.RoleAdmin, Status: "active"})
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
@@ -215,7 +215,7 @@ func TestTenantBookIsSafeForConcurrentUse(t *testing.T) {
 func TestAccountBookProvisionsAndFinds(t *testing.T) {
 	ctx := context.Background()
 	existing := accounts.Ref{ID: accountOne, Email: "user@example.com", Status: accounts.StatusActive}
-	book := coretest.NewAccountBook([]string{"ops@example.com"}, existing)
+	book := testcore.NewAccountBook([]string{"ops@example.com"}, existing)
 
 	provisioned, err := book.Provision(ctx, accounts.NewAccount{Email: "Jane.Doe@example.com", Password: "synthetic-pass-phrase", FullName: "Jane Doe"})
 	if err != nil {
@@ -247,7 +247,7 @@ func TestAccountBookProvisionsAndFinds(t *testing.T) {
 
 func TestAccountBookEmptyLookups(t *testing.T) {
 	ctx := context.Background()
-	book := coretest.NewAccountBook(nil)
+	book := testcore.NewAccountBook(nil)
 	found, err := book.Get(ctx, nil)
 	if err != nil || found == nil || len(found) != 0 {
 		t.Fatalf("Get(nil) = %#v, %v; want empty non-nil", found, err)
@@ -260,7 +260,7 @@ func TestAccountBookEmptyLookups(t *testing.T) {
 
 func TestAccountBookOperatorsFollowTheList(t *testing.T) {
 	ctx := context.Background()
-	book := coretest.NewAccountBook([]string{"ops@example.com"})
+	book := testcore.NewAccountBook([]string{"ops@example.com"})
 	if !book.GrantsOperator("OPS@example.com") || book.GrantsOperator("user@example.com") {
 		t.Fatal("GrantsOperator does not follow the operator list")
 	}
@@ -276,7 +276,7 @@ func TestAccountBookOperatorsFollowTheList(t *testing.T) {
 
 func TestAccountBookFailProvision(t *testing.T) {
 	ctx := context.Background()
-	book := coretest.NewAccountBook(nil)
+	book := testcore.NewAccountBook(nil)
 	unavailable := api.NewError(http.StatusServiceUnavailable, accounts.CodeIdentityProviderUnavailable, "Sign-in is unavailable right now.")
 	book.FailProvision(unavailable)
 

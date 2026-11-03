@@ -20,7 +20,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/parameter"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/parameters"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 // probeKey is the parameter the probe module reads.
@@ -96,7 +96,7 @@ func (r *probeReader) Get(_ context.Context, key string) (parameter.Value, bool,
 
 // newProbeEnv is the probe module behind the real chain, with the parameters
 // module when withModule is true.
-func newProbeEnv(t testing.TB, withModule bool, opts coretest.Options) *env {
+func newProbeEnv(t testing.TB, withModule bool, opts testcore.Options) *env {
 	t.Helper()
 	modules := []core.Module{probeModule()}
 	if withModule {
@@ -109,7 +109,7 @@ func newProbeEnv(t testing.TB, withModule bool, opts coretest.Options) *env {
 // over a real database: the tenant's override, else the global value of the
 // definition, and never another tenant's override.
 func TestReaderResolvesTenantOverrideThenGlobalValue(t *testing.T) {
-	e := newProbeEnv(t, true, coretest.Options{Database: true})
+	e := newProbeEnv(t, true, testcore.Options{Database: true})
 	wantData[parameters.View](t, e.json("operator", http.MethodPost, "/api/v1/parameters", numberDefinition), http.StatusCreated)
 
 	requireProbe(t, e, "tenantless", "50", "the global value of a tenantless read")
@@ -132,7 +132,7 @@ func TestReaderResolvesTenantOverrideThenGlobalValue(t *testing.T) {
 // TestReaderAnswersEveryStoredType reads one parameter of each type the module
 // stores through the port.
 func TestReaderAnswersEveryStoredType(t *testing.T) {
-	e := newProbeEnv(t, true, coretest.Options{Database: true})
+	e := newProbeEnv(t, true, testcore.Options{Database: true})
 	definitions := []struct {
 		key  string
 		body string
@@ -158,15 +158,15 @@ func TestReaderAnswersEveryStoredType(t *testing.T) {
 // port is parameter.NoReader, so an absent parameter is the contract's
 // not-found and never a 500 or a panic.
 func TestAVerticalWithoutAReaderAnswersNotFound(t *testing.T) {
-	e := newProbeEnv(t, false, coretest.Options{})
+	e := newProbeEnv(t, false, testcore.Options{})
 	wantError(t, e.json("adminA", http.MethodGet, "/api/v1/probe/export-max-rows", ""), http.StatusNotFound, api.CodeResourceNotFound)
 	wantError(t, e.json("adminA", http.MethodGet, "/api/v1/probe/parameter/some.key", ""), http.StatusNotFound, api.CodeResourceNotFound)
 }
 
-// TestCoretestForwardsAProvidedReader proves the seam: a vertical test that
-// supplies its own reader through coretest.Options reads it through the Host.
-func TestCoretestForwardsAProvidedReader(t *testing.T) {
-	e := newProbeEnv(t, false, coretest.Options{Parameters: &probeReader{value: 7}})
+// TestTestcoreForwardsAProvidedReader proves the seam: a vertical test that
+// supplies its own reader through testcore.Options reads it through the Host.
+func TestTestcoreForwardsAProvidedReader(t *testing.T) {
+	e := newProbeEnv(t, false, testcore.Options{Parameters: &probeReader{value: 7}})
 	rows := wantData[map[string]float64](t, e.json("adminA", http.MethodGet, "/api/v1/probe/export-max-rows", ""), http.StatusOK)
 	if rows["maxRows"] != 7 {
 		t.Fatalf("maxRows = %v, want 7", rows["maxRows"])

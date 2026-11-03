@@ -9,7 +9,7 @@ import (
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
 	coreaccess "github.com/HectorVeraO/initializer/go-srv/internal/platform/core/access"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 func TestModuleProvidesTheAPIKeyResolver(t *testing.T) {
@@ -21,7 +21,7 @@ func TestModuleProvidesTheAPIKeyResolver(t *testing.T) {
 			return nil
 		},
 	}
-	coretest.New(t, []core.Module{Module(), probe}, coretest.Options{Database: true})
+	testcore.New(t, []core.Module{Module(), probe}, testcore.Options{Database: true})
 
 	if resolver == nil || resolver == coreaccess.NoAPIKeys {
 		t.Fatalf("host resolver = %v, want the api-keys resolver", resolver)
@@ -42,7 +42,7 @@ func TestProvideRegistersTheTenantLevelScope(t *testing.T) {
 			return nil
 		},
 	}
-	coretest.New(t, []core.Module{Module(), probe}, coretest.Options{Database: true})
+	testcore.New(t, []core.Module{Module(), probe}, testcore.Options{Database: true})
 
 	var found *coreaccess.Scope
 	for _, scope := range registry.All() {

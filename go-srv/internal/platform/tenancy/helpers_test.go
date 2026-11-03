@@ -335,7 +335,7 @@ type Account struct {
 }
 
 // accountsFake is an accounts.Directory and accounts.Provisioner that follows
-// the port contracts like coretest.AccountBook, and also lets a test add
+// the port contracts like testcore.AccountBook, and also lets a test add
 // accounts after the host exists, put several accounts on one email, change
 // an account's status, operator flag or email, hide an account and make a
 // call fail. It is safe for concurrent use.

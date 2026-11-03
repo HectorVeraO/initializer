@@ -1,7 +1,7 @@
-// Package coretest is the test host for module tests: it runs core.Build with
+// Package testcore is the test host for module tests: it runs core.Build with
 // boundary fakes and returns the full handler, chain included, so a test sees
 // X-Trace-Id, envelopes, policies and the fallback exactly as production does.
-package coretest
+package testcore
 
 import (
 	"context"
@@ -95,7 +95,7 @@ func New(t testing.TB, modules []core.Module, opts Options) http.Handler {
 		Parameters:         opts.Parameters,
 	}, modules)
 	if err != nil {
-		t.Fatalf("coretest: Build: %v", err)
+		t.Fatalf("testcore: Build: %v", err)
 	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), closeTimeout)
@@ -121,7 +121,7 @@ func newLogger(sink *slog.Logger) *slog.Logger {
 func openPool(t testing.TB, ownDatabase bool) *pgxpool.Pool {
 	t.Helper()
 	if ownDatabase {
-		database := testpg.New(t, "coretest")
+		database := testpg.New(t, "testcore")
 		return database.Pool(t, testPoolConns)
 	}
 	return newRejectingPool(t)

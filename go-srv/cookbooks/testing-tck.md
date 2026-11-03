@@ -12,15 +12,15 @@ Read before writing or changing tests in this component.
 
 ## Go tests
 
-- Test-support code lives in `internal/testkit/` (`coretest` for module tests, `testpg` for
+- Test-support code lives in `internal/testkit/` (`testcore` for module tests, `testpg` for
   databases), outside the platform tree. Only a `_test.go` file imports it; boundary rule 7 fails a
   file of the package that does.
 - Test through the public surface: run the module through
-  `coretest.New(t, []core.Module{yourpkg.Module()}, coretest.Options{...})`, which runs
+  `testcore.New(t, []core.Module{yourpkg.Module()}, testcore.Options{...})`, which runs
   `core.Build` and returns the full handler (chain, envelope, policies, fallback), serve requests
   with `net/http/httptest`, and assert status codes, headers and decoded `api.Envelope[T]`.
-  `internal/testkit/coretest/coretest_test.go` is the reference.
-- `coretest.Options` supplies the boundary fakes: `SessionResolver` (`coretest.Session(principal)`:
+  `internal/testkit/testcore/testcore_test.go` is the reference.
+- `testcore.Options` supplies the boundary fakes: `SessionResolver` (`testcore.Session(principal)`:
   cookie `test_session` resolves to the principal, header `X-XSRF-TOKEN: ok` makes the CSRF check
   pass), `APIKeyResolver`, `TenantDirectory`, `FlagEvaluator`, `Parameters` (the `parameter.Reader`
   seam; no fake ships with it, so a test that needs a value supplies its own reader in its own
@@ -40,7 +40,7 @@ Read before writing or changing tests in this component.
 - Set `APP_TEST_DATABASE_URL` to an admin connection on the compose service that runs PostgreSQL:
   the host port and the user are the ones `.deploy/local/README.md` and `.deploy/local/.env` list,
   for example `postgres://user:password@localhost:10132/postgres?sslmode=disable`.
-- Tests never use that URL's own database: `coretest.Options{Database: true}` creates an `it_*`
+- Tests never use that URL's own database: `testcore.Options{Database: true}` creates an `it_*`
   database on the server, applies the modules' migrations and drops it on cleanup; the next
   database test also drops `it_*` leftovers of killed runs that are older than an hour and have no
   connection.

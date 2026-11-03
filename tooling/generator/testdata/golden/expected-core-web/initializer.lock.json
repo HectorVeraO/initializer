@@ -175,7 +175,7 @@
     },
     {
       "path": "acme-backend-srv/AGENTS.md",
-      "sha256": "ce8368ae57dd0d267ebdefbb853a6dde81ba4c76879fe7e022b35cc494fbfd23"
+      "sha256": "3594556d283d833698cbb049afb55e8b5d4de9fda58a9e24e104bc94cc9b2204"
     },
     {
       "path": "acme-backend-srv/cmd/server/modules.go",

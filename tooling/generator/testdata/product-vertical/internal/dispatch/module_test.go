@@ -12,7 +12,7 @@ import (
 	"example.com/fixture/srv/internal/platform/core"
 	"example.com/fixture/srv/internal/platform/core/api"
 	"example.com/fixture/srv/internal/platform/core/reqctx"
-	"example.com/fixture/srv/internal/testkit/coretest"
+	"example.com/fixture/srv/internal/testkit/testcore"
 )
 
 // accountID is the account every request of this file acts as.
@@ -28,12 +28,12 @@ func principal() reqctx.Principal {
 	}
 }
 
-// newHandler serves the vertical through coretest over a fresh database.
+// newHandler serves the vertical through testcore over a fresh database.
 func newHandler(t *testing.T) http.Handler {
 	t.Helper()
-	return coretest.New(t, []core.Module{dispatch.Module()}, coretest.Options{
+	return testcore.New(t, []core.Module{dispatch.Module()}, testcore.Options{
 		Database:        true,
-		SessionResolver: coretest.Session(principal()),
+		SessionResolver: testcore.Session(principal()),
 	})
 }
 

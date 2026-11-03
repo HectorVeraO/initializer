@@ -22,7 +22,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/featureflag"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/featureflags"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 const (
@@ -105,7 +105,7 @@ func randomUUID(t testing.TB) string {
 	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
 }
 
-// env is the module running inside coretest over a private database.
+// env is the module running inside testcore over a private database.
 type env struct {
 	Evaluator featureflag.Evaluator
 	Pool      *pgxpool.Pool
@@ -114,7 +114,7 @@ type env struct {
 	Tenant    reqctx.TenantID
 }
 
-// newEnv boots the real module over manifest through coretest. A test-only
+// newEnv boots the real module over manifest through testcore. A test-only
 // module captures the port and the pool and serves GET /api/v1/probe/{key}
 // behind a session of a principal with a generated active tenant.
 func newEnv(t testing.TB, manifest string) *env {
@@ -150,10 +150,10 @@ func newEnvWithFlags(t testing.TB, flagsFiles string) *env {
 		}))
 		return nil
 	}}
-	e.Handler = coretest.New(t, []core.Module{featureflags.Module(), probe}, coretest.Options{
+	e.Handler = testcore.New(t, []core.Module{featureflags.Module(), probe}, testcore.Options{
 		Database:        true,
 		Config:          map[string]string{"APP_FLAGS_FILE": flagsFiles},
-		SessionResolver: coretest.Session(principal),
+		SessionResolver: testcore.Session(principal),
 		Logger:          logger,
 	})
 	return e

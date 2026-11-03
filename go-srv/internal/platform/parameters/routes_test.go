@@ -15,7 +15,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/api"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/parameters"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 // actorSessions is a SessionResolver fake at the session boundary: the value
@@ -69,12 +69,12 @@ func accountPrincipal(t testing.TB, tenant string, role reqctx.Role, operator bo
 
 func newEnv(t testing.TB, logger *slog.Logger) *env {
 	t.Helper()
-	return newEnvWith(t, logger, coretest.Options{Database: true}, parameters.Module())
+	return newEnvWith(t, logger, testcore.Options{Database: true}, parameters.Module())
 }
 
 // newEnvWith is newEnv over the given modules, in order, with the given options
 // minus the session resolver and the logger, which it installs.
-func newEnvWith(t testing.TB, logger *slog.Logger, opts coretest.Options, modules ...core.Module) *env {
+func newEnvWith(t testing.TB, logger *slog.Logger, opts testcore.Options, modules ...core.Module) *env {
 	t.Helper()
 	e := &env{tenantA: randomUUID(t), tenantB: randomUUID(t)}
 	sessions := &actorSessions{principals: map[string]reqctx.Principal{
@@ -86,7 +86,7 @@ func newEnvWith(t testing.TB, logger *slog.Logger, opts coretest.Options, module
 	}}
 	opts.SessionResolver = sessions
 	opts.Logger = logger
-	e.handler = coretest.New(t, modules, opts)
+	e.handler = testcore.New(t, modules, opts)
 	return e
 }
 

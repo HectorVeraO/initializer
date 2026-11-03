@@ -16,7 +16,7 @@ import (
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/clock"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/config"
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core/reqctx"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 // exampleEnvPath locates the example env: .deploy/local/.example.env of the
@@ -89,7 +89,7 @@ func TestExampleEnvLinesPassValidationInProvide(t *testing.T) {
 }
 
 func TestBuildBootsAndReportsReady(t *testing.T) {
-	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
+	handler := testcore.New(t, []core.Module{Module()}, testcore.Options{
 		Database: true,
 		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
 	})
@@ -156,7 +156,7 @@ func TestProvideRegistersNoScope(t *testing.T) {
 			return nil
 		},
 	}
-	coretest.New(t, []core.Module{Module(), probe}, coretest.Options{
+	testcore.New(t, []core.Module{Module(), probe}, testcore.Options{
 		Database: true,
 		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
 	})
@@ -177,7 +177,7 @@ func TestModuleProvidesTheAccountPortsOnly(t *testing.T) {
 			return nil
 		},
 	}
-	coretest.New(t, []core.Module{Module(), probe}, coretest.Options{
+	testcore.New(t, []core.Module{Module(), probe}, testcore.Options{
 		Database: true,
 		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
 	})
@@ -203,7 +203,7 @@ func TestModuleProvidesTheAccountPortsOnly(t *testing.T) {
 }
 
 func TestTenantRoutesBelongToTenancy(t *testing.T) {
-	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
+	handler := testcore.New(t, []core.Module{Module()}, testcore.Options{
 		Database: true,
 		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
 	})
@@ -284,7 +284,7 @@ func TestSeedKeyIsAcceptedUnderAnHTTPSPublicURL(t *testing.T) {
 }
 
 func TestAPIKeyRoutesBelongToAPIKeys(t *testing.T) {
-	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
+	handler := testcore.New(t, []core.Module{Module()}, testcore.Options{
 		Database: true,
 		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
 	})
@@ -306,7 +306,7 @@ func TestIdentityAloneCreatesOnlyItsOwnTable(t *testing.T) {
 			return nil
 		},
 	}
-	coretest.New(t, []core.Module{Module(), probe}, coretest.Options{
+	testcore.New(t, []core.Module{Module(), probe}, testcore.Options{
 		Database: true,
 		Config:   map[string]string{"APP_SESSION_KEYS": randomSessionKeys(t)},
 	})
@@ -332,7 +332,7 @@ func TestIdentityAloneCreatesOnlyItsOwnTable(t *testing.T) {
 
 func TestMountedRoutesAreTheSessionRoutesAndTheKratosProxyAndNoSiblings(t *testing.T) {
 	kratos := newStubKratos(t)
-	handler := coretest.New(t, []core.Module{Module()}, coretest.Options{
+	handler := testcore.New(t, []core.Module{Module()}, testcore.Options{
 		Database: true,
 		Config: map[string]string{
 			"APP_SESSION_KEYS":      randomSessionKeys(t),

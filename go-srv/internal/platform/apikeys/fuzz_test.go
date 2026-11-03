@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/HectorVeraO/initializer/go-srv/internal/platform/core"
-	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/coretest"
+	"github.com/HectorVeraO/initializer/go-srv/internal/testkit/testcore"
 )
 
 // FuzzAPIKeyHeader sends arbitrary X-API-Key values to a key-accepting route:
 // no value may authenticate (no key exists) or crash the server.
 func FuzzAPIKeyHeader(f *testing.F) {
-	handler := coretest.New(f, []core.Module{Module()}, coretest.Options{Database: true})
+	handler := testcore.New(f, []core.Module{Module()}, testcore.Options{Database: true})
 	for _, value := range []string{"", " ", "ak_live_", "ak_live_" + strings.Repeat("a", 16) + "_", "\x00", "a\nb", "\xff\xfe"} {
 		f.Add(value)
 	}
