@@ -58,9 +58,8 @@
       margin-left: auto;
     }
 
-    // The shell still renders its icon buttons and its language select with
-    // these two classes; the restyle replaces them with pButton and this block
-    // goes away.
+    // The legacy topbar (shown while `ui_restyle` is off) renders its controls
+    // with these two classes; the restyled topbar uses pButton instead.
     .layout-topbar-action {
       display: inline-flex;
       align-items: center;

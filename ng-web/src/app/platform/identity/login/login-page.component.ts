@@ -6,6 +6,7 @@ import { TranslocoModule, TranslocoService, provideTranslocoScope } from '@jsver
 import { ButtonModule } from '@openng/optimus-ui/button';
 import { InputTextModule } from '@openng/optimus-ui/inputtext';
 import { MessageModule } from '@openng/optimus-ui/message';
+import { BRAND, BRAND_HERO_URL } from '@/core/config/brand';
 import { KratosLoginClient } from '../auth/kratos-login.service';
 import type { KratosMessage } from '../auth/kratos.types';
 import { scopedText } from '../i18n/scoped-text';
@@ -33,6 +34,10 @@ export class LoginPage {
   private readonly route = inject(ActivatedRoute);
   private readonly transloco = inject(TranslocoService);
   private readonly historyState = this.readHistoryState(inject(DOCUMENT));
+
+  protected readonly brand = BRAND;
+  protected readonly heroUrl = BRAND_HERO_URL;
+  protected readonly year = new Date().getFullYear();
 
   protected readonly form = new FormGroup({
     email: new FormControl(typeof this.historyState.email === 'string' ? this.historyState.email : '', { nonNullable: true }),

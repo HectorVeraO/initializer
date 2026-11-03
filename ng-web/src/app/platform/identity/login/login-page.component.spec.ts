@@ -2,6 +2,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { MessageService } from '@openng/optimus-ui/api';
+import { BRAND } from '@/core/config/brand';
 import { BlankComponent, byTestId, configureFeatureTest, renderRoute, settle, textOf, typeInto } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
 import { sessionView } from '../testing/session-view';
@@ -91,6 +92,22 @@ describe('LoginPage', () => {
     await vi.waitFor(() => expect(fixture.componentInstance).toBeTruthy());
     await settle(fixture);
   }
+
+  it('renders the split screen with the typographic hero next to the sign-in form', async () => {
+    const fixture = await openLogin();
+
+    const root = fixture.nativeElement as HTMLElement;
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(textOf(byTestId(root, 'login-hero'))).toContain('Administra tu plataforma desde un solo lugar');
+    });
+    expect(textOf(byTestId(root, 'login-hero'))).toContain(BRAND);
+    expect(byTestId(root, 'login-form')).not.toBeNull();
+    expect(byTestId(root, 'login-email')).not.toBeNull();
+    expect(byTestId(root, 'login-password')).not.toBeNull();
+    expect(byTestId(root, 'login-submit')).not.toBeNull();
+  });
 
   it('sends the typed credentials to Kratos and lands on the return URL', async () => {
     const fixture = await openLogin('?returnUrl=%2Fmemberships');

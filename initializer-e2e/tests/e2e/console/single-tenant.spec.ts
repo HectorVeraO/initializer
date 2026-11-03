@@ -19,6 +19,7 @@ test.describe('Console with identity and no tenancy', () => {
       );
 
       await expect(shellPage.tenantSwitcher).toHaveCount(0);
+      await shellPage.openAccountMenu();
       await expect(shellPage.accountEmailLocator).toHaveText(auth.email);
       await expect(shellPage.operatorBadge).toBeVisible();
       await expect(shellPage.roleBadge).toHaveCount(0);

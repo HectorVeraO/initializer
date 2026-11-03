@@ -13,6 +13,11 @@
     "notices": {
       "invitationAccepted": "Tu invitación fue aceptada. Inicia sesión para continuar.",
       "accountCreated": "Tu cuenta fue creada. Inicia sesión para continuar."
+    },
+    "hero": {
+      "eyebrow": "Consola de administración",
+      "title": "Administra tu plataforma desde un solo lugar",
+      "lead": "Sesiones, tenants, accesos y configuración en una consola clara y consistente."
     }
   },
   "session": {

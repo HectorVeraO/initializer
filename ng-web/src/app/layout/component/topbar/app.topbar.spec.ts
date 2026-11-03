@@ -1,9 +1,9 @@
-import { Component, Type } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { Component, Type, inject } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslocoTestingModule } from '@jsverse/transloco';
 import { provideOptimus } from '@openng/optimus-ui/config';
-import { PLATFORM_MODULES } from '@/platform/core';
+import { ACCOUNT_SLOT_OVERLAY, PLATFORM_MODULES } from '@/platform/core';
 import type { TopbarItem, WebModule } from '@/platform/core';
 import { BRAND } from '@/core/config/brand';
 import { byTestId, stubMatchMedia, textOf } from '@/core/testing/ui-testing';
@@ -19,6 +19,11 @@ class ProbeAccount {}
 @Component({ selector: 'p-probe-other', template: '<span data-testid="probe-other">other</span>' })
 class ProbeOther {}
 
+@Component({ selector: 'p-probe-account-slot', template: '<span data-testid="probe-slot">{{ overlay === true ? "overlay" : "inline" }}</span>' })
+class ProbeAccountSlot {
+  protected readonly overlay = inject(ACCOUNT_SLOT_OVERLAY, { optional: true });
+}
+
 function item(id: string, slot: TopbarItem['slot'], component: Type<unknown>): TopbarItem {
   return { id, slot, component };
 }
@@ -32,7 +37,7 @@ describe('AppTopbar', () => {
     stubMatchMedia();
   });
 
-  function render(modules: readonly WebModule[]): HTMLElement {
+  function render(modules: readonly WebModule[]): ComponentFixture<AppTopbar> {
     TestBed.configureTestingModule({
       imports: [TranslocoTestingModule.forRoot({ langs: { es }, translocoConfig: { availableLangs: ['es'], defaultLang: 'es' }, preloadLangs: true })],
       providers: [provideRouter([]), provideOptimus({}), { provide: PLATFORM_MODULES, useValue: modules }]
@@ -42,7 +47,7 @@ describe('AppTopbar', () => {
 
     fixture.detectChanges();
 
-    return fixture.nativeElement as HTMLElement;
+    return fixture;
   }
 
   function slotIds(root: HTMLElement): string[] {
@@ -54,7 +59,7 @@ describe('AppTopbar', () => {
   }
 
   it('renders a context item of a later module before an account item of an earlier one, each in its own wrapper', () => {
-    const root = render([moduleWith('core', [item('account-probe', 'account', ProbeAccount)]), moduleWith('later', [item('context-probe', 'context', ProbeContext)])]);
+    const root = render([moduleWith('core', [item('account-probe', 'account', ProbeAccount)]), moduleWith('later', [item('context-probe', 'context', ProbeContext)])]).nativeElement as HTMLElement;
 
     expect(slotIds(root)).toEqual(['topbar-context-probe', 'topbar-account-probe']);
     expect(textOf(byTestId(byTestId(root, 'topbar-context-probe') as HTMLElement, 'probe-context'))).toBe('context');
@@ -62,17 +67,24 @@ describe('AppTopbar', () => {
   });
 
   it('keeps module order, then array order, within a slot', () => {
-    const root = render([moduleWith('core', [item('first', 'context', ProbeContext), item('second', 'context', ProbeOther)]), moduleWith('later', [item('third', 'context', ProbeAccount)])]);
+    const root = render([moduleWith('core', [item('first', 'context', ProbeContext), item('second', 'context', ProbeOther)]), moduleWith('later', [item('third', 'context', ProbeAccount)])]).nativeElement as HTMLElement;
 
     expect(slotIds(root)).toEqual(['topbar-first', 'topbar-second', 'topbar-third']);
   });
 
   it('renders no slot item when no module has topbar items, and keeps the logo and the language and theme controls', () => {
-    const root = render([moduleWith('core')]);
+    const root = render([moduleWith('core')]).nativeElement as HTMLElement;
 
     expect(slotIds(root)).toEqual([]);
     expect(textOf(byTestId(root, 'topbar-logo'))).toBe(BRAND);
     expect(byTestId(root, 'language-select')).not.toBeNull();
     expect(byTestId(root, 'theme-toggle')).not.toBeNull();
+    expect(byTestId(root, 'menu-toggle')).not.toBeNull();
+  });
+
+  it('marks the account slot as an overlay for the components it renders', () => {
+    const root = render([moduleWith('core', [item('account-slot', 'account', ProbeAccountSlot)])]).nativeElement as HTMLElement;
+
+    expect(textOf(byTestId(root, 'probe-slot'))).toBe('overlay');
   });
 });

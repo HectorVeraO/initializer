@@ -1,27 +1,10 @@
 @layer components {
-  // The sidebar still renders the mask-based `.menu-icon-<name>` glyphs of the
-  // shell. When the menu moves to the `pi-*` icon font, the block keeps only the
-  // sizing of the glyph and the mask rules below go away.
-  .menu-icon {
+  // Nav glyphs come from the `pi-*` font of @openng/icons; only their box is set here.
+  .layout-menuitem-icon {
     flex-shrink: 0;
-    display: inline-block;
-    width: 18px;
-    height: 18px;
-    vertical-align: middle;
-    background-color: currentColor;
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-    -webkit-mask-position: center;
-    mask-position: center;
-    -webkit-mask-size: contain;
-    mask-size: contain;
-  }
-
-  @each $name in 'home', 'building', 'users', 'layers', 'file', 'box', 'credit-card', 'file-text', 'tag', 'clock', 'sliders', 'bank', 'puzzle', 'refresh', 'clipboard' {
-    .menu-icon-#{$name} {
-      -webkit-mask-image: url('/assets/icons/menu/#{$name}.svg');
-      mask-image: url('/assets/icons/menu/#{$name}.svg');
-    }
+    width: 20px;
+    font-size: 18px;
+    text-align: center;
   }
 
   .layout-sidebar {

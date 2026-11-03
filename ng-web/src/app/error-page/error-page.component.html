@@ -1,25 +1,19 @@
-<div class="error-container">
-  <div class="error-content">
-    <i class="pi pi-exclamation-triangle error-icon"></i>
+<div class="flex min-h-screen items-center justify-center bg-surface-50 p-6 dark:bg-surface-950">
+  <div class="flex w-full max-w-md flex-col items-center gap-4 rounded-xl border border-surface bg-surface-0 p-8 text-center dark:bg-surface-900">
+    <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-300">
+      <i class="pi pi-exclamation-triangle text-xl" aria-hidden="true"></i>
+    </span>
 
-    <h1>{{ 'errors.' + errorKey() + '.title' | transloco }}</h1>
+    <h1 class="m-0 text-display-xs font-medium text-color">{{ 'errors.' + errorKey() + '.title' | transloco }}</h1>
 
-    <p class="error-message">{{ 'errors.' + errorKey() + '.message' | transloco }}</p>
+    <p class="m-0 text-md text-muted-color">{{ 'errors.' + errorKey() + '.message' | transloco }}</p>
 
-    <p class="error-hint">{{ 'errors.' + errorKey() + '.additional' | transloco }}</p>
+    <p class="m-0 text-sm text-muted-color">{{ 'errors.' + errorKey() + '.additional' | transloco }}</p>
 
     @if (missingFields().length > 0) {
-      <p class="error-hint" data-testid="error-missing-fields">{{ missingFields().join(', ') }}</p>
+      <p class="m-0 text-sm text-muted-color" data-testid="error-missing-fields">{{ missingFields().join(', ') }}</p>
     }
 
-    <button class="retry-button" (click)="onRetry()" [disabled]="isRetrying()">
-      @if (isRetrying()) {
-        <i class="pi pi-spin pi-spinner"></i>
-        {{ 'errors.siteUnavailable.retrying' | transloco }}
-      } @else {
-        <i class="pi pi-refresh"></i>
-        {{ 'errors.siteUnavailable.retry' | transloco }}
-      }
-    </button>
+    <p-button type="button" severity="secondary" [loading]="isRetrying()" [label]="(isRetrying() ? 'errors.siteUnavailable.retrying' : 'errors.siteUnavailable.retry') | transloco" (click)="onRetry()" />
   </div>
 </div>

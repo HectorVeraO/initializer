@@ -83,10 +83,10 @@ describe('AppMenu', () => {
       publicRoutes: [],
       i18n: { scope: 'reports', alias: 'reports', loader: { es: () => Promise.resolve({ menu: { title: 'Informes' }, nav: { open: 'Abierto', members: 'Miembros', anyone: 'Cualquiera', admins: 'Solo admins' } }) } },
       nav: [
-        { id: 'open', labelKey: 'nav.open', icon: 'menu-icon menu-icon-users', path: '/open', requires: {} },
-        { id: 'members', labelKey: 'nav.members', icon: 'menu-icon menu-icon-users', path: '/members', requires: { tenant: 'required' } },
-        { id: 'anyone', labelKey: 'nav.anyone', icon: 'menu-icon menu-icon-users', path: '/anyone', requires: { tenant: 'required-unless-operator' } },
-        { id: 'admins', labelKey: 'nav.admins', icon: 'menu-icon menu-icon-cog', path: '/admins', requires: { roles: ['admin'] } }
+        { id: 'open', labelKey: 'nav.open', icon: 'pi pi-users', path: '/open', requires: {} },
+        { id: 'members', labelKey: 'nav.members', icon: 'pi pi-users', path: '/members', requires: { tenant: 'required' } },
+        { id: 'anyone', labelKey: 'nav.anyone', icon: 'pi pi-users', path: '/anyone', requires: { tenant: 'required-unless-operator' } },
+        { id: 'admins', labelKey: 'nav.admins', icon: 'pi pi-cog', path: '/admins', requires: { roles: ['admin'] } }
       ]
     };
 

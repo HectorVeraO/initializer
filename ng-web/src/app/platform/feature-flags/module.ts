@@ -13,6 +13,6 @@ export const featureFlagsModule: WebModule = {
     }
   ],
   publicRoutes: [],
-  nav: [{ id: 'feature-flags', labelKey: 'nav.featureFlags', icon: 'menu-icon menu-icon-tag', path: '/operator/feature-flags', requires: { platformOperator: true } }],
+  nav: [{ id: 'feature-flags', labelKey: 'nav.featureFlags', icon: 'pi pi-flag', path: '/operator/feature-flags', requires: { platformOperator: true } }],
   i18n: PLATFORM_FEATURE_FLAGS_I18N
 };

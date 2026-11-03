@@ -58,7 +58,7 @@ export class AppMenu implements OnInit, OnDestroy {
     model.push({
       id: 'main',
       label: this.transloco.translate('menu.main'),
-      items: [{ label: this.transloco.translate('menu.home'), icon: 'menu-icon menu-icon-home', routerLink: ['/home'] }]
+      items: [{ label: this.transloco.translate('menu.home'), icon: 'pi pi-home', routerLink: ['/home'] }]
     });
 
     model.push(...this.buildPlatformSections());

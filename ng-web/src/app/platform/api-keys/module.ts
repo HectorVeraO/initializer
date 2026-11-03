@@ -16,6 +16,6 @@ export const apiKeysModule: WebModule = {
     }
   ],
   publicRoutes: [],
-  nav: [{ id: 'api-keys', labelKey: 'nav.apiKeys', icon: 'menu-icon menu-icon-layers', path: '/api-keys', requires: KEY_ADMIN }],
+  nav: [{ id: 'api-keys', labelKey: 'nav.apiKeys', icon: 'pi pi-key', path: '/api-keys', requires: KEY_ADMIN }],
   i18n: API_KEYS_I18N
 };

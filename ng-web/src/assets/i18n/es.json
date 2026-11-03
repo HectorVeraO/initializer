@@ -6,7 +6,9 @@
     "lang": {
       "es": "Español",
       "en": "Inglés"
-    }
+    },
+    "menu": "Menú",
+    "theme": "Cambiar tema"
   },
   "menu": {
     "main": "Principal",
@@ -255,6 +257,7 @@
   },
   "forbidden": {
     "title": "No tienes permiso para ver esta sección",
+    "message": "Tu cuenta no tiene acceso a esta sección. Pídeselo a un administrador del tenant.",
     "back": "Volver al inicio"
   },
   "states": {

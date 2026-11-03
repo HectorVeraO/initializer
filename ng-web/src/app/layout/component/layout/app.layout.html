@@ -1,5 +1,9 @@
 <div class="layout-wrapper" [ngClass]="containerClass">
+  @if (restyled()) {
   <p-topbar></p-topbar>
+  } @else {
+  <p-topbar-legacy></p-topbar-legacy>
+  }
   <p-sidebar></p-sidebar>
   <div class="layout-main-container">
     <div class="layout-main">

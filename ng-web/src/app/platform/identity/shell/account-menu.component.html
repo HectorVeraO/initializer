@@ -1,12 +1,31 @@
-@if (isAuthenticated() && account(); as account) {
-  <div class="flex items-center gap-3">
-    <span class="text-sm" data-testid="session-account-email">{{ account.email }}</span>
+<ng-template #accountPanel let-account>
+  <div class="flex flex-wrap items-center gap-3">
+    <span class="text-sm font-medium text-color break-all" data-testid="session-account-email">{{ account.email }}</span>
     @if (account.isPlatformOperator) {
-      <span class="text-xs font-semibold px-2 py-1 rounded bg-primary text-primary-contrast" data-testid="session-operator">{{ 'identity.shell.operator' | transloco }}</span>
+      <span class="text-xs font-medium px-2 py-0.5 rounded-sm bg-highlight text-primary" data-testid="session-operator">{{ 'identity.shell.operator' | transloco }}</span>
     }
     @if (account.role) {
-      <span class="text-xs font-semibold px-2 py-1 rounded bg-surface-200 dark:bg-surface-700" data-testid="session-role" [attr.data-value]="account.role">{{ 'identity.shell.roles.' + account.role | transloco }}</span>
+      <span class="text-xs font-medium px-2 py-0.5 rounded-sm bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-200" data-testid="session-role" [attr.data-value]="account.role">{{
+        'identity.shell.roles.' + account.role | transloco
+      }}</span>
     }
     <button pButton type="button" severity="secondary" size="small" data-testid="sign-out" (click)="signOut()">{{ 'identity.shell.signOut' | transloco }}</button>
   </div>
+</ng-template>
+
+@if (overlay) {
+  @if (isAuthenticated()) {
+    <button type="button" class="layout-topbar-avatar" [attr.aria-label]="'identity.shell.account' | transloco" data-testid="account-menu-trigger" (click)="accountPopover.toggle($event)">
+      <p-avatar icon="pi pi-user" shape="circle" />
+    </button>
+  }
+  <p-popover #accountPopover styleClass="w-72">
+    @if (account(); as account) {
+      <ng-container *ngTemplateOutlet="accountPanel; context: { $implicit: account }" />
+    }
+  </p-popover>
+} @else if (isAuthenticated()) {
+  @if (account(); as account) {
+    <ng-container *ngTemplateOutlet="accountPanel; context: { $implicit: account }" />
+  }
 }

@@ -1,13 +1,9 @@
-<div class="flex items-center justify-center min-h-screen overflow-hidden">
-  <div class="flex flex-col items-center justify-center">
-    <span class="mb-8 text-3xl font-bold text-surface-900 dark:text-surface-0">{{ brand }}</span>
-    <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, color-mix(in srgb, var(--primary-color), transparent 60%) 10%, var(--surface-ground) 30%)">
-      <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20 flex flex-col items-center" style="border-radius: 53px">
-        <span class="text-primary font-bold text-3xl">404</span>
-        <h1 class="text-surface-900 dark:text-surface-0 font-bold text-3xl lg:text-5xl mb-2">{{ 'common.notFound' | transloco }}</h1>
-        <div class="text-surface-600 dark:text-surface-200 mb-8">{{ 'common.notFoundMessage' | transloco }}</div>
-        <p-button [label]="'common.goToDashboard' | transloco" routerLink="/" />
-      </div>
-    </div>
+<div class="flex min-h-screen items-center justify-center bg-surface-50 p-6 dark:bg-surface-950">
+  <div class="flex w-full max-w-md flex-col items-center gap-4 rounded-xl border border-surface bg-surface-0 p-10 text-center dark:bg-surface-900">
+    <span class="text-lg font-medium text-color">{{ brand }}</span>
+    <span class="text-display-lg font-medium text-primary">404</span>
+    <h1 class="m-0 text-display-xs font-medium text-color">{{ 'common.notFound' | transloco }}</h1>
+    <p class="m-0 text-md text-muted-color">{{ 'common.notFoundMessage' | transloco }}</p>
+    <p-button [label]="'common.goToDashboard' | transloco" routerLink="/" />
   </div>
 </div>
