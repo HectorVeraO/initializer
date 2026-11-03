@@ -9,6 +9,7 @@
     "rowGone": "That item no longer exists or changed. The list was refreshed."
   },
   "title": "API keys",
+  "listTitle": "Keys",
   "createTitle": "Create API key",
   "name": "Name",
   "expiresAt": "Expires on (optional)",

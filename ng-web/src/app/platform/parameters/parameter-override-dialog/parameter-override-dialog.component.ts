@@ -12,6 +12,7 @@ import { ToggleSwitchModule } from '@openng/optimus-ui/toggleswitch';
 import { firstValueFrom } from 'rxjs';
 import { errorMessage } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
+import { FormFieldComponent } from '@/core/ui/form-field/form-field.component';
 import { fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
 import { displayValue, jsonText, parseJsonText } from '../json-value';
 import { PLATFORM_PARAMETERS_I18N } from '../i18n/scope';
@@ -27,7 +28,7 @@ type EditorKind = 'select' | 'number' | 'boolean' | 'string' | 'json';
 /** Sets the tenant override of one parameter. Shown while `parameter` is not null; the server decides whether the value is valid. */
 @Component({
   selector: 'app-parameter-override-dialog',
-  imports: [ReactiveFormsModule, ButtonModule, DialogModule, InputNumberModule, InputTextModule, MessageModule, SelectModule, TextareaModule, ToggleSwitchModule, TranslocoModule],
+  imports: [ReactiveFormsModule, ButtonModule, DialogModule, FormFieldComponent, InputNumberModule, InputTextModule, MessageModule, SelectModule, TextareaModule, ToggleSwitchModule, TranslocoModule],
   providers: [provideTranslocoScope(PLATFORM_PARAMETERS_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './parameter-override-dialog.component.html'

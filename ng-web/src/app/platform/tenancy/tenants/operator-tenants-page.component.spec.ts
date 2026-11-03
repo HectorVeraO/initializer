@@ -1,6 +1,8 @@
 import { HttpTestingController } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MessageService } from '@openng/optimus-ui/api';
+import { provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
 import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import es from '../../../../assets/i18n/es.json';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
@@ -24,10 +26,14 @@ describe('OperatorTenantsPage', () => {
 
   let messages: { add: ReturnType<typeof vi.fn> };
 
+  /** What the flag source answers for `ui_restyle`; every other key stays off. */
+  const restyled = signal(false);
+
   beforeEach(() => {
+    restyled.set(false);
     stubMatchMedia();
     messages = { add: vi.fn() };
-    configureFeatureTest([{ path: 'forbidden', component: BlankComponent }], [{ provide: MessageService, useValue: messages }]);
+    configureFeatureTest([{ path: 'forbidden', component: BlankComponent }], [...provideFakeAccess(null, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }]);
     http = TestBed.inject(HttpTestingController);
   });
 
@@ -80,6 +86,24 @@ describe('OperatorTenantsPage', () => {
     expect(allByTestId(root(fixture), 'tenants-row').map((row) => row.getAttribute('data-key'))).toEqual(['acme', 'beta']);
     expect(textOf(byTestId(rowOf(fixture, 'beta'), 'tenants-cell-status'))).toBe('Suspendido');
     expect(textOf(byTestId(root(fixture), 'tenants-suspension-note'))).toContain('API keys');
+  });
+
+  it('renders the restyled screen from the same class: page header, flush card, shared status tag and the create dialog', async () => {
+    restyled.set(true);
+
+    const fixture = await open([tenant('acme'), tenant('beta', { status: 'suspended' })]);
+
+    expect(byTestId(root(fixture), 'tenants-list-card')).not.toBeNull();
+    expect(textOf(byTestId(root(fixture), 'tenants-suspension-note'))).toContain('API keys');
+    expect(textOf(byTestId(rowOf(fixture, 'beta'), 'tenants-cell-status'))).toBe('Suspendido');
+    expect(byTestId(rowOf(fixture, 'acme'), 'tenant-suspend')).not.toBeNull();
+    expect(byTestId(root(fixture), 'tenant-form')).toBeNull();
+
+    (byTestId(root(fixture), 'tenant-new') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    expect(byTestId(document.body, 'tenant-create-dialog')).not.toBeNull();
+    expect(byTestId(document.body, 'tenant-slug')).not.toBeNull();
   });
 
   it('asks for the first page at the contract maximum, newest first', async () => {

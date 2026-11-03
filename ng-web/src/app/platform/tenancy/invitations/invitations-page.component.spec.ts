@@ -7,7 +7,7 @@ import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import es from '../../../../assets/i18n/es.json';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
+import { accessContext, provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
 import { nextCall } from '../../../../testing/fixtures/http-testing';
 import type { AccessContext } from '@/platform/core';
 import { InvitationsPage } from './invitations-page.component';
@@ -31,8 +31,12 @@ describe('InvitationsPage', () => {
 
   let visitor: ReturnType<typeof signal<AccessContext | null>>;
 
+  /** What the flag source answers for `ui_restyle`; every other key stays off. */
+  const restyled = signal(false);
+
   beforeEach(() => {
     visitor = signal<AccessContext | null>(null);
+    restyled.set(false);
     stubMatchMedia();
     messages = { add: vi.fn() };
     configureFeatureTest(
@@ -40,7 +44,7 @@ describe('InvitationsPage', () => {
         { path: 'invitations', component: BlankComponent },
         { path: 'forbidden', component: BlankComponent }
       ],
-      [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }]
+      [...provideFakeAccess(visitor, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }]
     );
     http = TestBed.inject(HttpTestingController);
   });
@@ -92,6 +96,23 @@ describe('InvitationsPage', () => {
     expect(textOf(byTestId(rows[1], 'invitations-cell-role'))).toBe('Lector');
     expect(textOf(byTestId(rows[0], 'invitations-cell-expires'))).toBe(formatSantiago('2026-02-01T12:00:00Z'));
     expect(byTestId(root(fixture), 'invitations-truncated')).toBeNull();
+  });
+
+  it('renders the restyled screen from the same class: page header, flush card, shared status tag and the invite dialog', async () => {
+    restyled.set(true);
+
+    const fixture = await open([invitation('jane@example.com')]);
+
+    expect(byTestId(root(fixture), 'invitations-list-card')).not.toBeNull();
+    expect(textOf(byTestId(root(fixture), 'invitations-cell-status'))).toBe('Pendiente');
+    expect(byTestId(root(fixture), 'invitation-revoke')).not.toBeNull();
+    expect(byTestId(root(fixture), 'invite-form')).toBeNull();
+
+    (byTestId(root(fixture), 'invite-new') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    expect(byTestId(document.body, 'invite-create-dialog')).not.toBeNull();
+    expect(byTestId(document.body, 'invite-email')).not.toBeNull();
   });
 
   it('asks for the first page at the contract maximum, pending only, newest first', async () => {

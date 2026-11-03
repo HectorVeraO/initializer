@@ -10,10 +10,16 @@ import { firstValueFrom } from 'rxjs';
 import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
+import { injectConfirmDestructive } from '@/core/ui/confirm-delete/confirm-destructive';
+import { DataTableComponent } from '@/core/ui/data-table/data-table.component';
+import { DataTableColumn } from '@/core/ui/data-table/data-table.types';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
+import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
+import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
+import { StatusTagComponent } from '@/core/ui/status-tag/status-tag.component';
 import { TENANCY_I18N } from '../i18n/scope';
-import { ACCESS_PROVIDER, InlineConfirmComponent } from '@/platform/core';
+import { ACCESS_PROVIDER, FLAG_SOURCE, InlineConfirmComponent, UI_RESTYLE_FLAG } from '@/platform/core';
 import type { MembershipStatus, TenantRole } from '@/platform/core';
 import { MembershipsApi } from './memberships-api.service';
 import type { MemberView, MembershipChange } from './memberships-api.service';
@@ -23,7 +29,7 @@ const ROLES: readonly TenantRole[] = ['admin', 'member', 'viewer'];
 /** Members of the active tenant. Every role reads the list; only an admin sees the write controls. */
 @Component({
   selector: 'app-memberships-page',
-  imports: [FormsModule, ButtonModule, MessageModule, SelectModule, TableModule, TranslocoModule, ListStateComponent, PageHeaderComponent, InlineConfirmComponent],
+  imports: [FormsModule, ButtonModule, MessageModule, SelectModule, TableModule, TranslocoModule, DataTableComponent, ListStateComponent, PageHeaderComponent, RowActionsComponent, SectionCardComponent, StatusTagComponent, InlineConfirmComponent],
   providers: [provideTranslocoScope(TENANCY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './memberships-page.component.html'
@@ -33,11 +39,23 @@ export class MembershipsPage {
   private readonly access = inject(ACCESS_PROVIDER);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
+  private readonly flags = inject(FLAG_SOURCE);
+  private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
 
+  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
+  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
+
   protected readonly roleOptions = ROLES.map((role) => ({ value: role, labelKey: `tenancy.roles.${role}` }));
+
+  protected readonly columns: DataTableColumn[] = [
+    { field: 'email', labelKey: 'tenancy.memberships.email' },
+    { field: 'name', labelKey: 'tenancy.memberships.name' },
+    { field: 'role', labelKey: 'tenancy.memberships.role' },
+    { field: 'status', labelKey: 'tenancy.memberships.status' }
+  ];
 
   protected readonly rows = signal<MemberView[]>([]);
   protected readonly totalItems = signal(0);
@@ -80,6 +98,19 @@ export class MembershipsPage {
     void this.load();
   }
 
+  /** The write actions of a row: suspend or reactivate, and revoke behind the shared confirmation. */
+  protected rowActions(row: MemberView): RowAction[] {
+    const isActive = row.status === 'active';
+
+    const actions: RowAction[] = [
+      { id: 'suspend', labelKey: 'tenancy.memberships.suspend', icon: 'pi pi-pause', testId: 'membership-suspend', destructive: true, hidden: !isActive, run: () => this.confirmStatus(row, 'suspended') },
+      { id: 'reactivate', labelKey: 'tenancy.memberships.reactivate', icon: 'pi pi-play', testId: 'membership-reactivate', hidden: isActive, run: () => void this.setStatus(row, 'active') },
+      { id: 'revoke', labelKey: 'tenancy.memberships.revoke', icon: 'pi pi-ban', testId: 'membership-revoke', destructive: true, run: () => this.confirmStatus(row, 'revoked') }
+    ];
+
+    return actions;
+  }
+
   protected async changeRole(row: MemberView, role: TenantRole): Promise<void> {
     if (role === row.role) {
       return;
@@ -91,6 +122,12 @@ export class MembershipsPage {
 
   protected async setStatus(row: MemberView, status: MembershipStatus): Promise<void> {
     await this.save(row, { status });
+  }
+
+  private confirmStatus(row: MemberView, status: MembershipStatus): void {
+    const labelKey = status === 'revoked' ? 'tenancy.memberships.revoke' : 'tenancy.memberships.suspend';
+
+    this.confirmDestructive({ acceptLabel: this.transloco.translate(labelKey) }, () => void this.setStatus(row, status));
   }
 
   private async save(row: MemberView, change: MembershipChange): Promise<void> {

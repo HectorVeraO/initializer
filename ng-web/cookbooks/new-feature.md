@@ -28,7 +28,7 @@ Product verticals live at `src/app/product/<vertical>/`. A vertical imports `@/p
 | Port (core barrel) | Provided by | Consumed by | Default |
 |---|---|---|---|
 | `ACCESS_PROVIDER` | identity (`SessionAccess`) | `requireAccess`, menu, topbar items, tenancy (switcher, no-tenant, accept, pages), api-keys page, parameters list | `OPEN_ACCESS` |
-| `FLAG_SOURCE` | identity (`SessionAccess`, reads `SessionView.flags`) | `flagGuard`, the `flag` clause | `NO_FLAGS` |
+| `FLAG_SOURCE` | identity (`SessionAccess`, reads `SessionView.flags`) | `flagGuard`, the `flag` clause, and each screen's own restyle read at its page boundary (`UI_RESTYLE_FLAG`) | `NO_FLAGS` |
 | `TENANT_DIRECTORY` | tenancy (`TenantsApi`) | feature-flags flag-detail | `null` |
 | `TENANT_SELECTION` | tenancy (`TenancySelection`) | `requireAccess`, menu, identity's session interceptor (403 navigation) | `null` (single-tenant console) |
 
@@ -38,6 +38,7 @@ Product verticals live at `src/app/product/<vertical>/`. A vertical imports `@/p
 - **Single-tenant rule**: with no tenancy module (`TENANT_SELECTION` is `null`), `tenant: 'required-unless-operator'` is met. `required` and `roles` stay unmet for everyone except a tenantless operator on an `orTenantlessOperator` requirement, and an unmet tenant clause redirects to `/forbidden`, not to the no-tenant page.
 - **`orTenantlessOperator`**: the web mirror of Go `access.Policy.TenantlessOperator`. A platform operator with no active tenant meets the `tenant` and `roles` clauses; a visitor with an active tenant is still held to `roles`. Valid only with `roles` and without `platformOperator`, else `PLATFORM_INVALID_REQUIREMENT`.
 - **Imports**: a module imports core only through `@/platform/core` and never another module (ESLint, `eslint.config.js`); it reaches another module only through a port. Core-owned code imports a module only through `@/platform/modules`.
+- **Restyle flag**: `UI_RESTYLE_FLAG` (`ui_restyle`, exported by `@/platform/core`) is read once per screen, at the page boundary, through `FLAG_SOURCE`. The page class stays shared and its template picks the restyled markup or the previous one; a `core/ui` widget never reads a flag.
 - **Where things live**: strings in `<module>/i18n/scope.ts` with `{en,es}.json`; a fixture only that module's specs use in `<module>/testing/`; fixtures that need no module in `src/testing/fixtures/` (`provideFakeAccess` fakes `ACCESS_PROVIDER` for a spec).
 
 ## Common pitfalls

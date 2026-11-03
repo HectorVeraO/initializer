@@ -3,6 +3,7 @@ import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { TranslocoModule, TranslocoService, provideTranslocoScope } from '@jsverse/transloco';
 import { MessageService } from '@openng/optimus-ui/api';
 import { ButtonModule } from '@openng/optimus-ui/button';
+import { DialogModule } from '@openng/optimus-ui/dialog';
 import { InputTextModule } from '@openng/optimus-ui/inputtext';
 import { MessageModule } from '@openng/optimus-ui/message';
 import { TableModule } from '@openng/optimus-ui/table';
@@ -11,11 +12,18 @@ import { ApiErrorCode } from '@/core/api/api-error-codes';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
 import { SantiagoDatePipe } from '@/core/format/santiago-date.pipe';
+import { injectConfirmDestructive } from '@/core/ui/confirm-delete/confirm-destructive';
+import { DataTableComponent } from '@/core/ui/data-table/data-table.component';
+import { DataTableColumn } from '@/core/ui/data-table/data-table.types';
+import { FormFieldComponent } from '@/core/ui/form-field/form-field.component';
 import { FormSectionComponent } from '@/core/ui/form-section/form-section.component';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
+import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
+import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
+import { StatusTagComponent } from '@/core/ui/status-tag/status-tag.component';
 import { TENANCY_I18N } from '../i18n/scope';
-import { InlineConfirmComponent, OneTimeSecretDialogComponent, fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
+import { FLAG_SOURCE, InlineConfirmComponent, OneTimeSecretDialogComponent, UI_RESTYLE_FLAG, fieldIssueMessages, unmatchedIssueMessages } from '@/platform/core';
 import type { TenantStatus } from '@/platform/core';
 import { TenantsApi } from './tenants-api.service';
 import type { TenantView } from './tenants-api.service';
@@ -27,7 +35,26 @@ const FORM_FIELDS: readonly string[] = ['slug', 'name', 'adminEmail'];
 /** Operator screen: every tenant, the form that creates one with its first-admin invitation, suspend and activate. */
 @Component({
   selector: 'app-operator-tenants-page',
-  imports: [ReactiveFormsModule, ButtonModule, InputTextModule, MessageModule, TableModule, TranslocoModule, SantiagoDatePipe, FormSectionComponent, ListStateComponent, PageHeaderComponent, InlineConfirmComponent, OneTimeSecretDialogComponent],
+  imports: [
+    ReactiveFormsModule,
+    ButtonModule,
+    DialogModule,
+    InputTextModule,
+    MessageModule,
+    TableModule,
+    TranslocoModule,
+    SantiagoDatePipe,
+    DataTableComponent,
+    FormFieldComponent,
+    FormSectionComponent,
+    ListStateComponent,
+    PageHeaderComponent,
+    RowActionsComponent,
+    SectionCardComponent,
+    StatusTagComponent,
+    InlineConfirmComponent,
+    OneTimeSecretDialogComponent
+  ],
   providers: [provideTranslocoScope(TENANCY_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './operator-tenants-page.component.html'
@@ -36,9 +63,24 @@ export class OperatorTenantsPage {
   private readonly api = inject(TenantsApi);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
+  private readonly flags = inject(FLAG_SOURCE);
+  private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
+
+  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
+  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
+
+  /** The restyled template creates a tenant in a dialog; the previous one keeps the inline form. */
+  protected readonly isCreating = signal(false);
+
+  protected readonly columns: DataTableColumn[] = [
+    { field: 'slug', labelKey: 'tenancy.tenants.slug' },
+    { field: 'name', labelKey: 'tenancy.tenants.name' },
+    { field: 'status', labelKey: 'tenancy.tenants.status' },
+    { field: 'createdAt', labelKey: 'tenancy.tenants.created' }
+  ];
 
   protected readonly form = new FormGroup({
     slug: new FormControl('', { nonNullable: true }),
@@ -97,6 +139,30 @@ export class OperatorTenantsPage {
     void this.load();
   }
 
+  protected openCreate(): void {
+    this.submitErrors.clear();
+    this.lastError.set(null);
+    this.isCreating.set(true);
+  }
+
+  protected onCreateVisibleChange(isVisible: boolean): void {
+    if (!isVisible) {
+      this.isCreating.set(false);
+    }
+  }
+
+  /** The row actions: suspend after the shared confirmation, or activate at once. */
+  protected rowActions(tenant: TenantView): RowAction[] {
+    const isActive = tenant.status === 'active';
+
+    const actions: RowAction[] = [
+      { id: 'suspend', labelKey: 'tenancy.tenants.suspend', icon: 'pi pi-pause', testId: 'tenant-suspend', destructive: true, hidden: !isActive, run: () => this.confirmSuspend(tenant) },
+      { id: 'activate', labelKey: 'tenancy.tenants.activate', icon: 'pi pi-play', testId: 'tenant-activate', hidden: isActive, run: () => void this.setStatus(tenant, 'active') }
+    ];
+
+    return actions;
+  }
+
   protected async submit(): Promise<void> {
     if (this.isSubmitting()) {
       return;
@@ -113,6 +179,7 @@ export class OperatorTenantsPage {
 
       this.secret.set(created.invitationUrl);
       this.form.reset({ slug: '', name: '', adminEmail: '' });
+      this.isCreating.set(false);
       await this.load();
     } catch (error) {
       this.lastError.set(error);
@@ -135,6 +202,10 @@ export class OperatorTenantsPage {
 
   protected closeSecret(): void {
     this.secret.set(null);
+  }
+
+  private confirmSuspend(tenant: TenantView): void {
+    this.confirmDestructive({ acceptLabel: this.transloco.translate('tenancy.tenants.suspend') }, () => void this.setStatus(tenant, 'suspended'));
   }
 
   /** A `404` or `409` on a row means it changed under the person: the list was refetched, say why. */

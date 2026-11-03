@@ -4,6 +4,7 @@
   },
   "list": {
     "title": "Parameters",
+    "listTitle": "Definitions",
     "section": "parameters",
     "empty": "There are no parameters yet.",
     "truncated": "Showing {{shown}} of {{total}} parameters.",

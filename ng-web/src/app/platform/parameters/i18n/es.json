@@ -4,6 +4,7 @@
   },
   "list": {
     "title": "Parámetros",
+    "listTitle": "Definiciones",
     "section": "los parámetros",
     "empty": "Aún no hay parámetros.",
     "truncated": "Mostrando {{shown}} de {{total}} parámetros.",

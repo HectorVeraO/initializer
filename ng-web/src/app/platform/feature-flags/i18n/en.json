@@ -5,6 +5,7 @@
   "notice": "Tenants see a change at their next session refresh or tenant switch.",
   "list": {
     "title": "Feature flags",
+    "listTitle": "Flags",
     "section": "feature flags",
     "empty": "There are no feature flags.",
     "truncated": "Showing {{shown}} of {{total}} flags.",
@@ -32,6 +33,7 @@
   },
   "detail": {
     "title": "Feature flag",
+    "summaryTitle": "Summary",
     "section": "feature flag",
     "notFound": "That flag is not defined in the manifest.",
     "truncated": "Only {{shown}} of {{total}} flags could be searched, so this one may exist beyond them.",

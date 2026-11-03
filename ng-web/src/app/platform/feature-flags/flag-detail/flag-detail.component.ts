@@ -5,6 +5,7 @@ import { ActivatedRoute } from '@angular/router';
 import { TranslocoModule, TranslocoService, provideTranslocoScope } from '@jsverse/transloco';
 import { MessageService } from '@openng/optimus-ui/api';
 import { ButtonModule } from '@openng/optimus-ui/button';
+import { DialogModule } from '@openng/optimus-ui/dialog';
 import { MessageModule } from '@openng/optimus-ui/message';
 import { SelectModule } from '@openng/optimus-ui/select';
 import { TableModule } from '@openng/optimus-ui/table';
@@ -12,9 +13,15 @@ import { ToggleSwitchModule } from '@openng/optimus-ui/toggleswitch';
 import { firstValueFrom, map } from 'rxjs';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
+import { injectConfirmDestructive } from '@/core/ui/confirm-delete/confirm-destructive';
+import { DataTableComponent } from '@/core/ui/data-table/data-table.component';
+import { DataTableColumn } from '@/core/ui/data-table/data-table.types';
+import { FormFieldComponent } from '@/core/ui/form-field/form-field.component';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
-import { InlineConfirmComponent, TENANT_DIRECTORY } from '@/platform/core';
+import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
+import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
+import { FLAG_SOURCE, InlineConfirmComponent, TENANT_DIRECTORY, UI_RESTYLE_FLAG } from '@/platform/core';
 import type { TenantRef } from '@/platform/core';
 import { FeatureFlagsApi } from '../feature-flags-api.service';
 import type { FlagView } from '../feature-flags.types';
@@ -34,7 +41,23 @@ interface OverrideRow {
 /** One flag with its tenant overrides; the tenant list resolves ids to names and feeds the picker. */
 @Component({
   selector: 'app-flag-detail',
-  imports: [FormsModule, ButtonModule, MessageModule, SelectModule, TableModule, ToggleSwitchModule, TranslocoModule, ListStateComponent, PageHeaderComponent, InlineConfirmComponent],
+  imports: [
+    FormsModule,
+    ButtonModule,
+    DialogModule,
+    MessageModule,
+    SelectModule,
+    TableModule,
+    ToggleSwitchModule,
+    TranslocoModule,
+    DataTableComponent,
+    FormFieldComponent,
+    ListStateComponent,
+    PageHeaderComponent,
+    RowActionsComponent,
+    SectionCardComponent,
+    InlineConfirmComponent
+  ],
   providers: [provideTranslocoScope(PLATFORM_FEATURE_FLAGS_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './flag-detail.component.html'
@@ -45,9 +68,23 @@ export class FlagDetailPage {
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
   private readonly route = inject(ActivatedRoute);
+  private readonly flags = inject(FLAG_SOURCE);
+  private readonly confirmDestructive = injectConfirmDestructive();
 
   private loadSequence = 0;
   private hasLoaded = false;
+
+  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
+  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
+
+  /** The restyled template adds an override in a dialog; the previous one keeps the inline form. */
+  protected readonly isAddingOverride = signal(false);
+
+  protected readonly overrideColumns: DataTableColumn[] = [
+    { field: 'name', labelKey: 'featureFlags.detail.tenantName' },
+    { field: 'slug', labelKey: 'featureFlags.detail.tenantSlug' },
+    { field: 'enabled', labelKey: 'featureFlags.detail.enabled' }
+  ];
 
   protected readonly key = toSignal(this.route.paramMap.pipe(map((params) => params.get('key') ?? '')), { initialValue: this.route.snapshot?.paramMap?.get('key') ?? '' });
 
@@ -65,6 +102,18 @@ export class FlagDetailPage {
 
   protected readonly listedCount = signal(0);
   protected readonly totalItems = signal(0);
+  /** The loaded flag when it belongs to the key on screen; null while the request for another key is in flight. */
+  protected readonly currentFlag = computed(() => {
+    const current = this.flag();
+
+    const isCurrentKey = current !== null && current.key === this.key();
+
+    return isCurrentKey ? current : null;
+  });
+
+  /** Page lead: never the description of the flag the route just left. */
+  protected readonly description = computed(() => this.currentFlag()?.description ?? '');
+
   protected readonly isNotFound = computed(() => !this.isLoading() && !this.loadFailed() && this.flag() === null);
   protected readonly isTruncated = computed(() => this.totalItems() > this.listedCount());
 
@@ -98,6 +147,25 @@ export class FlagDetailPage {
     void this.load();
   }
 
+  protected openAddOverride(): void {
+    this.pickedTenantId.set(null);
+    this.newEnabled.set(true);
+    this.isAddingOverride.set(true);
+  }
+
+  protected onAddVisibleChange(isVisible: boolean): void {
+    if (!isVisible) {
+      this.isAddingOverride.set(false);
+    }
+  }
+
+  /** One row action: remove the tenant override after the shared confirmation. */
+  protected rowActions(row: OverrideRow): RowAction[] {
+    const actions: RowAction[] = [{ id: 'remove', labelKey: 'featureFlags.detail.remove', icon: 'pi pi-trash', testId: 'flag-tenant-remove', destructive: true, run: () => this.confirmRemove(row) }];
+
+    return actions;
+  }
+
   protected async save(): Promise<void> {
     const flag = this.flag();
 
@@ -115,6 +183,7 @@ export class FlagDetailPage {
       this.flag.set(updated);
       this.pickedTenantId.set(null);
       this.newEnabled.set(true);
+      this.isAddingOverride.set(false);
     } catch (error) {
       this.fail(error);
       await this.load();
@@ -138,6 +207,10 @@ export class FlagDetailPage {
       this.fail(error);
       await this.load();
     }
+  }
+
+  private confirmRemove(row: OverrideRow): void {
+    this.confirmDestructive({ acceptLabel: this.transloco.translate(`${SCOPE_ALIAS}.detail.remove`) }, () => void this.remove(row));
   }
 
   /** Error toast; the caller refetches so the screen shows what the server holds. */

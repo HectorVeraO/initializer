@@ -6,8 +6,7 @@
         <p class="m-0 text-sm">{{ current.description }}</p>
       }
 
-      <div class="flex flex-col gap-2">
-        <label for="parameter-override-input">{{ 'parameters.override.value' | transloco }}</label>
+      <p-form-field [label]="'parameters.override.value' | transloco" controlId="parameter-override-input" [errors]="valueMessages()" errorTestId="parameter-override-value-error">
         @switch (kind()) {
           @case ('select') {
             <p-select inputId="parameter-override-input" [options]="current.allowedValues ?? []" [formControl]="value" appendTo="body" data-testid="parameter-override-value" [ariaLabel]="'parameters.override.value' | transloco">
@@ -35,10 +34,7 @@
             <input pInputText id="parameter-override-input" type="text" autocomplete="off" [formControl]="value" data-testid="parameter-override-value" />
           }
         }
-        @for (message of valueMessages(); track $index) {
-          <p-message severity="error" variant="simple" size="small" role="alert" data-testid="parameter-override-value-error">{{ message }}</p-message>
-        }
-      </div>
+      </p-form-field>
 
       @if (formMessages().length > 0) {
         <div role="alert" data-testid="parameter-override-issues">

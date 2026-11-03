@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { clickRowAction, confirmRowAction } from '../core/row-actions';
 
 /** The parameters screen (`/parameters`). */
 export class ParametersPage {
@@ -25,9 +26,15 @@ export class ParametersPage {
     return cell;
   }
 
-  /** Opens the override dialog of a number parameter, enters `value` and saves; waits for the PUT to answer 200. */
+  /** Opens the override dialog of `key` from whichever row action the template shows. */
+  async openOverride(key: string): Promise<void> {
+    await clickRowAction(this.row(key), 'parameter-set-override');
+    await expect(this.page.getByTestId('parameter-override-key')).toBeVisible();
+  }
+
+  /** Enters `value` in the override dialog and saves; waits for the PUT to answer 200. */
   async setOverride(key: string, value: number): Promise<void> {
-    await this.row(key).getByTestId('parameter-set-override').click();
+    await this.openOverride(key);
     const input = this.page
       .getByTestId('parameter-override-value')
       .locator('input');
@@ -45,10 +52,13 @@ export class ParametersPage {
     expect(response.status()).toBe(200);
   }
 
-  /** Clears the tenant override with the inline confirmation. */
+  /** Clears the tenant override: the restyled row asks in the shared dialog, the previous one inline. */
   async clearOverride(key: string): Promise<void> {
-    const row = this.row(key);
-    await row.getByTestId('parameter-clear-override').click();
-    await row.getByTestId('parameter-clear-override-confirm').click();
+    await confirmRowAction(
+      this.page,
+      this.row(key),
+      'parameter-clear-override',
+      'Quitar valor propio',
+    );
   }
 }

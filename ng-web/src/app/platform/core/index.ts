@@ -9,6 +9,7 @@ export type { UnmetClause } from './access/require-access';
 export { FLAG_SOURCE, NO_FLAGS } from './flags/flag-source.port';
 export type { FlagSource } from './flags/flag-source.port';
 export { flagGuard } from './flags/flag-guard';
+export { UI_RESTYLE_FLAG } from './flags/ui-restyle.flag';
 export { TENANT_DIRECTORY } from './tenants/tenant-directory.port';
 export type { TenantDirectory } from './tenants/tenant-directory.port';
 export { TENANT_SELECTION } from './tenants/tenant-selection.port';

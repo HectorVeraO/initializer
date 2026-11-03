@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
+import { accessContext, provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
 import { nextCall } from '../../../../testing/fixtures/http-testing';
 import type { AccessContext, TenantRole } from '@/platform/core';
 import { MembershipsPage } from './memberships-page.component';
@@ -28,7 +28,11 @@ describe('MembershipsPage', () => {
 
   let visitor: ReturnType<typeof signal<AccessContext | null>>;
 
+  /** What the flag source answers for `ui_restyle`; every other key stays off. */
+  const restyled = signal(false);
+
   beforeEach(() => {
+    restyled.set(false);
     stubMatchMedia();
     visitor = signal<AccessContext | null>(null);
     messages = { add: vi.fn() };
@@ -37,7 +41,7 @@ describe('MembershipsPage', () => {
         { path: 'memberships', component: BlankComponent },
         { path: 'forbidden', component: BlankComponent }
       ],
-      [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }]
+      [...provideFakeAccess(visitor, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }]
     );
     http = TestBed.inject(HttpTestingController);
   });
@@ -121,6 +125,31 @@ describe('MembershipsPage', () => {
     expect(byTestId(root(fixture), 'membership-suspend')).toBeNull();
     expect(byTestId(root(fixture), 'membership-revoke')).toBeNull();
     expect(byTestId(root(fixture), 'membership-reactivate')).toBeNull();
+  });
+
+  it('renders the restyled screen from the same class: flush card, shared status tags and the row actions', async () => {
+    restyled.set(true);
+
+    const fixture = await open([member('jane'), member('omar', { status: 'suspended' })]);
+
+    expect(byTestId(root(fixture), 'memberships-list-card')).not.toBeNull();
+    expect(textOf(byTestId(rowOf(fixture, 'jane'), 'memberships-cell-status'))).toBe('Activo');
+    expect(byTestId(rowOf(fixture, 'jane'), 'membership-suspend')).not.toBeNull();
+    expect(byTestId(rowOf(fixture, 'jane'), 'membership-revoke')).not.toBeNull();
+    expect(byTestId(rowOf(fixture, 'omar'), 'membership-reactivate')).not.toBeNull();
+  });
+
+  it('renders the restyled screen to a viewer with the status tags and no row actions', async () => {
+    restyled.set(true);
+
+    const fixture = await open([member('jane'), member('omar', { status: 'suspended' })], { role: 'viewer' });
+
+    expect(byTestId(root(fixture), 'memberships-list-card')).not.toBeNull();
+    expect(allByTestId(root(fixture), 'memberships-row')).toHaveLength(2);
+    expect(textOf(byTestId(rowOf(fixture, 'jane'), 'memberships-cell-status'))).toBe('Activo');
+    for (const testId of ['membership-suspend', 'membership-reactivate', 'membership-revoke']) {
+      expect(byTestId(root(fixture), testId)).toBeNull();
+    }
   });
 
   it('shows suspend on active rows and reactivate on suspended rows to an admin', async () => {

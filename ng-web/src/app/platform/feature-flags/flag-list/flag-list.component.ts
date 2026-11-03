@@ -9,8 +9,13 @@ import { TableModule } from '@openng/optimus-ui/table';
 import { Observable, firstValueFrom } from 'rxjs';
 import { errorMessage, showsLoadError } from '@/core/api/api-error';
 import { SubmitErrors } from '@/core/api/submit-errors';
+import { DataTableComponent } from '@/core/ui/data-table/data-table.component';
+import { DataTableColumn } from '@/core/ui/data-table/data-table.types';
 import { ListStateComponent } from '@/core/ui/list-state/list-state.component';
 import { PageHeaderComponent } from '@/core/ui/page-header/page-header.component';
+import { RowAction, RowActionsComponent } from '@/core/ui/row-actions/row-actions.component';
+import { SectionCardComponent } from '@/core/ui/section-card/section-card.component';
+import { FLAG_SOURCE, UI_RESTYLE_FLAG } from '@/platform/core';
 import { FeatureFlagsApi } from '../feature-flags-api.service';
 import type { FlagView } from '../feature-flags.types';
 import { PLATFORM_FEATURE_FLAGS_I18N } from '../i18n/scope';
@@ -28,7 +33,7 @@ interface GlobalOption {
 /** The flags of the manifest with the global override select; the detail holds the tenant overrides. */
 @Component({
   selector: 'app-flag-list',
-  imports: [FormsModule, RouterLink, MessageModule, SelectModule, TableModule, TranslocoModule, ListStateComponent, PageHeaderComponent],
+  imports: [FormsModule, RouterLink, MessageModule, SelectModule, TableModule, TranslocoModule, DataTableComponent, ListStateComponent, PageHeaderComponent, RowActionsComponent, SectionCardComponent],
   providers: [provideTranslocoScope(PLATFORM_FEATURE_FLAGS_I18N)],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './flag-list.component.html'
@@ -37,9 +42,22 @@ export class FlagListPage {
   private readonly api = inject(FeatureFlagsApi);
   private readonly transloco = inject(TranslocoService);
   private readonly messages = inject(MessageService);
+  private readonly flags = inject(FLAG_SOURCE);
 
   private loadSequence = 0;
   private hasLoaded = false;
+
+  /** Release flag: this page picks the restyled template or the previous one; a shared widget never reads it. */
+  protected readonly restyled = computed(() => this.flags.isEnabled(UI_RESTYLE_FLAG));
+
+  protected readonly columns: DataTableColumn[] = [
+    { field: 'key', labelKey: 'featureFlags.list.key' },
+    { field: 'type', labelKey: 'featureFlags.list.type' },
+    { field: 'default', labelKey: 'featureFlags.list.default' },
+    { field: 'globalOverride', labelKey: 'featureFlags.list.global' },
+    { field: 'tenantOverrides', labelKey: 'featureFlags.list.tenants' },
+    { field: 'expiresAt', labelKey: 'featureFlags.list.expires' }
+  ];
 
   protected readonly options: GlobalOption[] = [
     { value: 'inherit', labelKey: `${SCOPE_ALIAS}.global.inherit` },
@@ -79,6 +97,13 @@ export class FlagListPage {
     }
 
     return row.globalOverride.enabled ? 'on' : 'off';
+  }
+
+  /** One row action: open the flag's tenant overrides. */
+  protected rowActions(flag: FlagView): RowAction[] {
+    const actions: RowAction[] = [{ id: 'open', labelKey: 'featureFlags.list.open', icon: 'pi pi-eye', testId: 'flag-open', link: { commands: ['/operator/feature-flags', flag.key] } }];
+
+    return actions;
   }
 
   protected async change(row: FlagView, choice: GlobalChoice): Promise<void> {

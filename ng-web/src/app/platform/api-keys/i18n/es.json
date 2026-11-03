@@ -9,6 +9,7 @@
     "rowGone": "Ese elemento ya no existe o cambió. Se actualizó la lista."
   },
   "title": "Claves de API",
+  "listTitle": "Claves",
   "createTitle": "Crear clave de API",
   "name": "Nombre",
   "expiresAt": "Vence el (opcional)",

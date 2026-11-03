@@ -35,6 +35,7 @@
   },
   "invitations": {
     "title": "Invitaciones",
+    "listTitle": "Pendientes",
     "inviteTitle": "Invitar a un miembro",
     "email": "Correo electrónico",
     "role": "Rol",
@@ -74,6 +75,7 @@
   },
   "memberships": {
     "title": "Miembros",
+    "listTitle": "Miembros",
     "section": "los miembros",
     "empty": "Este tenant no tiene miembros.",
     "email": "Correo electrónico",
@@ -93,6 +95,7 @@
   },
   "tenants": {
     "title": "Tenants",
+    "listTitle": "Tenants",
     "createTitle": "Crear tenant",
     "slug": "Slug",
     "name": "Nombre",

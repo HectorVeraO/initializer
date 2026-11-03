@@ -1,12 +1,12 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MessageService } from '@openng/optimus-ui/api';
+import { ConfirmationService, MessageService } from '@openng/optimus-ui/api';
 import { BlankComponent, allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import es from '../../../assets/i18n/es.json';
 import apiKeysEs from './i18n/es.json';
 import { errorEnvelope, okEnvelope } from '../../../testing/fixtures/api-envelope';
-import { accessContext, provideFakeAccess } from '../../../testing/fixtures/access-testing';
+import { accessContext, provideFakeAccess, restyledFlags } from '../../../testing/fixtures/access-testing';
 import { nextCall } from '../../../testing/fixtures/http-testing';
 import type { AccessContext } from '@/platform/core';
 import { ApiKeysPage, endOfDayUtc } from './api-keys-page.component';
@@ -48,16 +48,24 @@ describe('ApiKeysPage', () => {
 
   let visitor: ReturnType<typeof signal<AccessContext | null>>;
 
+  /** The shared confirmation dialog at its boundary: accepting is one click, so the double runs the accept callback. */
+  let confirmation: { confirm: ReturnType<typeof vi.fn> };
+
+  /** What the flag source answers for `ui_restyle`; every other key stays off. */
+  const restyled = signal(false);
+
   beforeEach(() => {
     visitor = signal<AccessContext | null>(null);
+    restyled.set(false);
     stubMatchMedia();
     messages = { add: vi.fn() };
+    confirmation = { confirm: vi.fn((options: { accept?: () => void }) => options.accept?.()) };
     configureFeatureTest(
       [
         { path: 'api-keys', component: BlankComponent },
         { path: 'forbidden', component: BlankComponent }
       ],
-      [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }]
+      [...provideFakeAccess(visitor, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }, { provide: ConfirmationService, useValue: confirmation }]
     );
     http = TestBed.inject(HttpTestingController);
   });
@@ -120,6 +128,58 @@ describe('ApiKeysPage', () => {
     expect(byTestId(rows[0], 'api-key-revoke')).not.toBeNull();
     expect(byTestId(rows[1], 'api-key-revoke')).toBeNull();
     expect(byTestId(root(fixture), 'api-keys-truncated')).toBeNull();
+  });
+
+  it('renders the restyled screen from the same class: page header, flush card and shared status tag', async () => {
+    restyled.set(true);
+
+    const fixture = await open([apiKey('ci')]);
+
+    expect(byTestId(root(fixture), 'api-keys-list-card')).not.toBeNull();
+    expect(textOf(byTestId(root(fixture), 'api-keys-owner'))).toBe('Claves del tenant Tenant A');
+    expect(textOf(byTestId(root(fixture), 'api-keys-cell-status'))).toBe('Activo');
+    expect(byTestId(root(fixture), 'api-key-form')).toBeNull();
+  });
+
+  it('creates a key from the restyled dialog and revokes it from its row action', async () => {
+    restyled.set(true);
+
+    const fixture = await open([]);
+
+    (byTestId(root(fixture), 'api-key-new') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    typeInto(byTestId(document.body, 'api-key-name') as HTMLInputElement, 'ci');
+    const box = (allByTestId(document.body, 'api-key-scope').find((element) => element.getAttribute('data-key') === 'tenant:read') as HTMLElement).querySelector('input') as HTMLInputElement;
+
+    box.click();
+    await settle(fixture);
+    (byTestId(document.body, 'api-key-submit') as HTMLButtonElement).click();
+
+    const post = await nextCall('POST', LIST_URL);
+
+    expect(post.request.body).toEqual({ name: 'ci', scopes: ['tenant:read'], expiresAt: null });
+    post.flush(okEnvelope({ apiKey: apiKey('ci'), plainTextKey: SYNTHETIC_KEY }), { status: 201, statusText: 'Created' });
+    (await nextCall('GET', LIST_URL)).flush(pageOf([apiKey('ci')]));
+    await settle(fixture);
+
+    // The dialog closes on the saved key; the one-time secret is the only dialog left.
+    await vi.waitFor(() => expect(byTestId(document.body, 'api-key-name')).toBeNull());
+    (byTestId(document.body, 'one-time-secret-close') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    // One click on the row action, one click on the shared confirmation's accept button, no typing.
+    (byTestId(root(fixture), 'api-key-revoke') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    expect(confirmation.confirm).toHaveBeenCalledWith(expect.objectContaining({ message: es.confirms.defaultMessage, acceptLabel: 'Revocar', rejectLabel: 'Cancelar' }));
+
+    (await nextCall('DELETE', `${LIST_URL}/id-ci`)).flush(okEnvelope(apiKey('ci', { status: 'revoked' })));
+    (await nextCall('GET', LIST_URL)).flush(pageOf([apiKey('ci', { status: 'revoked' })]));
+    await settle(fixture);
+
+    expect(textOf(byTestId(root(fixture), 'api-keys-cell-status'))).toBe('Revocado');
+    expect(byTestId(root(fixture), 'api-key-revoke')).toBeNull();
   });
 
   it('asks for the first page at the contract maximum, newest first', async () => {

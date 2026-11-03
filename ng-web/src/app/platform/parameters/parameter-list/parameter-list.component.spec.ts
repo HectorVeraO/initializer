@@ -5,7 +5,7 @@ import { MessageService } from '@openng/optimus-ui/api';
 import type { AccessContext } from '@/platform/core';
 import { allByTestId, byTestId, configureFeatureTest, settle, stubMatchMedia, textOf, typeInto } from '@/core/testing/ui-testing';
 import { errorEnvelope, okEnvelope } from '../../../../testing/fixtures/api-envelope';
-import { accessContext, provideFakeAccess } from '../../../../testing/fixtures/access-testing';
+import { accessContext, provideFakeAccess, restyledFlags } from '../../../../testing/fixtures/access-testing';
 import { nextCall } from '../../../../testing/fixtures/http-testing';
 import { parameterView } from '../testing/parameter-view';
 import { ParameterListPage } from './parameter-list.component';
@@ -33,11 +33,15 @@ describe('ParameterListPage', () => {
 
   let visitor: ReturnType<typeof signal<AccessContext | null>>;
 
+  /** What the flag source answers for `ui_restyle`; every other key stays off. */
+  const restyled = signal(false);
+
   beforeEach(() => {
+    restyled.set(false);
     stubMatchMedia();
     messages = { add: vi.fn() };
     visitor = signal<AccessContext | null>(null);
-    configureFeatureTest([], [...provideFakeAccess(visitor), { provide: MessageService, useValue: messages }]);
+    configureFeatureTest([], [...provideFakeAccess(visitor, { flags: restyledFlags(restyled) }), { provide: MessageService, useValue: messages }]);
     http = TestBed.inject(HttpTestingController);
   });
 
@@ -81,6 +85,19 @@ describe('ParameterListPage', () => {
     await click(fixture, byTestId(rowOf(fixture, key), testId));
     await click(fixture, byTestId(rowOf(fixture, key), `${testId}-confirm`));
   }
+
+  it('renders the restyled screen from the same class: flush card, data table, row actions and the override dialog', async () => {
+    restyled.set(true);
+
+    const fixture = await open(role('admin'));
+
+    expect(byTestId(root(fixture), 'parameters-list-card')).not.toBeNull();
+    expect(byTestId(rowOf(fixture, KEY), 'parameter-set-override')).not.toBeNull();
+    expect(textOf(byTestId(rowOf(fixture, KEY), 'parameters-cell-value'))).toBe('3');
+
+    await click(fixture, byTestId(rowOf(fixture, KEY), 'parameter-set-override'));
+    await vi.waitFor(() => expect(byTestId(document.body, 'parameter-override-value')).not.toBeNull());
+  });
 
   it('requests the first page of 100 sorted by key', async () => {
     visitor.set(role('admin'));
